@@ -4,8 +4,9 @@ services:
     name: eventloo-backend
     env: python
     plan: free
-    buildCommand: cd backend && pip install -r requirements.txt
-    startCommand: cd backend && python manage.py migrate && gunicorn event_management.wsgi:application --bind 0.0.0.0:$PORT
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py migrate && gunicorn event_management.wsgi:application --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.9.16
@@ -26,11 +27,11 @@ services:
       - key: STATIC_URL
         value: /static/
       - key: STATIC_ROOT
-        value: /opt/render/project/src/backend/staticfiles
+        value: /opt/render/project/src/staticfiles
       - key: MEDIA_URL
         value: /media/
       - key: MEDIA_ROOT
-        value: /opt/render/project/src/backend/media
+        value: /opt/render/project/src/media
 
   # React Frontend
   - type: web
