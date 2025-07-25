@@ -20,7 +20,7 @@ django-extensions==3.2.3
 # python-magic==0.4.27  # Removed - requires system dependencies not available on Render
 
 # PDF and reporting packages (commented out for testing)
-# reportlab==4.0.4
+# reportlab==4.0.4  # Removed - may cause build issues
 
 # HTTP and deployment packages
 requests==2.31.0
