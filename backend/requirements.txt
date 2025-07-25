@@ -1,3 +1,4 @@
+# Essential Django packages
 Django==4.2.7
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
@@ -7,16 +8,25 @@ PyJWT==2.8.0
 python-decouple==3.8
 Pillow==10.0.1
 django-extensions==3.2.3
+
+# Data processing packages (commented out for testing)
+# pandas==2.0.3
+# openpyxl==3.0.10
+# xlrd==2.0.1
+
+# Removed problematic packages
 # djangorestframework-nested==0.0.1  # Removed - package not available
-pandas==2.0.3
-openpyxl==3.0.10
-xlrd==2.0.1
 # openai==1.3.5  # Temporarily removed - may cause build issues
 # python-magic==0.4.27  # Removed - requires system dependencies not available on Render
-reportlab==4.0.4
+
+# PDF and reporting packages (commented out for testing)
+# reportlab==4.0.4
+
+# HTTP and deployment packages
 requests==2.31.0
 gunicorn==21.2.0
 whitenoise==6.6.0
 dj-database-url==2.1.0
 psycopg2-binary==2.9.9
+
 # Note: pip will be upgraded automatically by Render 
