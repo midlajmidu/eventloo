@@ -5,7 +5,7 @@ echo "Starting build process for Render deployment..."
 
 # Install Python dependencies
 echo "Installing Python dependencies..."
-pip install -r requirements.txt
+cd backend && pip install -r requirements.txt && cd ..
 
 # Install Node.js dependencies and build frontend
 echo "Installing Node.js dependencies and building frontend..."
