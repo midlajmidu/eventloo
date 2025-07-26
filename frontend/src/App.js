@@ -12,6 +12,7 @@ import AdminLayout from './components/Layout/AdminLayout';
 import TeamManagerLayout from './components/Layout/TeamManagerLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import TeamProtectedRoute from './components/TeamProtectedRoute';
+import DebugBackend from './components/DebugBackend';
 
 // Admin Components
 import EventsPage from './components/Admin/EventsPage';
@@ -58,6 +59,7 @@ function App() {
     <ErrorBoundary>
       <Router>
         <div className="App">
+          <DebugBackend />
           <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
