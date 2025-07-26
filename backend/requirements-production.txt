@@ -1,6 +1,4 @@
-# Production requirements with build flags for pandas compatibility
---only-binary=pandas,numpy
---no-cache-dir
+# Production requirements for pandas compatibility
 
 # Essential Django packages
 Django==4.2.16
