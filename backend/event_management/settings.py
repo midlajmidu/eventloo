@@ -16,9 +16,9 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS_STR = config('ALLOWED_HOSTS', default='localhost,127.0.0.1')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STR.split(',')]
 
-# Add Render domain if in production
+# Add Google Cloud Run domain if in production
 if not DEBUG:
-    ALLOWED_HOSTS.extend(['.onrender.com', '.render.com'])
+    ALLOWED_HOSTS.extend(['.run.app', '.googleapis.com'])
 
 # Application definition
 INSTALLED_APPS = [
@@ -165,10 +165,10 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS_STR = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001')
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS_STR.split(',')]
 
-# Add Render frontend URL if provided
-RENDER_FRONTEND_URL = config('RENDER_FRONTEND_URL', default='')
-if RENDER_FRONTEND_URL:
-    CORS_ALLOWED_ORIGINS.append(RENDER_FRONTEND_URL)
+# Add Google Cloud Run frontend URL if provided
+CLOUD_RUN_FRONTEND_URL = config('CLOUD_RUN_FRONTEND_URL', default='')
+if CLOUD_RUN_FRONTEND_URL:
+    CORS_ALLOWED_ORIGINS.append(CLOUD_RUN_FRONTEND_URL)
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only for development
 
