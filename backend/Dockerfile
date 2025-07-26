@@ -39,6 +39,10 @@ RUN mkdir -p /app/staticfiles /app/media
 # Collect static files
 RUN python manage.py collectstatic --noinput --clear
 
+# Make startup script executable
+COPY start.sh /app/
+RUN chmod +x /app/start.sh
+
 # Create a non-root user for security
 RUN adduser --disabled-password --gecos '' appuser
 RUN chown -R appuser:appuser /app
@@ -51,5 +55,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:${PORT:-8080}/api/admin/dashboard/summary/ || exit 1
 
-# Start Gunicorn server
-CMD gunicorn --bind 0.0.0.0:${PORT:-8080} --workers 3 --timeout 120 --keep-alive 2 event_management.wsgi:application 
+# Start using the startup script
+CMD ["/app/start.sh"] 

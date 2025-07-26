@@ -1,15 +1,15 @@
 #!/bin/bash
 
-# Render deployment start script
-echo "Starting Eventloo application on Render..."
+# Set default port if not provided
+export PORT=${PORT:-8080}
 
-# Navigate to backend directory
-cd backend
+echo "Starting Django application on port $PORT"
 
 # Run database migrations
-echo "Running database migrations..."
-python manage.py migrate
+python manage.py migrate --noinput
 
-# Start the Django application with Gunicorn
-echo "Starting Django application with Gunicorn..."
-gunicorn event_management.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --timeout 120 
+# Collect static files
+python manage.py collectstatic --noinput
+
+# Start Gunicorn
+exec gunicorn --bind 0.0.0.0:$PORT --workers 1 --timeout 120 --keep-alive 2 event_management.wsgi:application 
