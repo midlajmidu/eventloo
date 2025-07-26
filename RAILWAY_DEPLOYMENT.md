@@ -40,7 +40,7 @@ Make sure these files are in your repository:
 ### **2.2 Deploy Backend Service**
 1. **Click "Deploy from GitHub repo"**
 2. **Select your repository**: `midlajmidu/eventloo`
-3. **Set Root Directory**: `backend`
+3. **Set Root Directory**: `backend` (Railway will auto-detect this from `backend/railway.json`)
 4. **Click "Deploy"**
 
 ### **2.3 Configure Environment Variables**
@@ -90,7 +90,7 @@ https://eventloo-backend-production-xxxx.up.railway.app
 1. **In the same Railway project, click "New" → "Service"**
 2. **Select "Deploy from GitHub repo"**
 3. **Select your repository again**: `midlajmidu/eventloo`
-4. **Set Root Directory**: `frontend`
+4. **Set Root Directory**: `frontend` (Railway will auto-detect this from `frontend/railway.json`)
 5. **Click "Deploy"**
 
 ### **3.2 Configure Frontend Environment**
