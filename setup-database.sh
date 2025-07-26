@@ -6,7 +6,7 @@
 set -e
 
 # Configuration
-PROJECT_ID="your-project-id"  # Replace with your Google Cloud project ID
+PROJECT_ID="eventloo"  # Your Google Cloud project ID
 REGION="us-central1"
 INSTANCE_NAME="eventloo-instance"
 DATABASE_NAME="eventloo_db"

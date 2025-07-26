@@ -6,7 +6,7 @@
 set -e  # Exit on any error
 
 # Configuration
-PROJECT_ID="your-project-id"  # Replace with your Google Cloud project ID
+PROJECT_ID="eventloo"  # Your Google Cloud project ID
 REGION="us-central1"
 SERVICE_NAME="eventloo"
 DATABASE_NAME="eventloo_db"
