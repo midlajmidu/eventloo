@@ -1,13 +1,14 @@
 # Essential Django packages
-Django==4.2.7
+Django==4.2.16
 djangorestframework==3.14.0
 django-cors-headers==4.3.1
 django-filter==23.3
-djangorestframework-simplejwt==5.3.0
+djangorestframework-simplejwt==5.3.2
 PyJWT==2.8.0
 python-decouple==3.8
 Pillow==10.4.0
 django-extensions==3.2.3
+setuptools>=65.0.0
 
 # Data processing packages (commented out for testing)
 # pandas==2.0.3
