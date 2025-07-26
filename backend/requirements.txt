@@ -10,10 +10,10 @@ Pillow==10.4.0
 django-extensions==3.2.3
 setuptools>=65.0.0
 
-# Data processing packages (commented out for testing)
-# pandas==2.0.3
-# openpyxl==3.0.10
-# xlrd==2.0.1
+# Data processing packages
+pandas==2.0.3
+openpyxl==3.0.10
+xlrd==2.0.1
 
 # Removed problematic packages
 # djangorestframework-nested==0.0.1  # Removed - package not available
