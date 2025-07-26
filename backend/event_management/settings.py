@@ -147,6 +147,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3001",
+    "https://eventloo-frontend.onrender.com",  # Add your Render frontend URL
 ]
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only for development
