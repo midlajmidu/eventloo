@@ -16,9 +16,9 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS_STR = config('ALLOWED_HOSTS', default='localhost,127.0.0.1')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STR.split(',')]
 
-# Add Railway domain if in production
+# Add Render domain if in production
 if not DEBUG:
-    ALLOWED_HOSTS.extend(['.railway.app', '.up.railway.app'])
+    ALLOWED_HOSTS.extend(['.onrender.com', '.render.com'])
 
 # Application definition
 INSTALLED_APPS = [
@@ -74,12 +74,20 @@ TEMPLATES = [
 WSGI_APPLICATION = 'event_management.wsgi.application'
 
 # Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+import dj_database_url
+
+DATABASE_URL = config('DATABASE_URL', default=None)
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.parse(DATABASE_URL)
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -104,8 +112,13 @@ USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Add whitenoise for static files in production
+if not DEBUG:
+    MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -152,10 +165,10 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS_STR = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001')
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS_STR.split(',')]
 
-# Add Railway frontend URL if provided
-RAILWAY_FRONTEND_URL = config('RAILWAY_FRONTEND_URL', default='')
-if RAILWAY_FRONTEND_URL:
-    CORS_ALLOWED_ORIGINS.append(RAILWAY_FRONTEND_URL)
+# Add Render frontend URL if provided
+RENDER_FRONTEND_URL = config('RENDER_FRONTEND_URL', default='')
+if RENDER_FRONTEND_URL:
+    CORS_ALLOWED_ORIGINS.append(RENDER_FRONTEND_URL)
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only for development
 
