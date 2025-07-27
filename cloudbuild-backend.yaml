@@ -1,11 +1,11 @@
 steps:
-  # Build the container image
+  # Build the backend container image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-f', 'Dockerfile.production', '-t', 'gcr.io/$PROJECT_ID/eventloo:latest', '.']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/eventloo-backend:latest', 'backend/']
   
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/eventloo:latest']
+    args: ['push', 'gcr.io/$PROJECT_ID/eventloo-backend:latest']
   
   # Deploy container image to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -13,9 +13,9 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'eventloo'
+      - 'eventloo-backend'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/eventloo:latest'
+      - 'gcr.io/$PROJECT_ID/eventloo-backend:latest'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -34,12 +34,12 @@ steps:
       - '--min-instances'
       - '0'
       - '--set-env-vars'
-      - 'DEBUG=False,DJANGO_SETTINGS_MODULE=event_management.settings,PYTHONUNBUFFERED=1,REACT_APP_API_URL=/api'
+      - 'DEBUG=False,DJANGO_SETTINGS_MODULE=event_management.settings,PYTHONUNBUFFERED=1,SECRET_KEY=django-insecure-backend-key,ALLOWED_HOSTS=eventloo-backend-241540993150.us-central1.run.app;eventloo-backend-uj5wj7uv4a-uc.a.run.app'
       - '--execution-environment'
       - 'gen2'
 
 images:
-  - 'gcr.io/$PROJECT_ID/eventloo:latest'
+  - 'gcr.io/$PROJECT_ID/eventloo-backend:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY

@@ -1,59 +1,37 @@
-# Use official Python 3.11 slim image for smaller size and better compatibility
-FROM python:3.11-slim
+FROM python:3.10-slim
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONUNBUFFERED=1
 
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        gcc \
-        libpq-dev \
-        libjpeg-dev \
-        libpng-dev \
-        libfreetype6-dev \
-        liblcms2-dev \
-        libwebp-dev \
-        libopenjp2-7-dev \
-        libtiff5-dev \
-        libxcb1-dev \
-        pkg-config \
-    && rm -rf /var/lib/apt/lists/*
+# Copy all source files
+COPY . .
 
-# Install Python dependencies
-COPY requirements.txt /app/
-RUN pip install --upgrade pip setuptools wheel
-RUN pip install -r requirements.txt
+# Debug: List files to see what was copied
+RUN ls -la
 
-# Copy project files
-COPY . /app/
+# Install dependencies
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# Create directories for static and media files
-RUN mkdir -p /app/staticfiles /app/media
+# Explicitly copy start.sh if it doesn't exist
+RUN if [ ! -f start.sh ]; then echo "start.sh not found, creating it"; \
+    echo '#!/bin/bash' > start.sh; \
+    echo 'echo "🚀 Starting Django backend..."' >> start.sh; \
+    echo 'export PORT=${PORT:-8080}' >> start.sh; \
+    echo 'python manage.py migrate --noinput' >> start.sh; \
+    echo 'python manage.py collectstatic --noinput --clear' >> start.sh; \
+    echo 'exec gunicorn event_management.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 300 --keep-alive 5 --max-requests 1000 --max-requests-jitter 100' >> start.sh; \
+    fi
 
-# Collect static files
-RUN python manage.py collectstatic --noinput --clear
+# Ensure start.sh is executable
+RUN chmod +x start.sh
 
-# Make startup script executable
-COPY start.sh /app/
-RUN chmod +x /app/start.sh
-
-# Create a non-root user for security
-RUN adduser --disabled-password --gecos '' appuser
-RUN chown -R appuser:appuser /app
-USER appuser
-
-# Expose port (Google Cloud Run will set PORT environment variable)
+# Expose the default port (Cloud Run uses PORT env)
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:${PORT:-8080}/api/admin/dashboard/summary/ || exit 1
-
-# Start using the startup script
-CMD ["/app/start.sh"] 
+# Run the start script
+CMD ["./start.sh"]

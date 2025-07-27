@@ -52,13 +52,21 @@ if DEBUG:
     SECURE_BROWSER_XSS_FILTER = False
     SECURE_CONTENT_TYPE_NOSNIFF = False
     X_FRAME_OPTIONS = 'SAMEORIGIN'
+else:
+    # Production security settings
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_HSTS_SECONDS = 31536000
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
 
 ROOT_URLCONF = 'event_management.urls'
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -78,8 +86,18 @@ import dj_database_url
 
 DATABASE_URL = config('DATABASE_URL', default=None)
 if DATABASE_URL:
+    db_config = dj_database_url.parse(DATABASE_URL)
+    # Add connection optimization for production
+    if not DEBUG:
+        db_config.update({
+            'CONN_MAX_AGE': 60,
+            'OPTIONS': {
+                'MAX_CONNS': 20,
+                'MIN_CONNS': 1,
+            }
+        })
     DATABASES = {
-        'default': dj_database_url.parse(DATABASE_URL)
+        'default': db_config
     }
 else:
     DATABASES = {
@@ -119,6 +137,16 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 if not DEBUG:
     MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
     STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+    
+    # Memory optimization for production
+    import gc
+    gc.set_threshold(700, 10, 10)
+    
+    # Additional static file settings for production
+    STATICFILES_FINDERS = [
+        'django.contrib.staticfiles.finders.FileSystemFinder',
+        'django.contrib.staticfiles.finders.AppDirectoriesFinder',
+    ]
 
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
@@ -162,15 +190,22 @@ SIMPLE_JWT = {
 }
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS_STR = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001')
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS_STR.split(',')]
-
-# Add Google Cloud Run frontend URL if provided
-CLOUD_RUN_FRONTEND_URL = config('CLOUD_RUN_FRONTEND_URL', default='')
-if CLOUD_RUN_FRONTEND_URL:
-    CORS_ALLOWED_ORIGINS.append(CLOUD_RUN_FRONTEND_URL)
-
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Only for development
+if DEBUG:
+    # Development CORS settings
+    CORS_ALLOWED_ORIGINS_STR = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001')
+    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS_STR.split(',')]
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    # Production CORS settings - allow frontend domain
+    CORS_ALLOWED_ORIGINS = [
+        'https://eventloo-uj5wj7uv4a-uc.a.run.app',  # Frontend URL
+        'https://eventloo-us-central1-eventloo.a.run.app',
+    ]
+    # Also allow any subdomain of run.app for flexibility
+    CORS_ALLOWED_ORIGIN_REGEXES = [
+        r"^https://.*\.run\.app$",
+    ]
+    CORS_ALLOW_ALL_ORIGINS = False
 
 # Additional CORS settings for Chrome compatibility
 CORS_ALLOW_CREDENTIALS = True

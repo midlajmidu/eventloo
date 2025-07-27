@@ -15,7 +15,12 @@ export const getApiBaseUrl = () => {
     return envUrl;
   }
   
-  // Default to HTTP localhost
+  // In production, use the separate backend service URL
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://eventloo-backend-uj5wj7uv4a-uc.a.run.app/api';
+  }
+  
+  // Default to HTTP localhost for development
   return 'http://localhost:8000/api';
 };
 

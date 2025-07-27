@@ -44,7 +44,7 @@ if ! gcloud sql instances describe $INSTANCE_NAME --project=$PROJECT_ID &> /dev/
         --storage-size=10GB \
         --backup-start-time=02:00 \
         --maintenance-window-day=SUN \
-        --maintenance-window-hour=02:00 \
+        --maintenance-window-hour=2 \
         --availability-type=zonal \
         --storage-auto-increase
     

@@ -56,4 +56,26 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-*.temp 
+*.temp
+
+# Google Cloud SDK and other large directories
+yes/
+google-cloud-sdk/
+
+# Backup files
+*.backup
+*.bak
+
+# Docker files that might be temporary
+.dockerignore.*
+Dockerfile.*
+!Dockerfile
+
+# Environment files
+.env.*
+!.env.example
+
+# Log files
+*.log
+backend.log
+frontend.log 

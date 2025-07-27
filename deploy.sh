@@ -55,7 +55,7 @@ if ! gcloud sql instances describe eventloo-instance --project=$PROJECT_ID &> /d
         --storage-size=10GB \
         --backup-start-time=02:00 \
         --maintenance-window-day=SUN \
-        --maintenance-window-hour=02:00
+        --maintenance-window-hour=2
 else
     echo -e "${GREEN}✅ Cloud SQL instance already exists${NC}"
 fi
@@ -87,7 +87,8 @@ gcloud run deploy $SERVICE_NAME \
     --cpu=1 \
     --max-instances=10 \
     --timeout=300 \
-    --set-env-vars="DEBUG=False,DJANGO_SETTINGS_MODULE=event_management.settings,DATABASE_URL=$DATABASE_URL,SECRET_KEY=$(openssl rand -base64 50),ALLOWED_HOSTS=localhost,127.0.0.1,$SERVICE_NAME-$REGION-$PROJECT_ID.a.run.app,CORS_ALLOWED_ORIGINS=https://$SERVICE_NAME-$REGION-$PROJECT_ID.a.run.app"
+    --set-env-vars="DEBUG=False,DJANGO_SETTINGS_MODULE=event_management.settings,SECRET_KEY=$(openssl rand -base64 50),ALLOWED_HOSTS=localhost,127.0.0.1,$SERVICE_NAME-$REGION-$PROJECT_ID.a.run.app,CORS_ALLOWED_ORIGINS=https://$SERVICE_NAME-$REGION-$PROJECT_ID.a.run.app" \
+    --set-env-vars="DATABASE_URL=$DATABASE_URL"
 
 # Get the service URL
 SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region=$REGION --format="value(status.url)")

@@ -2,8 +2,8 @@
 .git
 .gitignore
 
-# Frontend (we only need backend for this Dockerfile)
-frontend/
+# Frontend (needed for production build)
+# frontend/
 
 # Python
 __pycache__
@@ -76,5 +76,4 @@ railway.json
 railway.toml
 nixpacks.toml
 render.yaml
-*.sh
 *.bat 
