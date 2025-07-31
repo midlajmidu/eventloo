@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, Sparkles, AlertCircle, Users, User } from 'lucide-react';
 import { authAPI } from '../services/api';
@@ -16,12 +16,37 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
+  // Check if user is already authenticated
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (token && token !== 'undefined' && token !== '') {
+      const userRole = localStorage.getItem('user_role');
+      if (userRole === 'admin') {
+        navigate('/admin/dashboard');
+      } else if (userRole === 'team_manager') {
+        navigate('/team-manager');
+      } else {
+        navigate('/user/dashboard');
+      }
+    }
+  }, [navigate]);
+
   const handleChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value,
     });
     if (error) setError('');
+  };
+
+  const getRedirectPath = () => {
+    // Check if there's a stored redirect path
+    const redirectPath = localStorage.getItem('redirectAfterLogin');
+    if (redirectPath) {
+      localStorage.removeItem('redirectAfterLogin');
+      return redirectPath;
+    }
+    return null;
   };
 
   const handleSubmit = async (e) => {
@@ -44,13 +69,19 @@ const Login = () => {
         localStorage.setItem('refresh_token', response.data.refresh);
         localStorage.setItem('user_role', response.data.user.role);
         
-        // Redirect based on role
-        if (response.data.user.role === 'admin') {
-          navigate('/admin/dashboard');
-        } else if (response.data.user.role === 'team_manager') {
-          navigate('/team-manager');
+        // Check for redirect path first
+        const redirectPath = getRedirectPath();
+        if (redirectPath) {
+          navigate(redirectPath);
         } else {
-          navigate('/user/dashboard');
+          // Redirect based on role
+          if (response.data.user.role === 'admin') {
+            navigate('/admin/dashboard');
+          } else if (response.data.user.role === 'team_manager') {
+            navigate('/team-manager');
+          } else {
+            navigate('/user/dashboard');
+          }
         }
       } else {
         // Team manager login
