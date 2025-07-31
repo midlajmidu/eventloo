@@ -30,9 +30,15 @@ const Login = () => {
     setError('');
 
     try {
+      console.log('🔧 Attempting login...');
+      console.log('🔧 Login type:', loginType);
+      console.log('🔧 Form data:', formData);
+      
       if (loginType === 'user') {
         // Regular user login
+        console.log('🔧 Making user login request...');
         const response = await authAPI.login(formData);
+        console.log('🔧 Login response:', response);
         
         localStorage.setItem('access_token', response.data.access);
         localStorage.setItem('refresh_token', response.data.refresh);
@@ -48,10 +54,12 @@ const Login = () => {
         }
       } else {
         // Team manager login
+        console.log('🔧 Making team manager login request...');
         const response = await authAPI.teamManagerLogin({
           team_username: formData.team_username,
           team_password: formData.team_password
         });
+        console.log('🔧 Team login response:', response);
         
         localStorage.setItem('team_data', JSON.stringify(response.data.team));
         localStorage.setItem('access_type', 'team_manager');
@@ -60,13 +68,22 @@ const Login = () => {
         navigate('/team-manager/dashboard');
       }
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('❌ Login error:', err);
+      console.error('❌ Error response:', err.response);
+      console.error('❌ Error message:', err.message);
+      
       if (err.response?.status === 401) {
-        setError('Invalid credentials');
+        setError('Invalid credentials. Please check your email and password.');
       } else if (err.response?.status === 400) {
-        setError('Please check your credentials format');
+        setError('Please check your credentials format.');
+      } else if (err.response?.status === 500) {
+        setError('Server error. Please try again later.');
+      } else if (err.code === 'NETWORK_ERROR' || err.message.includes('Network Error')) {
+        setError('Network error. Please check your internet connection and try again.');
+      } else if (err.message.includes('timeout')) {
+        setError('Request timeout. Please try again.');
       } else {
-        setError('Something went wrong. Please try again.');
+        setError(`Something went wrong: ${err.message || 'Unknown error'}`);
       }
     } finally {
       setLoading(false);

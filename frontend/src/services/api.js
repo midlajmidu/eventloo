@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getApiBaseUrl, debugApiConfig } from '../utils/apiUtils';
+import { getApiBaseUrl, debugApiConfig, getApiTimeout } from '../utils/apiUtils';
 
 // Use the safe API base URL
 const API_BASE_URL = getApiBaseUrl();
@@ -14,7 +14,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
   // Add timeout and additional settings for Chrome compatibility
-  timeout: 10000,
+  timeout: getApiTimeout(),
   withCredentials: false, // Disable credentials for CORS
 });
 
@@ -24,7 +24,7 @@ const reportApi = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000,
+  timeout: getApiTimeout(),
   withCredentials: false,
 });
 

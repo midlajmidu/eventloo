@@ -1,3 +1,5 @@
+import productionConfig from '../config/production';
+
 // API Utilities for handling URL issues
 
 /**
@@ -15,9 +17,9 @@ export const getApiBaseUrl = () => {
     return envUrl;
   }
   
-  // In production, use the separate backend service URL
+  // In production, use the correct Google Cloud backend service URL
   if (process.env.NODE_ENV === 'production') {
-    return 'https://eventloo-backend-uj5wj7uv4a-uc.a.run.app/api';
+    return 'https://eventloo-backend-7vxrwvifna-uc.a.run.app/api';
   }
   
   // Default to HTTP localhost for development
@@ -43,6 +45,7 @@ export const debugApiConfig = () => {
   console.log('  - Computed Base URL:', getApiBaseUrl());
   console.log('  - Current Location:', window.location.href);
   console.log('  - Protocol:', window.location.protocol);
+  console.log('  - Production Config:', productionConfig);
 };
 
 /**
@@ -58,4 +61,11 @@ export const isDevelopment = () => {
 export const isLocalhost = () => {
   return window.location.hostname === 'localhost' || 
          window.location.hostname === '127.0.0.1';
+};
+
+/**
+ * Get API timeout from config
+ */
+export const getApiTimeout = () => {
+  return productionConfig.API_TIMEOUT;
 }; 

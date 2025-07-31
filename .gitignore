@@ -56,7 +56,7 @@ Thumbs.db
 
 # Temporary files
 *.tmp
-*.temp
+*.temp 
 
 # Google Cloud SDK and other large directories
 yes/

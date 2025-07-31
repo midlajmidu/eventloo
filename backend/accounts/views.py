@@ -1956,3 +1956,62 @@ class SchoolSettingsViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         return self.update(request, *args, **kwargs) 
+
+@api_view(['POST'])
+@permission_classes([])
+def create_admin_user(request):
+    """Create an admin user for testing"""
+    from django.contrib.auth import get_user_model
+    from django.db import transaction
+    
+    User = get_user_model()
+    
+    try:
+        with transaction.atomic():
+            email = 'admin@eventloo.com'
+            password = 'admin123'
+            name = 'Admin User'
+            
+            # Check if user already exists and activate if needed
+            existing_user = User.objects.filter(email=email).first()
+            if existing_user:
+                # Update existing user to ensure it's active
+                existing_user.is_active = True
+                existing_user.is_staff = True
+                existing_user.is_superuser = True
+                existing_user.role = 'admin'
+                existing_user.save()
+                return Response({
+                    'message': 'Admin user activated successfully',
+                    'email': email,
+                    'password': password
+                }, status=200)
+            
+            # Create admin user
+            user = User.objects.create_user(
+                email=email,
+                username=email,
+                password=password,
+                name=name,
+                role='admin',
+                is_staff=True,
+                is_superuser=True,
+                is_active=True
+            )
+            
+            return Response({
+                'message': 'Admin user created successfully',
+                'email': email,
+                'password': password,
+                'name': name,
+                'role': user.role
+            }, status=201)
+            
+    except Exception as e:
+        return Response({
+            'error': f'Error creating user: {str(e)}'
+        }, status=500)
+
+
+
+ 

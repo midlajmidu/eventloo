@@ -13,6 +13,7 @@ import TeamManagerLayout from './components/Layout/TeamManagerLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import TeamProtectedRoute from './components/TeamProtectedRoute';
 import DebugBackend from './components/DebugBackend';
+import BackendTest from './components/BackendTest';
 
 // Admin Components
 import EventsPage from './components/Admin/EventsPage';
@@ -63,6 +64,7 @@ function App() {
           <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/test" element={<BackendTest />} />
 
           {/* Protected Admin Routes */}
           <Route 

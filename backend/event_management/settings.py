@@ -18,7 +18,13 @@ ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STR.split(',')]
 
 # Add Google Cloud Run domain if in production
 if not DEBUG:
-    ALLOWED_HOSTS.extend(['.run.app', '.googleapis.com'])
+    ALLOWED_HOSTS.extend([
+        '.run.app', 
+        '.googleapis.com',
+        '.up.railway.app',  # Railway domains
+        'eventloo-backend-241540993150.us-central1.run.app',
+        'eventloo-backend-uj5wj7uv4a-uc.a.run.app'
+    ])
 
 # Application definition
 INSTALLED_APPS = [
@@ -200,6 +206,7 @@ else:
     CORS_ALLOWED_ORIGINS = [
         'https://eventloo-uj5wj7uv4a-uc.a.run.app',  # Frontend URL
         'https://eventloo-us-central1-eventloo.a.run.app',
+        'https://eventloo-frontend-326693416937.us-central1.run.app',  # New Google Cloud Frontend URL
     ]
     # Also allow any subdomain of run.app for flexibility
     CORS_ALLOWED_ORIGIN_REGEXES = [
