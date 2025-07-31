@@ -17,9 +17,9 @@ export const getApiBaseUrl = () => {
     return envUrl;
   }
   
-  // In production, use the backend URL in the eventloo-com project
+  // In production, use the current working backend URL
   if (process.env.NODE_ENV === 'production') {
-    return 'https://eventloo-backend-us-central1-eventloo-com.a.run.app/api';
+    return 'https://eventloo-backend-7vxrwvifna-uc.a.run.app/api';
   }
   
   // Default to HTTP localhost for development
