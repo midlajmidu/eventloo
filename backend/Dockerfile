@@ -21,7 +21,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements-minimal.txt requirements.txt
+COPY requirements-production.txt requirements.txt
 
 # Install Python dependencies with memory optimization
 RUN pip install --upgrade pip && \

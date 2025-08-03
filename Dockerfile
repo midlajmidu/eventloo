@@ -27,7 +27,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-COPY requirements-production.txt /app/requirements.txt
+COPY backend/requirements-production.txt /app/requirements.txt
 RUN pip install --upgrade pip setuptools wheel
 RUN pip install -r requirements.txt
 
