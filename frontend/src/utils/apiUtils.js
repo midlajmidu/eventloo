@@ -14,16 +14,18 @@ export const getApiBaseUrl = () => {
     if (envUrl.includes('localhost') && envUrl.startsWith('https://')) {
       return envUrl.replace('https://', 'http://');
     }
-    return envUrl;
+    // Remove trailing slash if present
+    return envUrl.replace(/\/$/, '');
   }
   
   // In production, use Railway backend URL
   if (process.env.NODE_ENV === 'production') {
-    return process.env.REACT_APP_API_URL || 'https://eventloo-backend.railway.app';
+    const railwayUrl = process.env.REACT_APP_API_URL || 'https://eventloo-backend.railway.app';
+    return railwayUrl.replace(/\/$/, '');
   }
   
   // Default to HTTP localhost for development
-  return 'http://localhost:8000/api';
+  return 'http://localhost:8000';
 };
 
 /**
@@ -32,6 +34,17 @@ export const getApiBaseUrl = () => {
 export const createSafeApiUrl = (endpoint) => {
   const baseUrl = getApiBaseUrl();
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  
+  // Ensure we don't have double /api
+  if (baseUrl.includes('/api') && cleanEndpoint.startsWith('/api')) {
+    return `${baseUrl}${cleanEndpoint.replace('/api', '')}`;
+  }
+  
+  // If base URL doesn't have /api, add it
+  if (!baseUrl.includes('/api')) {
+    return `${baseUrl}/api${cleanEndpoint}`;
+  }
+  
   return `${baseUrl}${cleanEndpoint}`;
 };
 
