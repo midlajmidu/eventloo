@@ -1,7 +1,6 @@
 import os
 from pathlib import Path
 from datetime import timedelta
-from decouple import config
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -13,12 +12,13 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-production-secret-key-2024')
 
 # Get allowed hosts from environment variable or use defaults
-ALLOWED_HOSTS_STR = config('ALLOWED_HOSTS', default='localhost,127.0.0.1')
+ALLOWED_HOSTS_STR = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 ALLOWED_HOSTS = [host.strip() for host in ALLOWED_HOSTS_STR.split(',')]
 
-# Add Google Cloud Run domain if in production
+# Add Render domain if in production
 if not DEBUG:
     ALLOWED_HOSTS.extend([
+        '.onrender.com',  # Render domains
         '.run.app', 
         '.googleapis.com',
         '.up.railway.app',  # Railway domains
