@@ -37,11 +37,14 @@ COPY . /app/
 # Create directories for static and media files
 RUN mkdir -p /app/staticfiles /app/media
 
-# Debug: Check files in /app
-RUN echo "Checking files in /app" && ls -l /app
-
-# Make startup script executable
-RUN chmod +x /app/startup.sh
+# Create startup script
+RUN echo '#!/bin/bash' > /app/startup.sh && \
+    echo 'echo "🚀 Starting Django backend..."' >> /app/startup.sh && \
+    echo 'export PORT=${PORT:-8080}' >> /app/startup.sh && \
+    echo 'python manage.py migrate --noinput' >> /app/startup.sh && \
+    echo 'python manage.py collectstatic --noinput --clear' >> /app/startup.sh && \
+    echo 'exec gunicorn event_management.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 --keep-alive 5 --max-requests 500 --max-requests-jitter 50' >> /app/startup.sh && \
+    chmod +x /app/startup.sh
 
 # Collect static files
 RUN python manage.py collectstatic --noinput --clear
