@@ -4,7 +4,7 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app/backend
 
 # Set work directory
 WORKDIR /app
@@ -35,19 +35,20 @@ RUN pip install -r requirements.txt
 COPY . /app/
 
 # Create directories for static and media files
-RUN mkdir -p /app/staticfiles /app/media
+RUN mkdir -p /app/backend/staticfiles /app/backend/media
 
 # Create startup script
 RUN echo '#!/bin/bash' > /app/startup.sh && \
     echo 'echo "🚀 Starting Django backend..."' >> /app/startup.sh && \
     echo 'export PORT=${PORT:-8080}' >> /app/startup.sh && \
+    echo 'cd /app/backend' >> /app/startup.sh && \
     echo 'python manage.py migrate --noinput' >> /app/startup.sh && \
     echo 'python manage.py collectstatic --noinput --clear' >> /app/startup.sh && \
     echo 'exec gunicorn event_management.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 --keep-alive 5 --max-requests 500 --max-requests-jitter 50' >> /app/startup.sh && \
     chmod +x /app/startup.sh
 
 # Collect static files
-RUN python manage.py collectstatic --noinput --clear
+RUN cd /app/backend && python manage.py collectstatic --noinput --clear
 
 # Create a non-root user for security
 RUN adduser --disabled-password --gecos '' appuser
