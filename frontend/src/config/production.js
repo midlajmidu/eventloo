@@ -1,10 +1,10 @@
 // Production configuration for Eventloo
 const productionConfig = {
   // API Configuration
-  API_BASE_URL: process.env.REACT_APP_API_URL || 'https://eventloo-backend-7vxrwvifna-uc.a.run.app/api',
+  API_BASE_URL: process.env.REACT_APP_API_URL || 'https://eventloo-production.up.railway.app/api',
   
   // Frontend URL
-  FRONTEND_URL: process.env.REACT_APP_FRONTEND_URL || 'https://eventloo-frontend-326693416937.us-central1.run.app',
+  FRONTEND_URL: process.env.REACT_APP_FRONTEND_URL || 'https://eventloo.vercel.app',
   
   // Feature flags
   ENABLE_DEBUG: process.env.REACT_APP_ENABLE_DEBUG === 'true',

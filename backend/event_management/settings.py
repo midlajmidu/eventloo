@@ -6,11 +6,11 @@ from decouple import config
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'eventloo-production-secret-key-2024-change-this-in-production')
-
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-production-secret-key-2024')
 
 # Get allowed hosts from environment variable or use defaults
 ALLOWED_HOSTS_STR = config('ALLOWED_HOSTS', default='localhost,127.0.0.1')
@@ -100,15 +100,15 @@ if DATABASE_URL:
         'default': db_config
     }
 else:
-    # Fallback to Railway PostgreSQL environment variables
+    # Local PostgreSQL configuration
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.postgresql',
-            'NAME': os.environ.get('PGDATABASE'),
-            'USER': os.environ.get('PGUSER'),
-            'PASSWORD': os.environ.get('PGPASSWORD'),
-            'HOST': os.environ.get('PGHOST'),
-            'PORT': os.environ.get('PGPORT', '5432'),
+            'NAME': 'eventloo_db',
+            'USER': os.environ.get('USER', 'muhammedmidlaj'),
+            'PASSWORD': '',
+            'HOST': 'localhost',
+            'PORT': '5432',
         }
     }
 
@@ -196,20 +196,19 @@ SIMPLE_JWT = {
 
 # CORS settings
 CORS_ALLOWED_ORIGINS = [
-    "https://eventloo-frontend.vercel.app",
-    "https://eventloo-frontend-git-main.vercel.app",
-    "https://eventloo-frontend-git-develop.vercel.app",
     "http://localhost:3000",
-    "http://localhost:3001",
+    "http://127.0.0.1:3000",
+    "https://eventloo.vercel.app",
+    "https://eventloo-frontend-326693416937.us-central1.run.app",
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
 # CSRF settings
 CSRF_TRUSTED_ORIGINS = [
-    "https://eventloo-frontend.vercel.app",
-    "https://eventloo-frontend-git-main.vercel.app",
-    "https://eventloo-frontend-git-develop.vercel.app",
+    "http://localhost:3000",
+    "https://eventloo.vercel.app",
+    "https://eventloo-frontend-326693416937.us-central1.run.app",
 ]
 
 # Additional CORS settings for Chrome compatibility

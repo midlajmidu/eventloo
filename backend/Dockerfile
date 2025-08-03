@@ -1,46 +1,38 @@
-FROM python:3.10-slim
+# Use Python 3.11 slim image
+FROM python:3.11-slim
 
 # Set environment variables
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PORT=8000
 
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies in a single layer to reduce image size
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# Install system dependencies
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
         gcc \
-        libpq-dev \
-        pkg-config \
-        curl \
-    && apt-get clean \
+        postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY requirements-production.txt requirements.txt
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Install Python dependencies with memory optimization
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir --compile -r requirements.txt
-
-# Copy application code
+# Copy project
 COPY . .
 
-# Create start script
-RUN echo '#!/bin/bash' > start.sh && \
-    echo 'echo "🚀 Starting Django backend..."' >> start.sh && \
-    echo 'export PORT=${PORT:-8080}' >> start.sh && \
-    echo 'python manage.py migrate --noinput' >> start.sh && \
-    echo 'python manage.py collectstatic --noinput --clear' >> start.sh && \
-    echo 'exec gunicorn event_management.wsgi:application --bind 0.0.0.0:$PORT --workers 1 --threads 2 --timeout 120 --keep-alive 5 --max-requests 500 --max-requests-jitter 50' >> start.sh && \
-    chmod +x start.sh
+# Create startup script
+RUN echo '#!/bin/bash\n\
+cd /app/backend\n\
+python manage.py migrate\n\
+python manage.py create_admin_user\n\
+exec gunicorn event_management.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 120\n\
+' > /app/startup.sh && chmod +x /app/startup.sh
 
-# Expose the default port
-EXPOSE 8080
+# Expose port
+EXPOSE $PORT
 
-# Run the start script
-CMD ["./start.sh"]
+# Run startup script
+CMD ["/app/startup.sh"]
