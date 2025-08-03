@@ -7,10 +7,10 @@ from decouple import config
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-change-this-in-production')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'eventloo-production-secret-key-2024-change-this-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 # Get allowed hosts from environment variable or use defaults
 ALLOWED_HOSTS_STR = config('ALLOWED_HOSTS', default='localhost,127.0.0.1')
@@ -90,26 +90,25 @@ WSGI_APPLICATION = 'event_management.wsgi.application'
 # Database
 import dj_database_url
 
-DATABASE_URL = config('DATABASE_URL', default=None)
+DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL:
     db_config = dj_database_url.parse(DATABASE_URL)
     # Add connection optimization for production
     if not DEBUG:
-        db_config.update({
-            'CONN_MAX_AGE': 60,
-            'OPTIONS': {
-                'MAX_CONNS': 20,
-                'MIN_CONNS': 1,
-            }
-        })
+        db_config.update({'CONN_MAX_AGE': 60})
     DATABASES = {
         'default': db_config
     }
 else:
+    # Fallback to Railway PostgreSQL environment variables
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('PGDATABASE'),
+            'USER': os.environ.get('PGUSER'),
+            'PASSWORD': os.environ.get('PGPASSWORD'),
+            'HOST': os.environ.get('PGHOST'),
+            'PORT': os.environ.get('PGPORT', '5432'),
         }
     }
 
@@ -195,27 +194,25 @@ SIMPLE_JWT = {
     'TOKEN_TYPE_CLAIM': 'token_type',
 }
 
-# CORS Configuration
-if DEBUG:
-    # Development CORS settings
-    CORS_ALLOWED_ORIGINS_STR = config('CORS_ALLOWED_ORIGINS', default='http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001')
-    CORS_ALLOWED_ORIGINS = [origin.strip() for origin in CORS_ALLOWED_ORIGINS_STR.split(',')]
-    CORS_ALLOW_ALL_ORIGINS = True
-else:
-    # Production CORS settings - allow frontend domain
-    CORS_ALLOWED_ORIGINS = [
-        'https://eventloo-uj5wj7uv4a-uc.a.run.app',  # Frontend URL
-        'https://eventloo-us-central1-eventloo.a.run.app',
-        'https://eventloo-frontend-326693416937.us-central1.run.app',  # New Google Cloud Frontend URL
-    ]
-    # Also allow any subdomain of run.app for flexibility
-    CORS_ALLOWED_ORIGIN_REGEXES = [
-        r"^https://.*\.run\.app$",
-    ]
-    CORS_ALLOW_ALL_ORIGINS = False
+# CORS settings
+CORS_ALLOWED_ORIGINS = [
+    "https://eventloo-frontend.vercel.app",
+    "https://eventloo-frontend-git-main.vercel.app",
+    "https://eventloo-frontend-git-develop.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+# CSRF settings
+CSRF_TRUSTED_ORIGINS = [
+    "https://eventloo-frontend.vercel.app",
+    "https://eventloo-frontend-git-main.vercel.app",
+    "https://eventloo-frontend-git-develop.vercel.app",
+]
 
 # Additional CORS settings for Chrome compatibility
-CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',

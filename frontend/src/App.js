@@ -98,124 +98,124 @@ function App() {
     <ErrorBoundary>
       <Router>
         <AuthHandler>
-          <div className="App">
-            <DebugBackend />
-            <Routes>
-            {/* Public Routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/test" element={<BackendTest />} />
+        <div className="App">
+          <DebugBackend />
+          <Routes>
+          {/* Public Routes */}
+          <Route path="/login" element={<Login />} />
+          <Route path="/test" element={<BackendTest />} />
 
-            {/* Protected Admin Routes */}
-            <Route 
-              path="/admin/*" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <AdminLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<AdminDashboard />} />
-              <Route path="dashboard" element={<AdminDashboard />} />
-              <Route path="events" element={<EventsPage />} />
-              <Route path="students" element={<StudentsPage />} />
-              <Route path="teams" element={<TeamsPage />} />
-              <Route path="points" element={<PointsPage />} />
-              <Route path="settings" element={<AdminSettings />} />
-            </Route>
+          {/* Protected Admin Routes */}
+          <Route 
+            path="/admin/*" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <AdminLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<AdminDashboard />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="events" element={<EventsPage />} />
+            <Route path="students" element={<StudentsPage />} />
+            <Route path="teams" element={<TeamsPage />} />
+            <Route path="points" element={<PointsPage />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route>
 
-            {/* Team Login Dashboard Routes */}
-            <Route 
-              path="/team-manager/dashboard" 
-              element={
-                <TeamProtectedRoute>
-                  <TeamLoginDashboard />
-                </TeamProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/team-manager/dashboard/events/:eventId/programs/:programId/assign" 
-              element={
-                <TeamProtectedRoute>
-                  <ProgramAssignmentPage />
-                </TeamProtectedRoute>
-              } 
-            />
+          {/* Team Login Dashboard Routes */}
+          <Route 
+            path="/team-manager/dashboard" 
+            element={
+              <TeamProtectedRoute>
+                <TeamLoginDashboard />
+              </TeamProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/team-manager/dashboard/events/:eventId/programs/:programId/assign" 
+            element={
+              <TeamProtectedRoute>
+                <ProgramAssignmentPage />
+              </TeamProtectedRoute>
+            } 
+          />
 
-            {/* Protected Team Manager Routes */}
-            <Route 
-              path="/team-manager/*" 
-              element={
-                <ProtectedRoute requiredRole="team_manager">
-                  <TeamManagerLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<TeamManagerDashboard />} />
-              <Route path="students" element={<TeamStudents />} />
-              <Route path="events" element={<TeamManagerEvents />} />
-              <Route path="events/:eventId" element={<TeamEventDetail />} />
-              <Route path="events/:eventId/programs/:programId/assign" element={<ProgramAssignmentPage />} />
-              <Route path="assignments" element={<TeamAssignments />} />
-              <Route path="points" element={<TeamManagerPoints />} />
-              <Route path="profile" element={<div className="text-center py-20">Team Profile - Coming Soon!</div>} />
-              <Route path="settings" element={<div className="text-center py-20">Settings Page - Coming Soon!</div>} />
-            </Route>
+          {/* Protected Team Manager Routes */}
+          <Route 
+            path="/team-manager/*" 
+            element={
+              <ProtectedRoute requiredRole="team_manager">
+                <TeamManagerLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<TeamManagerDashboard />} />
+            <Route path="students" element={<TeamStudents />} />
+            <Route path="events" element={<TeamManagerEvents />} />
+            <Route path="events/:eventId" element={<TeamEventDetail />} />
+            <Route path="events/:eventId/programs/:programId/assign" element={<ProgramAssignmentPage />} />
+            <Route path="assignments" element={<TeamAssignments />} />
+            <Route path="points" element={<TeamManagerPoints />} />
+            <Route path="profile" element={<div className="text-center py-20">Team Profile - Coming Soon!</div>} />
+            <Route path="settings" element={<div className="text-center py-20">Settings Page - Coming Soon!</div>} />
+          </Route>
 
-            {/* Protected User Routes */}
-            <Route 
-              path="/user/dashboard" 
-              element={
-                <ProtectedRoute requiredRole="event_manager">
-                  <UserDashboard />
-                </ProtectedRoute>
-              } 
-            />
+          {/* Protected User Routes */}
+          <Route 
+            path="/user/dashboard" 
+            element={
+              <ProtectedRoute requiredRole="event_manager">
+                <UserDashboard />
+              </ProtectedRoute>
+            } 
+          />
 
-            {/* Event Dashboard Route */}
-            <Route 
-              path="/events/:eventId/dashboard" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <EventDashboard />
-                </ProtectedRoute>
-              } 
-            />
+          {/* Event Dashboard Route */}
+          <Route 
+            path="/events/:eventId/dashboard" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <EventDashboard />
+              </ProtectedRoute>
+            } 
+          />
 
-            {/* Event Top Performers Route */}
-            <Route 
-              path="/events/:eventId/top-performers" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <div className="min-h-screen bg-gray-50">
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                      <EventTopPerformers />
-                    </div>
+          {/* Event Top Performers Route */}
+          <Route 
+            path="/events/:eventId/top-performers" 
+            element={
+              <ProtectedRoute requiredRole="admin">
+                <div className="min-h-screen bg-gray-50">
+                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                    <EventTopPerformers />
                   </div>
-                </ProtectedRoute>
-              } 
-            />
+                </div>
+              </ProtectedRoute>
+            } 
+          />
 
-            {/* Default Route */}
-            <Route 
-              path="/" 
-              element={
-                isAuthenticated() ? (
-                  <Navigate to={getDefaultRoute()} replace />
-                ) : (
-                  <Navigate to="/login" replace />
-                )
-              } 
-            />
+          {/* Default Route */}
+          <Route 
+            path="/" 
+            element={
+              isAuthenticated() ? (
+                <Navigate to={getDefaultRoute()} replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
 
-            {/* Catch-all Route */}
-            <Route 
-              path="*" 
-              element={<Navigate to="/" replace />} 
-            />
-          </Routes>
-        </div>
+          {/* Catch-all Route */}
+          <Route 
+            path="*" 
+            element={<Navigate to="/" replace />} 
+          />
+        </Routes>
+      </div>
         </AuthHandler>
-      </Router>
+    </Router>
     </ErrorBoundary>
   );
 }

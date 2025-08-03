@@ -13,13 +13,13 @@ const BackendTest = () => {
   const runTests = async () => {
     setLoading(true);
     setTestResults([]);
-
+    
     try {
       // Test 1: API Configuration
       addResult('🔧 Testing API configuration...', 'info');
       debugApiConfig();
       addResult(`✅ API Base URL: ${getApiBaseUrl()}`, 'success');
-
+      
       // Test 2: Backend Health Check
       addResult('🏥 Testing backend health...', 'info');
       try {
@@ -104,15 +104,15 @@ const BackendTest = () => {
     <div className="max-w-4xl mx-auto p-6">
       <div className="bg-white rounded-lg shadow-lg p-6">
         <h2 className="text-2xl font-bold mb-4">Backend Connection Test</h2>
-        
-        <button
+      
+      <button 
           onClick={runTests}
-          disabled={loading}
+        disabled={loading}
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 mb-4"
-        >
+      >
           {loading ? 'Running Tests...' : 'Run Connection Tests'}
-        </button>
-
+      </button>
+      
         <div className="space-y-2">
           {testResults.map((result, index) => (
             <div

@@ -1,0 +1,85 @@
+#!/bin/bash
+
+echo "🌐 ACCESSING DATA IN GOOGLE CLOUD"
+echo "=================================================="
+
+echo "📋 Your Database Information:"
+echo "   Project ID: 7vxrwvifna"
+echo "   Database Instance: eventloo-db"
+echo "   Database Name: eventloo_db"
+echo "   Public IP: 35.194.18.12"
+echo "   Port: 5432"
+echo "   Username: eventloo_user"
+echo ""
+
+echo "🔍 WAYS TO ACCESS YOUR DATA:"
+echo "=================================================="
+
+echo "1️⃣ GOOGLE CLOUD CONSOLE (Web Interface)"
+echo "   📍 URL: https://console.cloud.google.com/sql/instances"
+echo "   📍 Select project: 7vxrwvifna"
+echo "   📍 Click on: eventloo-db"
+echo "   📍 Go to: DATABASES tab"
+echo "   📍 Click: eventloo_db"
+echo "   📍 Use: Query Editor to run SQL queries"
+echo ""
+
+echo "2️⃣ GOOGLE CLOUD SHELL (Command Line)"
+echo "   📍 URL: https://console.cloud.google.com/cloudshell"
+echo "   📍 Run: gcloud sql connect eventloo-db --user=eventloo_user"
+echo "   📍 Enter password: eventloo_secure_password_2024"
+echo ""
+
+echo "3️⃣ THIRD-PARTY TOOLS"
+echo "   📍 pgAdmin (Desktop app)"
+echo "   📍 DBeaver (Desktop app)"
+echo "   📍 TablePlus (Desktop app)"
+echo "   📍 Connection details:"
+echo "      Host: 35.194.18.12"
+echo "      Port: 5432"
+echo "      Database: eventloo_db"
+echo "      Username: eventloo_user"
+echo "      Password: eventloo_secure_password_2024"
+echo ""
+
+echo "4️⃣ API ACCESS (Programmatic)"
+echo "   📍 Backend API: https://eventloo-backend-7vxrwvifna-uc.a.run.app/api/"
+echo "   📍 Authentication required"
+echo ""
+
+echo "📊 SAMPLE SQL QUERIES TO VIEW DATA:"
+echo "=================================================="
+
+echo "🔍 View all users:"
+echo "   SELECT id, username, email, name, role FROM auth_user;"
+echo ""
+
+echo "🔍 View all events:"
+echo "   SELECT id, name, description, start_date, end_date FROM events_event;"
+echo ""
+
+echo "🔍 View all students:"
+echo "   SELECT id, name, student_id, category, grade, section FROM auth_user WHERE role = 'student';"
+echo ""
+
+echo "🔍 View all teams:"
+echo "   SELECT id, name, team_number FROM events_team;"
+echo ""
+
+echo "🔍 View program assignments:"
+echo "   SELECT pa.id, u.name as student, t.name as team, p.name as program FROM events_programassignment pa JOIN auth_user u ON pa.student_id = u.id JOIN events_team t ON pa.team_id = t.id JOIN events_program p ON pa.program_id = p.id;"
+echo ""
+
+echo "🌐 QUICK ACCESS LINKS:"
+echo "=================================================="
+echo "🔗 Cloud SQL Console: https://console.cloud.google.com/sql/instances"
+echo "🔗 Cloud Shell: https://console.cloud.google.com/cloudshell"
+echo "🔗 Your Backend API: https://eventloo-backend-7vxrwvifna-uc.a.run.app/api/"
+echo "🔗 Your Frontend: https://eventloo-frontend-7vxrwvifna-uc.a.run.app"
+echo ""
+
+echo "💡 TIP: The easiest way is to use Google Cloud Console's Query Editor!"
+echo "   - No installation needed"
+echo "   - Web-based interface"
+echo "   - Real-time data viewing"
+echo "   - Export capabilities" 

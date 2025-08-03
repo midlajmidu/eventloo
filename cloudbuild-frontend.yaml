@@ -1,13 +1,25 @@
 steps:
-  # Build the frontend container image
+  # Build the React app
+  - name: 'node:18'
+    entrypoint: npm
+    args: ['ci']
+    dir: 'frontend'
+
+  - name: 'node:18'
+    entrypoint: npm
+    args: ['run', 'build']
+    dir: 'frontend'
+
+  # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/eventloo-frontend:latest', 'frontend/']
+    args: ['build', '-t', 'gcr.io/$PROJECT_ID/eventloo-frontend:$COMMIT_SHA', '.']
+    dir: 'frontend'
   
-  # Push the container image to Container Registry
+  # Push the image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/eventloo-frontend:latest']
+    args: ['push', 'gcr.io/$PROJECT_ID/eventloo-frontend:$COMMIT_SHA']
   
-  # Deploy container image to Cloud Run
+  # Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -15,32 +27,27 @@ steps:
       - 'deploy'
       - 'eventloo-frontend'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/eventloo-frontend:latest'
+      - 'gcr.io/$PROJECT_ID/eventloo-frontend:$COMMIT_SHA'
       - '--region'
       - 'us-central1'
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
       - '--port'
-      - '8080'
+      - '80'
       - '--memory'
-      - '1Gi'
+      - '512Mi'
       - '--cpu'
       - '1'
       - '--max-instances'
       - '10'
       - '--timeout'
       - '300'
-      - '--min-instances'
-      - '0'
       - '--set-env-vars'
-      - 'REACT_APP_API_URL=https://eventloo-backend-326693416937.us-central1.run.app/api'
-      - '--execution-environment'
-      - 'gen2'
+      - 'REACT_APP_API_URL=https://eventloo-backend-7vxrwvifna-uc.a.run.app/api,NODE_ENV=production'
 
 images:
-  - 'gcr.io/$PROJECT_ID/eventloo-frontend:latest'
+  - 'gcr.io/$PROJECT_ID/eventloo-frontend:$COMMIT_SHA'
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: 'E2_HIGHCPU_8' 

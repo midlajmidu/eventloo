@@ -17,9 +17,9 @@ export const getApiBaseUrl = () => {
     return envUrl;
   }
   
-  // In production, use the current working backend URL
+  // In production, use Railway backend URL
   if (process.env.NODE_ENV === 'production') {
-    return 'https://eventloo-backend-7vxrwvifna-uc.a.run.app/api';
+    return process.env.REACT_APP_API_URL || 'https://eventloo-backend.railway.app';
   }
   
   // Default to HTTP localhost for development

@@ -1,0 +1,53 @@
+#!/bin/bash
+
+echo "🔍 GETTING EXACT DATABASE_URL FOR YOUR PROJECT"
+echo "=================================================="
+
+echo "📋 Your Project Details:"
+echo "   Project ID: 7vxrwvifna"
+echo "   Region: us-central1"
+echo ""
+
+echo "📊 Database Information (from our previous setup):"
+echo "   Instance: eventloo-db"
+echo "   Public IP: 35.194.18.12"
+echo "   Database: eventloo_db"
+echo "   Username: eventloo_user"
+echo "   Password: eventloo_secure_password_2024"
+echo "   Port: 5432"
+echo ""
+
+echo "🔗 YOUR EXACT DATABASE_URL:"
+echo "=================================================="
+echo "postgres://eventloo_user:eventloo_secure_password_2024@35.194.18.12:5432/eventloo_db"
+echo ""
+
+echo "📋 HOW TO VERIFY THIS IS CORRECT:"
+echo "=================================================="
+echo "1. Go to: https://console.cloud.google.com/sql/instances"
+echo "2. Select project: 7vxrwvifna"
+echo "3. Click on: eventloo-db"
+echo "4. Check:"
+echo "   - OVERVIEW tab: Public IP address"
+echo "   - DATABASES tab: Database name"
+echo "   - USERS tab: Username and password"
+echo ""
+
+echo "🧪 TESTING DATABASE CONNECTION:"
+echo "=================================================="
+echo "After adding DATABASE_URL to your backend, test with:"
+echo ""
+echo "curl -X POST -H \"Content-Type: application/json\" \\"
+echo "  -d '{\"username\": \"admin\", \"password\": \"admin123\", \"email\": \"admin@eventloo.com\", \"first_name\": \"Admin\", \"last_name\": \"User\", \"role\": \"admin\"}' \\"
+echo "  \"https://eventloo-backend-7vxrwvifna-uc.a.run.app/api/create-admin-user/\""
+echo ""
+
+echo "✅ EXPECTED RESULT:"
+echo "   {\"message\":\"Admin user created successfully\",...}"
+echo ""
+
+echo "🌐 QUICK LINKS:"
+echo "=================================================="
+echo "🔗 Cloud SQL Console: https://console.cloud.google.com/sql/instances"
+echo "🔗 Cloud Run Console: https://console.cloud.google.com/run"
+echo "🔗 Your Backend: https://eventloo-backend-7vxrwvifna-uc.a.run.app" 

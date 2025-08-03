@@ -74,13 +74,13 @@ const Login = () => {
         if (redirectPath) {
           navigate(redirectPath);
         } else {
-          // Redirect based on role
-          if (response.data.user.role === 'admin') {
-            navigate('/admin/dashboard');
-          } else if (response.data.user.role === 'team_manager') {
-            navigate('/team-manager');
-          } else {
-            navigate('/user/dashboard');
+        // Redirect based on role
+        if (response.data.user.role === 'admin') {
+          navigate('/admin/dashboard');
+        } else if (response.data.user.role === 'team_manager') {
+          navigate('/team-manager');
+        } else {
+          navigate('/user/dashboard');
           }
         }
       } else {
