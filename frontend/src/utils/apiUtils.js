@@ -49,6 +49,25 @@ export const createSafeApiUrl = (endpoint) => {
 };
 
 /**
+ * Gets the API base URL with /api included
+ */
+export const getApiBaseUrlWithApi = () => {
+  const baseUrl = getApiBaseUrl();
+  
+  // Always add /api to the base URL for production
+  if (process.env.NODE_ENV === 'production') {
+    return `${baseUrl}/api`;
+  }
+  
+  // For development, check if base URL already has /api
+  if (baseUrl.includes('/api')) {
+    return baseUrl;
+  } else {
+    return `${baseUrl}/api`;
+  }
+};
+
+/**
  * Debug function to log API configuration
  */
 export const debugApiConfig = () => {
@@ -56,6 +75,7 @@ export const debugApiConfig = () => {
   console.log('  - Environment:', process.env.NODE_ENV);
   console.log('  - REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
   console.log('  - Computed Base URL:', getApiBaseUrl());
+  console.log('  - Base URL with API:', getApiBaseUrlWithApi());
   console.log('  - Current Location:', window.location.href);
   console.log('  - Protocol:', window.location.protocol);
   console.log('  - Production Config:', productionConfig);

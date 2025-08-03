@@ -1,8 +1,8 @@
 import axios from 'axios';
-import { getApiBaseUrl, createSafeApiUrl, debugApiConfig, getApiTimeout } from '../utils/apiUtils';
+import { getApiBaseUrl, getApiBaseUrlWithApi, createSafeApiUrl, debugApiConfig, getApiTimeout } from '../utils/apiUtils';
 
 // Use the safe API base URL with /api included
-const API_BASE_URL = createSafeApiUrl('');
+const API_BASE_URL = getApiBaseUrlWithApi();
 
 // Debug logging to help identify URL issues
 debugApiConfig();
