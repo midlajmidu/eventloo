@@ -3,9 +3,9 @@
 echo "🔍 Debugging Network Error Between Frontend and Backend"
 echo "======================================================"
 
-# You need to replace these with your actual URLs
-FRONTEND_URL="https://your-vercel-frontend-url.vercel.app"
-BACKEND_URL="https://your-railway-backend-url.railway.app"
+# Updated with correct URLs
+FRONTEND_URL="https://eventloo.vercel.app"
+BACKEND_URL="https://eventloo-production.up.railway.app"
 
 echo "Frontend URL: $FRONTEND_URL"
 echo "Backend URL: $BACKEND_URL"
@@ -83,6 +83,7 @@ echo "Testing backend root..."
 ROOT_RESPONSE=$(curl -s "$BACKEND_URL/")
 if [ ! -z "$ROOT_RESPONSE" ]; then
     echo "✅ Backend root is responding"
+    echo "Response: $ROOT_RESPONSE"
 else
     echo "❌ Backend root is not responding"
 fi
@@ -122,8 +123,7 @@ echo "   - Check browser console for specific errors"
 echo "   - Clear browser cache and try again"
 echo ""
 echo "🔧 Next Steps:"
-echo "1. Update the URLs in this script with your actual URLs"
-echo "2. Run this script again"
+echo "1. Update environment variables in Vercel and Railway"
+echo "2. Redeploy both services"
 echo "3. Check Railway logs for specific errors"
-echo "4. Check Vercel environment variables"
-echo "5. Test in browser with developer tools open" 
+echo "4. Test in browser with developer tools open" 
