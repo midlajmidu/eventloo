@@ -3,7 +3,7 @@ services:
     name: eventloo-backend
     env: python
     plan: free
-    buildCommand: pip install -r backend/requirements.txt
+    buildCommand: pip install --upgrade pip setuptools wheel && pip install -r backend/requirements-minimal.txt
     startCommand: ./start.sh
     envVars:
       - key: PYTHON_VERSION
@@ -18,6 +18,10 @@ services:
         value: https://eventloo.vercel.app,http://localhost:3000
       - key: CSRF_TRUSTED_ORIGINS
         value: https://eventloo.vercel.app,http://localhost:3000
+      - key: PIP_NO_CACHE_DIR
+        value: "1"
+      - key: PIP_DISABLE_PIP_VERSION_CHECK
+        value: "1"
 
 databases:
   - name: eventloo-db
