@@ -18,10 +18,10 @@ export const getApiBaseUrl = () => {
     return envUrl.replace(/\/$/, '');
   }
   
-  // In production, use Railway backend URL
+  // In production, use Render backend URL as default
   if (process.env.NODE_ENV === 'production') {
-    const railwayUrl = process.env.REACT_APP_API_URL || 'https://eventloo-backend.railway.app';
-    return railwayUrl.replace(/\/$/, '');
+    const renderUrl = process.env.REACT_APP_API_URL || 'https://eventloo-backend-qkvm.onrender.com';
+    return renderUrl.replace(/\/$/, '');
   }
   
   // Default to HTTP localhost for development
