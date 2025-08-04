@@ -35,15 +35,11 @@ export const createSafeApiUrl = (endpoint) => {
   const baseUrl = getApiBaseUrl();
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   
-  // Always add /api to the base URL for production
-  if (process.env.NODE_ENV === 'production') {
-    return `${baseUrl}/api${cleanEndpoint}`;
-  }
-  
-  // For development, check if base URL already has /api
+  // Check if base URL already has /api
   if (baseUrl.includes('/api')) {
     return `${baseUrl}${cleanEndpoint}`;
   } else {
+    // Add /api to the base URL
     return `${baseUrl}/api${cleanEndpoint}`;
   }
 };
@@ -54,15 +50,11 @@ export const createSafeApiUrl = (endpoint) => {
 export const getApiBaseUrlWithApi = () => {
   const baseUrl = getApiBaseUrl();
   
-  // Always add /api to the base URL for production
-  if (process.env.NODE_ENV === 'production') {
-    return `${baseUrl}/api`;
-  }
-  
-  // For development, check if base URL already has /api
+  // Check if base URL already has /api
   if (baseUrl.includes('/api')) {
     return baseUrl;
   } else {
+    // Add /api to the base URL
     return `${baseUrl}/api`;
   }
 };
