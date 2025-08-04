@@ -13,7 +13,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: ALLOWED_HOSTS
-        value: eventloo-backend.onrender.com,localhost,127.0.0.1
+        value: eventloo-backend-qkvm.onrender.com,localhost,127.0.0.1
       - key: CORS_ALLOWED_ORIGINS
         value: https://eventloo.vercel.app,http://localhost:3000
       - key: CSRF_TRUSTED_ORIGINS
@@ -22,9 +22,8 @@ services:
         value: "1"
       - key: PIP_DISABLE_PIP_VERSION_CHECK
         value: "1"
-
-databases:
-  - name: eventloo-db
-    databaseName: eventloo_db
-    user: eventloo_user
-    plan: free 
+    databases:
+      - name: eventloo-db
+        databaseName: eventloo_db
+        user: eventloo_user
+        plan: free 
