@@ -1,7 +1,7 @@
 // Production configuration for Eventloo
 const productionConfig = {
   // API Configuration
-  API_BASE_URL: process.env.REACT_APP_API_URL || 'https://eventloo-backend.onrender.com/api',
+  API_BASE_URL: process.env.REACT_APP_API_URL || 'https://eventloo-backend-qkvm.onrender.com/api',
   
   // Frontend URL
   FRONTEND_URL: process.env.REACT_APP_FRONTEND_URL || 'https://eventloo.vercel.app',
