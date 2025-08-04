@@ -1,25 +1,26 @@
 #!/bin/bash
 
-echo "🚀 Starting Eventloo backend..."
+echo "Starting Django backend"
 
 # Change to backend directory
 cd backend
 
-# Run migrations
-echo "🗄️ Running database migrations..."
-python manage.py migrate
+# Run database migrations
+echo "Running database migrations..."
+python manage.py migrate --noinput
+
+# Collect static files
+echo "Collecting static files..."
+python manage.py collectstatic --noinput
 
 # Create admin user
-echo "👤 Creating admin user..."
+echo "Creating admin user..."
 python manage.py create_admin_user
 
 # Start Gunicorn server
-echo "🌐 Starting Gunicorn server..."
+echo "Starting Gunicorn server..."
 exec gunicorn event_management.wsgi:application \
     --bind 0.0.0.0:$PORT \
     --workers 1 \
-    --threads 2 \
-    --timeout 60 \
-    --preload \
-    --access-logfile - \
-    --error-logfile - 
+    --threads 4 \
+    --timeout 300 
