@@ -2883,8 +2883,14 @@ def generate_formatted_calling_sheet(request, program_id):
         
         program = Program.objects.get(id=program_id)
         assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team').order_by('chest_number', 'student__first_name')
+        
+        # DEBUG: Check school settings
         school_settings = SchoolSettings.get_settings()
+        print(f"DEBUG: School settings: {school_settings}")
+        
+        # DEBUG: Check template creation
         template = build_custom_pdf_template(school_settings)
+        print(f"DEBUG: Template: {template}")
         
         buffer = BytesIO()
         doc = SimpleDocTemplate(
@@ -2896,7 +2902,31 @@ def generate_formatted_calling_sheet(request, program_id):
             bottomMargin=50
         )
         elements = []
-        elements.extend(template.create_header(event_title=program.event.title, extra_title=f'Calling Sheet - {program.name}'))
+        
+        # FIXED: Handle template creation properly
+        if template is not None:
+            # Use the template header if available
+            elements.extend(template.create_header(event_title=program.event.title, extra_title=f'Calling Sheet - {program.name}'))
+        else:
+            # FALLBACK: Create a simple header without template
+            print("WARNING: Using fallback header - template is None")
+            styles = getSampleStyleSheet()
+            title_style = ParagraphStyle(
+                'TitleStyle',
+                parent=styles['Heading1'],
+                fontSize=16,
+                spaceAfter=20,
+                alignment=TA_CENTER,
+                textColor=colors.black,
+                fontName='Helvetica-Bold'
+            )
+            
+            # Simple header without template
+            header_text = f"{program.event.title}<br/>Calling Sheet - {program.name}"
+            header_paragraph = Paragraph(header_text, title_style)
+            elements.append(header_paragraph)
+            elements.append(Spacer(1, 20))
+        
         styles = getSampleStyleSheet()
         details_style = ParagraphStyle(
             'Details',
@@ -3056,20 +3086,22 @@ def generate_formatted_calling_sheet(request, program_id):
             elements.append(table)
         else:
             elements.append(Paragraph("No participants assigned to this program.", styles['Normal']))
+        
         doc.build(elements)
         pdf_data = buffer.getvalue()
         buffer.close()
+        
         response = HttpResponse(pdf_data, content_type='application/pdf')
         filename = f"{program.name.replace(' ', '_')}_formatted_calling_sheet.pdf"
         response['Content-Disposition'] = f'attachment; filename="{filename}"'
         return response
+        
     except Program.DoesNotExist:
         return Response({'error': 'Program not found'}, status=404)
     except Exception as e:
         print(f"Error generating calling sheet: {str(e)}")
         print(f"Traceback: {traceback.format_exc()}")
         return Response({'error': f'Error generating calling sheet: {str(e)}'}, status=500)
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_program_participants(request, program_id):
