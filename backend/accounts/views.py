@@ -1160,15 +1160,35 @@ class StudentViewSet(viewsets.ModelViewSet):
         if not file.name.endswith(('.xlsx', '.xls')):
             return Response({'error': 'Please upload an Excel file (.xlsx or .xls)'}, status=status.HTTP_400_BAD_REQUEST)
         
+        # Check file size (limit to 10MB)
+        if file.size > 10 * 1024 * 1024:  # 10MB
+            return Response({'error': 'File size too large. Please upload a file smaller than 10MB.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
-            # Read Excel file
+            # Read Excel file - use openpyxl for both .xlsx and .xls files for better compatibility
             try:
-                df = pd.read_excel(file, engine='openpyxl' if file.name.endswith('.xlsx') else 'xlrd')
+                if file.name.endswith('.xlsx'):
+                    df = pd.read_excel(file, engine='openpyxl')
+                elif file.name.endswith('.xls'):
+                    # Try openpyxl first, fallback to xlrd if needed
+                    try:
+                        df = pd.read_excel(file, engine='openpyxl')
+                    except Exception:
+                        df = pd.read_excel(file, engine='xlrd')
+                else:
+                    return Response({'error': 'Please upload an Excel file (.xlsx or .xls)'}, status=status.HTTP_400_BAD_REQUEST)
+                
+                print(f"Successfully read Excel file: {file.name}, Shape: {df.shape}")
+                
             except Exception as e:
-                return Response({'error': f'Error reading Excel file: {str(e)}'}, status=status.HTTP_400_BAD_REQUEST)
+                print(f"Error reading Excel file {file.name}: {str(e)}")
+                return Response({'error': f'Error reading Excel file: {str(e)}. Please ensure the file is a valid Excel file and not corrupted.'}, status=status.HTTP_400_BAD_REQUEST)
             
             # AI-powered column detection and data validation
+            print(f"Processing Excel data with {len(df)} rows...")
             results = self._process_student_excel_with_ai(df)
+            
+            print(f"Validation results: {len(results['valid_students'])} valid, {len(results['errors'])} errors")
             
             if results['errors']:
                 return Response({
@@ -1182,7 +1202,10 @@ class StudentViewSet(viewsets.ModelViewSet):
             skipped = []
             team_assignments = []
             
-            for student_data in results['valid_students']:
+            print(f"Starting to process {len(results['valid_students'])} valid students...")
+            
+            for index, student_data in enumerate(results['valid_students']):
+                print(f"Processing student {index + 1}/{len(results['valid_students'])}: {student_data.get('name', 'Unknown')}")
                 try:
                     # Auto-generate student_id
                     from datetime import datetime
@@ -1252,11 +1275,15 @@ class StudentViewSet(viewsets.ModelViewSet):
                         is_active=True
                     )
                     
-                    # Generate chest code
-                    student.generate_chest_code()
-                    student.save()
+                    # Generate chest code after student is created
+                    try:
+                        student.generate_chest_code()
+                    except Exception as e:
+                        print(f"Warning: Could not generate chest code for {student.student_id}: {str(e)}")
+                        # Continue without chest code - it's not critical
                     
                     created_students.append(student)
+                    print(f"Successfully created student: {student.student_id} - {student.name}")
                     
                     # Handle team assignment
                     team_name = student_data.get('team_name', '').strip()
@@ -1265,13 +1292,16 @@ class StudentViewSet(viewsets.ModelViewSet):
                             'student': student,
                             'team_name': team_name
                         })
+                        print(f"Queued team assignment: {student.name} -> {team_name}")
                     
                 except Exception as e:
+                    error_msg = f'Error creating student: {str(e)}'
+                    print(f"Error creating student {student_data.get('name', 'Unknown')}: {error_msg}")
                     skipped.append({
                         'student_id': student_data.get('student_id', 'Unknown'),
                         'name': student_data.get('name', ''),
                         'email': student_data.get('email', ''),
-                        'reason': f'Error creating student: {str(e)}'
+                        'reason': error_msg
                     })
             
             # Process team assignments
@@ -1286,6 +1316,9 @@ class StudentViewSet(viewsets.ModelViewSet):
                 'skipped_creations': len(skipped),
                 'team_assignments_processed': len(team_assignment_results)
             }
+            
+            print(f"Bulk upload completed: {summary}")
+            
             response_data = {
                 'success': True,
                 'message': f'Successfully processed {len(created_students)} students',
@@ -1296,7 +1329,15 @@ class StudentViewSet(viewsets.ModelViewSet):
             return Response(response_data)
             
         except Exception as e:
-            return Response({'error': f'Unexpected error: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"Bulk upload error: {str(e)}")
+            print(f"Traceback: {error_details}")
+            return Response({
+                'error': 'An unexpected error occurred while processing the file',
+                'details': [f'Server error: {str(e)}'],
+                'suggestions': ['Please try again with a different file', 'Ensure the file format is correct', 'Contact support if the issue persists']
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def _process_team_assignments(self, team_assignments):
         """Process team assignments for bulk uploaded students"""
