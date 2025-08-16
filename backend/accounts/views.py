@@ -1161,20 +1161,55 @@ class StudentViewSet(viewsets.ModelViewSet):
         if file.size > 10 * 1024 * 1024:  # 10MB
             return Response({'error': 'File size too large. Please upload a file smaller than 10MB.'}, status=status.HTTP_400_BAD_REQUEST)
         
+        # Check openpyxl version for .xlsx files
+        if file.name.endswith('.xlsx'):
+            try:
+                import openpyxl
+                openpyxl_version = openpyxl.__version__
+                print(f"Current openpyxl version: {openpyxl_version}")
+                if openpyxl_version < '3.1.0':
+                    return Response({
+                        'error': 'Server is currently updating. Please wait a few minutes and try again.',
+                        'details': [
+                            f'Current openpyxl version: {openpyxl_version}',
+                            'Required version: 3.1.0 or newer',
+                            'Server is being updated with the correct version'
+                        ],
+                        'suggestions': [
+                            'Please wait 5-10 minutes for the update to complete',
+                            'Try uploading your file again in a few minutes',
+                            'If the issue persists, contact support'
+                        ]
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            except ImportError:
+                return Response({
+                    'error': 'Server is currently updating. Please wait a few minutes and try again.',
+                    'details': ['openpyxl package is being installed'],
+                    'suggestions': ['Please wait 5-10 minutes for the update to complete']
+                }, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
-            # Read Excel file with proper engine selection
+            # Read Excel file with proper engine selection and version handling
             try:
                 if file.name.endswith('.xlsx'):
                     # For .xlsx files, we must use openpyxl
                     try:
                         df = pd.read_excel(file, engine='openpyxl')
                     except Exception as openpyxl_error:
-                        if 'openpyxl' in str(openpyxl_error).lower() and 'version' in str(openpyxl_error).lower():
-                            # openpyxl version issue - provide helpful error message
+                        error_msg = str(openpyxl_error).lower()
+                        if 'openpyxl' in error_msg and ('version' in error_msg or '3.1.0' in error_msg):
+                            # openpyxl version issue - try to provide alternative solution
                             return Response({
-                                'error': 'Excel file reading failed due to openpyxl version issue. Please contact support.',
-                                'details': [f'Technical error: {str(openpyxl_error)}'],
-                                'suggestions': ['Try uploading the file again', 'Ensure the file is not corrupted', 'Contact support if the issue persists']
+                                'error': 'Excel file reading failed due to openpyxl version issue.',
+                                'details': [
+                                    f'Current openpyxl version is too old (requires 3.1.0+)',
+                                    f'Technical error: {str(openpyxl_error)}'
+                                ],
+                                'suggestions': [
+                                    'Please wait for the server to update (usually 5-10 minutes)',
+                                    'Try uploading the file again in a few minutes',
+                                    'If the issue persists, contact support'
+                                ]
                             }, status=status.HTTP_400_BAD_REQUEST)
                         else:
                             raise openpyxl_error
