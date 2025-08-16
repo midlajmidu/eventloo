@@ -1162,20 +1162,24 @@ class StudentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'File size too large. Please upload a file smaller than 10MB.'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            # Read Excel file with fallback engines for compatibility
+            # Read Excel file with proper engine selection
             try:
                 if file.name.endswith('.xlsx'):
-                    # Try openpyxl first, fallback to xlrd if openpyxl version is too old
+                    # For .xlsx files, we must use openpyxl
                     try:
                         df = pd.read_excel(file, engine='openpyxl')
                     except Exception as openpyxl_error:
-                        if 'openpyxl' in str(openpyxl_error).lower():
-                            # openpyxl version issue, try xlrd
-                            df = pd.read_excel(file, engine='xlrd')
+                        if 'openpyxl' in str(openpyxl_error).lower() and 'version' in str(openpyxl_error).lower():
+                            # openpyxl version issue - provide helpful error message
+                            return Response({
+                                'error': 'Excel file reading failed due to openpyxl version issue. Please contact support.',
+                                'details': [f'Technical error: {str(openpyxl_error)}'],
+                                'suggestions': ['Try uploading the file again', 'Ensure the file is not corrupted', 'Contact support if the issue persists']
+                            }, status=status.HTTP_400_BAD_REQUEST)
                         else:
                             raise openpyxl_error
                 elif file.name.endswith('.xls'):
-                    # Try openpyxl first, fallback to xlrd if needed
+                    # For .xls files, try openpyxl first, then xlrd
                     try:
                         df = pd.read_excel(file, engine='openpyxl')
                     except Exception:
