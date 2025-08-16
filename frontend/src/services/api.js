@@ -41,6 +41,49 @@ reportApi.interceptors.request.use(
   }
 );
 
+// Attach auth token to reportApi requests (same behavior as main api)
+reportApi.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle 401 on reportApi by refreshing token once, then retrying
+reportApi.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/token/refresh/')) {
+      originalRequest._retry = true;
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (refreshToken) {
+        try {
+          const refreshResponse = await axios.post(`${API_BASE_URL}/token/refresh/`, { refresh: refreshToken });
+          const { access } = refreshResponse.data;
+          localStorage.setItem('access_token', access);
+          localStorage.setItem('token', access);
+          originalRequest.headers.Authorization = `Bearer ${access}`;
+          return reportApi(originalRequest);
+        } catch (refreshError) {
+          // Clear and redirect to login on refresh failure
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('user_role');
+          localStorage.removeItem('user');
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+          return Promise.reject(refreshError);
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Debug interceptor to log all requests
 api.interceptors.request.use(
   (config) => {
