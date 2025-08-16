@@ -12,6 +12,8 @@ from events.permissions import CanManageStudents
 from events.pagination import StandardPagination, LargePagination, SmallPagination
 import pandas as pd
 import re
+import random
+import string
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -19,12 +21,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.utils import timezone
 from events.models import Team, Event, Program, ProgramAssignment, PointsRecord as EventPointsRecord
-import pandas as pd
-import re
-import random
-import string
 from datetime import datetime
-from .models import SchoolSettings
 from .serializers import SchoolSettingsSerializer
 
 def get_paginated_response(data, request, pagination_class=StandardPagination):
@@ -1165,10 +1162,18 @@ class StudentViewSet(viewsets.ModelViewSet):
             return Response({'error': 'File size too large. Please upload a file smaller than 10MB.'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            # Read Excel file - use openpyxl for both .xlsx and .xls files for better compatibility
+            # Read Excel file with fallback engines for compatibility
             try:
                 if file.name.endswith('.xlsx'):
-                    df = pd.read_excel(file, engine='openpyxl')
+                    # Try openpyxl first, fallback to xlrd if openpyxl version is too old
+                    try:
+                        df = pd.read_excel(file, engine='openpyxl')
+                    except Exception as openpyxl_error:
+                        if 'openpyxl' in str(openpyxl_error).lower():
+                            # openpyxl version issue, try xlrd
+                            df = pd.read_excel(file, engine='xlrd')
+                        else:
+                            raise openpyxl_error
                 elif file.name.endswith('.xls'):
                     # Try openpyxl first, fallback to xlrd if needed
                     try:
