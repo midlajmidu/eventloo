@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Eventloo Browser Compatibility Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+            color: #0c5460;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .browser-info {
+            background-color: #e9ecef;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌐 Eventloo Browser Compatibility Test</h1>
+        
+        <div class="browser-info">
+            <h3>Browser Information</h3>
+            <p><strong>User Agent:</strong> <span id="userAgent"></span></p>
+            <p><strong>Browser:</strong> <span id="browserName"></span></p>
+            <p><strong>Version:</strong> <span id="browserVersion"></span></p>
+            <p><strong>Platform:</strong> <span id="platform"></span></p>
+        </div>
+
+        <div class="test-section">
+            <h3>🔗 Basic Connectivity Test</h3>
+            <p>Test if the backend server is reachable from this browser.</p>
+            <button onclick="testBasicConnectivity()">Test Basic Connectivity</button>
+            <div id="basicResult" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🌍 CORS Test</h3>
+            <p>Test if CORS is properly configured for this browser.</p>
+            <button onclick="testCORS()">Test CORS</button>
+            <div id="corsResult" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔐 Authentication Test</h3>
+            <p>Test if authentication endpoints work properly.</p>
+            <button onclick="testAuthentication()">Test Authentication</button>
+            <div id="authResult" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 Events API Test</h3>
+            <p>Test if the events API endpoint works.</p>
+            <button onclick="testEventsAPI()">Test Events API</button>
+            <div id="eventsResult" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔒 HTTPS vs HTTP Test</h3>
+            <p>Test if there's an HTTPS redirect issue causing the SSL errors.</p>
+            <button onclick="testHTTPSIssue()">Test HTTPS Issue</button>
+            <div id="httpsResult" class="result"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔄 All Tests</h3>
+            <p>Run all tests at once to get a complete picture.</p>
+            <button onclick="runAllTests()">Run All Tests</button>
+            <div id="allResults" class="result"></div>
+        </div>
+
+        <div class="test-section info">
+            <h3>💡 Troubleshooting Tips</h3>
+            <ul>
+                <li><strong>If basic connectivity fails:</strong> The backend server might not be running. Start it with <code>python3 manage.py runserver 8000</code></li>
+                <li><strong>If CORS fails:</strong> The server CORS settings might need adjustment</li>
+                <li><strong>If authentication fails:</strong> This is normal - it means the server is working but requires login</li>
+                <li><strong>If events API fails:</strong> Check if you're logged in to the main application</li>
+                <li><strong>Chrome-specific issues:</strong> Try clearing browser cache or using incognito mode</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // Detect browser information
+        function detectBrowser() {
+            const userAgent = navigator.userAgent;
+            document.getElementById('userAgent').textContent = userAgent;
+            document.getElementById('platform').textContent = navigator.platform;
+
+            let browserName = 'Unknown';
+            let browserVersion = 'Unknown';
+
+            if (userAgent.includes('Chrome')) {
+                browserName = 'Chrome';
+                browserVersion = userAgent.match(/Chrome\/(\d+)/)?.[1] || 'Unknown';
+            } else if (userAgent.includes('Firefox')) {
+                browserName = 'Firefox';
+                browserVersion = userAgent.match(/Firefox\/(\d+)/)?.[1] || 'Unknown';
+            } else if (userAgent.includes('Safari')) {
+                browserName = 'Safari';
+                browserVersion = userAgent.match(/Version\/(\d+)/)?.[1] || 'Unknown';
+            } else if (userAgent.includes('Edge')) {
+                browserName = 'Edge';
+                browserVersion = userAgent.match(/Edge\/(\d+)/)?.[1] || 'Unknown';
+            }
+
+            document.getElementById('browserName').textContent = browserName;
+            document.getElementById('browserVersion').textContent = browserVersion;
+        }
+
+        // Test basic connectivity
+        async function testBasicConnectivity() {
+            const resultDiv = document.getElementById('basicResult');
+            resultDiv.textContent = 'Testing...';
+            resultDiv.className = 'result info';
+
+            try {
+                const response = await fetch('http://localhost:8000/api/events/', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `✅ Success! Server responded with status: ${response.status}\nHeaders: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}`;
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Error: ${error.message}\n\nThis could mean:\n- Backend server is not running\n- Network connectivity issue\n- CORS problem`;
+            }
+        }
+
+        // Test CORS
+        async function testCORS() {
+            const resultDiv = document.getElementById('corsResult');
+            resultDiv.textContent = 'Testing CORS...';
+            resultDiv.className = 'result info';
+
+            try {
+                const response = await fetch('http://localhost:8000/api/events/', {
+                    method: 'OPTIONS',
+                    headers: {
+                        'Origin': 'http://localhost:3000',
+                        'Access-Control-Request-Method': 'GET',
+                        'Access-Control-Request-Headers': 'authorization,content-type',
+                    },
+                });
+
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `✅ CORS Preflight successful!\nStatus: ${response.status}\nHeaders: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}`;
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ CORS Error: ${error.message}\n\nThis indicates a CORS configuration issue.`;
+            }
+        }
+
+        // Test authentication
+        async function testAuthentication() {
+            const resultDiv = document.getElementById('authResult');
+            resultDiv.textContent = 'Testing authentication...';
+            resultDiv.className = 'result info';
+
+            try {
+                const response = await fetch('http://localhost:8000/api/token/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'test',
+                        password: 'test'
+                    }),
+                });
+
+                if (response.status === 400) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ Authentication endpoint working!\nStatus: ${response.status}\nResponse: Invalid credentials (expected for test user)`;
+                } else {
+                    resultDiv.className = 'result info';
+                    resultDiv.textContent = `ℹ️ Authentication endpoint responded with status: ${response.status}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Authentication Error: ${error.message}`;
+            }
+        }
+
+        // Test events API
+        async function testEventsAPI() {
+            const resultDiv = document.getElementById('eventsResult');
+            resultDiv.textContent = 'Testing events API...';
+            resultDiv.className = 'result info';
+
+            try {
+                const response = await fetch('http://localhost:8000/api/events/', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+
+                if (response.status === 401) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ Events API working!\nStatus: ${response.status}\nResponse: Authentication required (this is normal)`;
+                } else if (response.status === 200) {
+                    const data = await response.json();
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `✅ Events API working!\nStatus: ${response.status}\nData: ${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultDiv.className = 'result info';
+                    resultDiv.textContent = `ℹ️ Events API responded with status: ${response.status}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ Events API Error: ${error.message}`;
+            }
+        }
+
+        // Test HTTPS vs HTTP issue
+        async function testHTTPSIssue() {
+            const resultDiv = document.getElementById('httpsResult');
+            resultDiv.textContent = 'Testing HTTPS vs HTTP issue...';
+            resultDiv.className = 'result info';
+
+            try {
+                // Test HTTP (should work)
+                const httpResponse = await fetch('http://localhost:8000/api/events/', {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' },
+                });
+                
+                resultDiv.className = 'result success';
+                resultDiv.textContent = `✅ HTTP Test: Status ${httpResponse.status}\n\n`;
+                
+                // Test HTTPS (should fail)
+                try {
+                    await fetch('https://localhost:8000/api/events/', {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' },
+                    });
+                    resultDiv.textContent += `❌ HTTPS Test: Unexpectedly succeeded (this might indicate a redirect issue)`;
+                } catch (httpsError) {
+                    resultDiv.textContent += `✅ HTTPS Test: Failed as expected (${httpsError.message})`;
+                }
+                
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `❌ HTTP Test Error: ${error.message}\n\nThis suggests the backend server is not running or there's a network issue.`;
+            }
+        }
+
+        // Run all tests
+        async function runAllTests() {
+            const resultDiv = document.getElementById('allResults');
+            resultDiv.textContent = 'Running all tests...\n\n';
+            resultDiv.className = 'result info';
+
+            const tests = [
+                { name: 'Basic Connectivity', func: testBasicConnectivity },
+                { name: 'CORS', func: testCORS },
+                { name: 'Authentication', func: testAuthentication },
+                { name: 'Events API', func: testEventsAPI },
+                { name: 'HTTPS Issue', func: testHTTPSIssue }
+            ];
+
+            for (const test of tests) {
+                resultDiv.textContent += `=== ${test.name} Test ===\n`;
+                try {
+                    await test.func();
+                    const testResult = document.querySelector(`#${test.name.toLowerCase().replace(' ', '')}Result`);
+                    resultDiv.textContent += testResult.textContent + '\n\n';
+                } catch (error) {
+                    resultDiv.textContent += `Error running ${test.name}: ${error.message}\n\n`;
+                }
+            }
+
+            resultDiv.className = 'result info';
+        }
+
+        // Initialize page
+        detectBrowser();
+    </script>
+</body>
+</html> 
