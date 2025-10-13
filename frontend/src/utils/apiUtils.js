@@ -7,8 +7,15 @@ import productionConfig from '../config/production';
  * Always returns the local development URL
  */
 export const getApiBaseUrl = () => {
-  return 'http://localhost:8000';
+  // If running locally, use localhost
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return 'http://localhost:8000';
+  }
+
+  // Otherwise, use the environment variable (set in Vercel)
+  return process.env.REACT_APP_API_URL;
 };
+
 
 /**
  * Creates a safe API URL that prevents HTTPS issues
