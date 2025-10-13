@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Local development settings
 DEBUG = True
 SECRET_KEY = 'django-insecure-local-dev-key-123'
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['eventloo-backend-qkvm.onrender.com', '127.0.0.1']
 
 # Application definition
 INSTALLED_APPS = [
