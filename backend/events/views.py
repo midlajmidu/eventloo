@@ -128,6 +128,10 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
             
         except Exception as e:
+            import traceback
+            print('THIRD PLACE REPORT ERROR:', str(e))
+            print(traceback.format_exc())
+            return Response({'error': f'PDF generation failed: {str(e)}', 'traceback': traceback.format_exc()}, status=500)
             logger.error(f"Error in EventViewSet.list: {str(e)}", exc_info=True)
             return Response(
                 {
