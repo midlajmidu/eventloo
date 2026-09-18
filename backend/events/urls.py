@@ -13,6 +13,7 @@ router.register(r'team-manager', views.TeamManagerViewSet, basename='team-manage
 
 # Create nested routers for programs
 events_router = routers.NestedDefaultRouter(router, r'events', lookup='event')
+events_router.register(r'stages', views.EventStageViewSet, basename='event-stages')
 events_router.register(r'programs', views.ProgramViewSet, basename='event-programs')
 
 # Create nested routers for program assignments and results
@@ -31,7 +32,7 @@ urlpatterns = [
     path('events/<int:pk>/points/students/', views.EventViewSet.as_view({'get': 'points_students'}), name='event-points-students'),
     
     # Program utility endpoints
-    path('programs/<int:program_id>/calling-sheet/', views.generate_calling_sheet, name='generate_calling_sheet'),
+    path('programs/<int:program_id>/calling-sheet/', views.generate_formatted_calling_sheet, name='generate_calling_sheet'),
     path('programs/<int:program_id>/formatted-calling-sheet/', views.generate_formatted_calling_sheet, name='generate_formatted_calling_sheet'),
     path('programs/<int:program_id>/formatted-evaluation-sheet/', views.generate_formatted_evaluation_sheet, name='generate_formatted_evaluation_sheet'),
     path('programs/<int:program_id>/participants/', views.get_program_participants, name='get_program_participants'),
@@ -57,8 +58,11 @@ urlpatterns = [
     path('events/<int:event_id>/reports/backup/', views.generate_event_backup, name='generate_event_backup'),
     path('events/reports/all-events/', views.generate_all_events_report, name='generate_all_events_report'),
     
-    # Executable report endpoints
-    path('events/<int:event_id>/reports/program-details-executable/', views.generate_program_details_executable, name='generate_program_details_executable'),
-    path('events/<int:event_id>/reports/complete-results-executable/', views.generate_complete_results_executable, name='generate_complete_results_executable'),
-    path('events/<int:event_id>/reports/participants-team-executable/', views.generate_participants_team_executable, name='generate_participants_team_executable'),
-] 
+    path('events/<int:event_id>/green-room-sign/', views.generate_green_room_sign_sheet, name='generate_green_room_sign_sheet'),
+    path('events/<int:event_id>/valuation-sheet/', views.generate_valuation_sheet, name='generate_valuation_sheet'),
+    path('events/<int:event_id>/call-list/', views.generate_call_list, name='generate_call_list'),
+    path('events/<int:event_id>/certificate-templates/', views.certificate_templates, name='certificate_templates'),
+    path('events/<int:event_id>/certificate-templates/<str:certificate_type>/', views.certificate_template_detail, name='certificate_template_detail'),
+    path('events/<int:event_id>/certificate-preview-data/', views.certificate_preview_data, name='certificate_preview_data'),
+    path('events/<int:event_id>/certificates/', views.generate_certificates, name='generate_certificates'),
+]

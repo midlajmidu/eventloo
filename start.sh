@@ -21,19 +21,13 @@ python manage.py migrate --noinput || {
 echo "Collecting static files..."
 python manage.py collectstatic --noinput --clear
 
-# Create admin user
-echo "Creating admin user..."
-python manage.py create_admin_user || {
-    echo "Admin user creation failed, continuing..."
-}
-
 # Start Gunicorn server
 echo "Starting Gunicorn server..."
 exec gunicorn event_management.wsgi:application \
     --bind 0.0.0.0:$PORT \
-    --workers 1 \
+    --workers "${WEB_CONCURRENCY:-2}" \
     --threads 4 \
-    --timeout 300 \
+    --timeout 60 \
     --preload \
     --access-logfile - \
     --error-logfile - 

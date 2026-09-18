@@ -1,14 +1,41 @@
 import os
+import sys
 from pathlib import Path
 from datetime import timedelta
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Local development settings
-DEBUG = True
-SECRET_KEY = 'django-insecure-local-dev-key-123'
-ALLOWED_HOSTS = ['eventloo-backend-qkvm.onrender.com', '127.0.0.1']
+# Security-sensitive settings must be supplied by the deployment environment.
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
+_is_test_run = 'test' in sys.argv
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG or _is_test_run:
+        SECRET_KEY = 'test-only-key-not-valid-for-production-please-set-secret-key'
+    else:
+        raise ImproperlyConfigured('SECRET_KEY must be set in the production environment.')
+
+JWT_SIGNING_KEY = os.environ.get('JWT_SIGNING_KEY')
+if not JWT_SIGNING_KEY:
+    if DEBUG or _is_test_run:
+        JWT_SIGNING_KEY = SECRET_KEY
+    else:
+        raise ImproperlyConfigured(
+            'JWT_SIGNING_KEY must be set independently in the production environment.'
+        )
+if not DEBUG and not _is_test_run and JWT_SIGNING_KEY == SECRET_KEY:
+    raise ImproperlyConfigured('JWT_SIGNING_KEY must be different from SECRET_KEY in production.')
+
+_allowed_hosts_value = os.environ.get('ALLOWED_HOSTS')
+if not _allowed_hosts_value and not DEBUG and not _is_test_run:
+    raise ImproperlyConfigured('ALLOWED_HOSTS must be explicitly set in production.')
+ALLOWED_HOSTS = [
+    host.strip() for host in (
+        _allowed_hosts_value or '127.0.0.1,localhost'
+    ).split(',') if host.strip()
+]
 
 # Application definition
 INSTALLED_APPS = [
@@ -20,15 +47,26 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'django_filters',
     'accounts',
     'events',
 ]
 
+USE_S3_MEDIA = bool(os.environ.get('AWS_STORAGE_BUCKET_NAME'))
+if not USE_S3_MEDIA and not DEBUG and not _is_test_run:
+    raise ImproperlyConfigured(
+        'AWS_STORAGE_BUCKET_NAME must be set in production for private uploaded media.'
+    )
+if USE_S3_MEDIA:
+    INSTALLED_APPS.append('storages')
+
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'event_management.security.SecurityHeadersMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -75,34 +113,53 @@ WSGI_APPLICATION = 'event_management.wsgi.application'
 import os
 import dj_database_url
 
-# Debug mode (defaults to False in production)
-DEBUG = os.environ.get("DEBUG", "False") == "True"
-
 # Get database connection string from environment variable
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if DATABASE_URL:
+    database_ssl_required = os.environ.get(
+        'DATABASE_SSL_REQUIRE', 'False' if DEBUG or _is_test_run else 'True'
+    ).lower() == 'true'
     # Parse the Supabase database connection
     db_config = dj_database_url.parse(
         DATABASE_URL,
         conn_max_age=600,      # keep connections open for reuse
-        ssl_require=True       # Supabase requires SSL
+        ssl_require=database_ssl_required,
     )
     DATABASES = {
         'default': db_config
     }
 else:
-    # Local PostgreSQL fallback (for your laptop dev)
+    if not DEBUG and not _is_test_run:
+        raise ImproperlyConfigured('DATABASE_URL must be set in the production environment.')
+    # SQLite fallback (for local development)
     DATABASES = {
         'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'eventloo_db',
-            'USER': os.environ.get('USER', 'muhammedmidlaj'),
-            'PASSWORD': '',
-            'HOST': 'localhost',
-            'PORT': '5432',
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
+
+REDIS_URL = os.environ.get('REDIS_URL')
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+            'TIMEOUT': 300,
+        }
+    }
+elif DEBUG or _is_test_run:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'eventloo-development-only',
+        }
+    }
+else:
+    raise ImproperlyConfigured(
+        'REDIS_URL must be set in production so authentication throttles are shared across workers.'
+    )
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
@@ -122,13 +179,30 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'UTC'
+TIME_ZONE = os.environ.get('TIME_ZONE', 'Asia/Kolkata')
 USE_I18N = True
 USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STORAGES = {
+    'default': {
+        'BACKEND': (
+            'storages.backends.s3.S3Storage'
+            if USE_S3_MEDIA else 'django.core.files.storage.FileSystemStorage'
+        )
+    },
+    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedManifestStaticFilesStorage'},
+}
+if USE_S3_MEDIA:
+    AWS_QUERYSTRING_AUTH = True
+    AWS_QUERYSTRING_EXPIRE = int(os.environ.get('AWS_QUERYSTRING_EXPIRE', '300'))
+    AWS_DEFAULT_ACL = None
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'private, max-age=300'}
+    AWS_S3_REGION_NAME = os.environ.get('AWS_S3_REGION_NAME') or None
+    AWS_S3_ENDPOINT_URL = os.environ.get('AWS_S3_ENDPOINT_URL') or None
 
 # Static files configuration for local development
 
@@ -141,24 +215,35 @@ AUTH_USER_MODEL = 'accounts.User'
 # REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'accounts.authentication.SchoolJWTAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': os.environ.get('DRF_ANON_RATE', '60/minute'),
+        'user': os.environ.get('DRF_USER_RATE', '600/minute'),
+        'login': os.environ.get('DRF_LOGIN_RATE', '10/minute'),
+        'exports': os.environ.get('DRF_EXPORT_RATE', '20/hour'),
+        'uploads': os.environ.get('DRF_UPLOAD_RATE', '10/hour'),
+    },
 }
 
 # JWT Configuration
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=10),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'UPDATE_LAST_LOGIN': False,
     'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY,
+    'SIGNING_KEY': JWT_SIGNING_KEY,
     'VERIFYING_KEY': None,
     'AUDIENCE': None,
     'ISSUER': None,
@@ -174,21 +259,30 @@ SIMPLE_JWT = {
 }
 
 # CORS settings for local development
+_default_frontend_origins = (
+    'http://localhost:3000,http://localhost:3001,http://localhost:3002,'
+    'http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,'
+    'https://eventloo.vercel.app'
+)
+_cors_origins_value = os.environ.get('CORS_ALLOWED_ORIGINS')
+if not _cors_origins_value and not DEBUG and not _is_test_run:
+    raise ImproperlyConfigured('CORS_ALLOWED_ORIGINS must be explicitly set in production.')
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "https://eventloo.vercel.app/",
+    origin.strip() for origin in (
+        _cors_origins_value or _default_frontend_origins
+    ).split(',') if origin.strip()
 ]
 
 CORS_ALLOW_CREDENTIALS = True
 
 # CSRF settings for local development
+_csrf_origins_value = os.environ.get('CSRF_TRUSTED_ORIGINS')
+if not _csrf_origins_value and not DEBUG and not _is_test_run:
+    raise ImproperlyConfigured('CSRF_TRUSTED_ORIGINS must be explicitly set in production.')
 CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:3001",
+    origin.strip() for origin in (
+        _csrf_origins_value or _cors_origins_value or _default_frontend_origins
+    ).split(',') if origin.strip()
 ]
 
 # Additional CORS settings for Chrome compatibility
@@ -217,12 +311,51 @@ if DEBUG:
     CORS_ALLOW_ALL_ORIGINS = True
     CORS_ALLOW_CREDENTIALS = True 
 
+# Production transport and browser hardening. TLS termination proxies must set
+# X-Forwarded-Proto correctly.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_SSL_REDIRECT = not DEBUG and not _is_test_run
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE = 'Lax'
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+REFRESH_COOKIE_NAME = 'eventloo_refresh'
+ACCESS_COOKIE_NAME = 'eventloo_access'
+REFRESH_COOKIE_SECURE = not DEBUG
+REFRESH_COOKIE_SAMESITE = os.environ.get(
+    'REFRESH_COOKIE_SAMESITE', 'Lax' if DEBUG else 'None'
+)
+REQUIRE_AJAX_AUTH_HEADER = not DEBUG and not _is_test_run
+ENABLE_DJANGO_ADMIN = os.environ.get('ENABLE_DJANGO_ADMIN', 'False').lower() == 'true'
+REQUIRE_SUPER_ADMIN_MFA = os.environ.get(
+    'REQUIRE_SUPER_ADMIN_MFA', 'False' if DEBUG or _is_test_run else 'True'
+).lower() == 'true'
+REQUIRE_SCHOOL_STAFF_MFA = os.environ.get(
+    'REQUIRE_SCHOOL_STAFF_MFA', 'False' if DEBUG or _is_test_run else 'True'
+).lower() == 'true'
+
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media') 
 
 # File upload settings
-DATA_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
-FILE_UPLOAD_MAX_MEMORY_SIZE = 104857600  # 100 MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {'console': {'class': 'logging.StreamHandler'}},
+    'loggers': {
+        'security.audit': {
+            'handlers': ['console'],
+            'level': os.environ.get('SECURITY_AUDIT_LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+    },
+}
 
 # Additional file upload settings for production
 if not DEBUG:

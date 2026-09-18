@@ -22,29 +22,14 @@ The backend might have the admin user with wrong role. Fix it:
 
 ```bash
 cd backend
-python ../fix-admin-role.py
-```
-
-Or manually in Django shell:
-```bash
-cd backend
-python manage.py shell
-```
-```python
-from accounts.models import User
-admin = User.objects.get(email='admin@eventloo.com')
-admin.role = 'admin'
-admin.save()
-exit()
+python manage.py seed_super_admin --email YOUR_EMAIL --password 'A-UNIQUE-STRONG-PASSWORD'
 ```
 
 ### 3. Login & Test
 
 1. **Open the app:** http://localhost:3001/login
-2. **Login with:**
-   - Email: `admin@eventloo.com`
-   - Password: `admin123`
-3. **You should be redirected to:** `/admin` (Admin Dashboard)
+2. Sign in at `/super-admin/login` with the platform account you explicitly provisioned.
+3. Create a school and its school administrator, then use that school account at `/login`.
 4. **No errors in console!** ✅
 
 ## 📁 Files Modified
@@ -58,7 +43,6 @@ exit()
 ### Documentation
 - 📄 `FRONTEND_CLEANUP_SUMMARY.md` - Detailed changes
 - 📄 `TESTING_GUIDE.md` - Complete testing checklist
-- 📄 `fix-admin-role.py` - Script to fix admin role
 - 📄 `QUICK_START.md` - This file
 
 ## 🎨 Current Route Structure
@@ -119,23 +103,10 @@ location.reload();
 ```
 
 ### Issue: Login redirects to wrong page
-**Solution:** Check user role in database:
-```bash
-cd backend
-python manage.py shell
-```
-```python
-from accounts.models import User
-user = User.objects.get(email='admin@eventloo.com')
-print(f"Role: {user.role}")  # Should be 'admin'
-```
+Confirm that the account was provisioned for the correct school and role in the Super Admin portal. Do not change tenant ownership or roles directly in the database.
 
 ### Issue: Protected routes not accessible
-**Solution:** Check if token is stored:
-```javascript
-console.log(localStorage.getItem('access_token'));
-console.log(localStorage.getItem('user_role'));
-```
+**Solution:** Inspect the login response and cookie settings in the browser network/application panels. Tokens are HttpOnly and intentionally cannot be read from JavaScript.
 
 ### Issue: Backend not responding
 **Solution:** Check backend is running:

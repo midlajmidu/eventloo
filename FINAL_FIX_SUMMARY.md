@@ -21,14 +21,9 @@ The infinite redirect loop was caused by **TWO issues**:
 
 ## ✅ Solutions Applied
 
-### 1. Fixed Database Role
-```bash
-# Updated admin user role from 'student' to 'admin'
-cd backend
-python3 manage.py shell -c "from accounts.models import User; u = User.objects.get(email='admin@eventloo.com'); u.role = 'admin'; u.save()"
-```
+### 1. Secured account provisioning
 
-**Result:** ✅ Admin user now has correct role
+Roles and school ownership are assigned only by the platform onboarding workflow; direct database role mutation is no longer recommended.
 
 ### 2. Enhanced ProtectedRoute.js
 Added handling for unknown/invalid roles:
@@ -93,9 +88,7 @@ location.reload();
 
 ### 2. Test Admin Login
 1. Go to http://localhost:3001/login
-2. Enter:
-   - Email: `admin@eventloo.com`
-   - Password: `admin123`
+2. Enter credentials for a school administrator created through the Super Admin portal. There are no default credentials.
 3. Click "Sign In"
 
 **Expected Results:**
@@ -161,9 +154,7 @@ Open browser console and check:
    location.reload();
    ```
 
-2. **Login and test**
-   - Email: `admin@eventloo.com`
-   - Password: `admin123`
+2. **Login and test** with a school account created through the Super Admin portal.
 
 3. **Enjoy your working app!** 🎊
 
@@ -171,7 +162,6 @@ Open browser console and check:
 
 - The React Router future flag warnings are **harmless** - they're just informational
 - If you create new users, make sure they have the correct role in the database
-- The `fix-admin-role.py` script is available for future use
 
 ## 🔧 Maintenance
 
@@ -183,11 +173,7 @@ If you encounter similar issues in the future:
    python3 manage.py shell -c "from accounts.models import User; u = User.objects.get(email='YOUR_EMAIL'); print(u.role)"
    ```
 
-2. **Fix role if needed:**
-   ```bash
-   cd backend
-   python3 ../fix-admin-role.py
-   ```
+2. If a role or tenant is wrong, replace the account through the authorized Super Admin workflow rather than editing database fields directly.
 
 3. **Clear browser storage:**
    ```javascript

@@ -1,15 +1,26 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth import get_user_model
 from django.core.validators import MinValueValidator, MaxValueValidator
 import secrets
 import string
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from pathlib import Path
+from uuid import uuid4
+
+from .certificate_config import (
+    CERTIFICATE_TYPE_CHOICES,
+    default_certificate_fields,
+    normalize_certificate_fields,
+)
 
 User = get_user_model()
 
 class Event(models.Model):
+    school = models.ForeignKey(
+        'accounts.School', on_delete=models.CASCADE, related_name='events'
+    )
     EVENT_TYPES = [
         ('competition', 'Competition'),
         ('cultural', 'Cultural'),
@@ -53,6 +64,87 @@ class Event(models.Model):
     runner_up_points = models.PositiveIntegerField(default=75, validators=[MinValueValidator(0)])
     participation_points = models.PositiveIntegerField(default=25, validators=[MinValueValidator(0)])
     
+    # Judging and Marking Configuration
+    num_judges = models.PositiveIntegerField(
+        default=3,
+        validators=[MinValueValidator(1), MaxValueValidator(4)],
+        help_text="Number of judges evaluating each program (1 to 4)"
+    )
+    max_mark_per_judge = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=100.00,
+        validators=[MinValueValidator(1)],
+        help_text="Maximum mark each judge can assign (e.g. 100 or 50)"
+    )
+    converted_total_mark = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=100.00,
+        validators=[MinValueValidator(1)],
+        help_text="Target converted mark scale (e.g. convert total score to out of 100)"
+    )
+
+    # Student Participation Limits (per event)
+    max_programs_per_student = models.PositiveIntegerField(
+        default=4,
+        validators=[MinValueValidator(0)],
+        help_text="Maximum total programs a single student can participate in"
+    )
+    max_single_programs_per_student = models.PositiveIntegerField(
+        default=3,
+        validators=[MinValueValidator(0)],
+        help_text="Maximum individual/single programs a single student can participate in"
+    )
+    max_group_programs_per_student = models.PositiveIntegerField(
+        default=2,
+        validators=[MinValueValidator(0)],
+        help_text="Maximum group/team programs a single student can participate in"
+    )
+
+    # Grading system. Event rules define score-percentage bands only; the
+    # absolute points for each grade are configured on each Program.
+    enable_grading_system = models.BooleanField(default=True)
+    grading_rules = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Grade percentage bands e.g. [{name:'A+', min_mark:90, max_mark:100}]"
+    )
+
+    # Event-Specific Points Configuration
+    std_ind_first = models.PositiveIntegerField(default=5, help_text="1st place points for Standard Category Individual")
+    std_ind_second = models.PositiveIntegerField(default=3, help_text="2nd place points for Standard Category Individual")
+    std_ind_third = models.PositiveIntegerField(default=1, help_text="3rd place points for Standard Category Individual")
+
+    std_group_first = models.PositiveIntegerField(default=10, help_text="1st place points for Standard Category Group")
+    std_group_second = models.PositiveIntegerField(default=6, help_text="2nd place points for Standard Category Group")
+    std_group_third = models.PositiveIntegerField(default=3, help_text="3rd place points for Standard Category Group")
+
+    mix_ind_first = models.PositiveIntegerField(default=10, help_text="1st place points for Mixed/General Category Individual")
+    mix_ind_second = models.PositiveIntegerField(default=6, help_text="2nd place points for Mixed/General Category Individual")
+    mix_ind_third = models.PositiveIntegerField(default=3, help_text="3rd place points for Mixed/General Category Individual")
+
+    mix_group_first = models.PositiveIntegerField(default=10, help_text="1st place points for Mixed/General Category Group")
+    mix_group_second = models.PositiveIntegerField(default=6, help_text="2nd place points for Mixed/General Category Group")
+    mix_group_third = models.PositiveIntegerField(default=3, help_text="3rd place points for Mixed/General Category Group")
+    count_general_individual_points_for_students = models.BooleanField(
+        default=False,
+        help_text=(
+            "When enabled, Mixed/General individual program points contribute to "
+            "the participant's personal and top-scorer totals. Team points are always retained."
+        ),
+    )
+
+    def get_effective_grading_rules(self):
+        if self.grading_rules and isinstance(self.grading_rules, list) and len(self.grading_rules) > 0:
+            return self.grading_rules
+        return [
+            {"name": "A+", "min_mark": 90, "max_mark": 100},
+            {"name": "A",  "min_mark": 80, "max_mark": 89.99},
+            {"name": "B+", "min_mark": 70, "max_mark": 79.99},
+            {"name": "B",  "min_mark": 60, "max_mark": 69.99},
+        ]
+
     # Administrative
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_events')
     created_at = models.DateTimeField(auto_now_add=True)
@@ -66,18 +158,22 @@ class Event(models.Model):
         
     def __str__(self):
         return self.title
+
+    def save(self, *args, **kwargs):
+        if not self.school_id and self.created_by_id:
+            self.school_id = self.created_by.school_id
+        self.full_clean()
+        super().save(*args, **kwargs)
     
     @property
     def current_participants(self):
         """Get current number of participants for this event"""
         try:
-            if self.is_team_based:
-                # Count participants through program assignments
-                return self.programs.filter(
-                    assignments__isnull=False
-                ).values('assignments__student').distinct().count()
-            else:
-                return self.individual_participants.count()
+            assigned_ids = set(self.programs.filter(
+                assignments__student__isnull=False
+            ).values_list('assignments__student_id', flat=True))
+            registered_ids = set(self.individual_participants.values_list('participant_id', flat=True))
+            return len(assigned_ids | registered_ids)
         except Exception:
             return 0
     
@@ -85,12 +181,9 @@ class Event(models.Model):
     def current_teams(self):
         """Get current number of teams for this event"""
         try:
-            if self.is_team_based:
-                # Count teams through program assignments
-                return self.programs.filter(
-                    assignments__team__isnull=False
-                ).values('assignments__team').distinct().count()
-            return 0
+            return self.programs.filter(
+                assignments__team__isnull=False
+            ).values('assignments__team').distinct().count()
         except Exception:
             return 0
     
@@ -143,7 +236,10 @@ class Event(models.Model):
         super().delete(*args, **kwargs)
 
 class Team(models.Model):
-    name = models.CharField(max_length=100, unique=True)
+    school = models.ForeignKey(
+        'accounts.School', on_delete=models.CASCADE, related_name='teams'
+    )
+    name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     members = models.ManyToManyField(User, related_name='team_memberships', blank=True)
     team_manager = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='managed_teams', limit_choices_to={'role': 'team_manager'})
@@ -153,52 +249,82 @@ class Team(models.Model):
     position = models.PositiveIntegerField(null=True, blank=True)  # Final ranking
     
     # Team number (auto-assigned sequential number)
-    team_number = models.PositiveIntegerField(null=True, blank=True, unique=True)
+    team_number = models.PositiveIntegerField(null=True, blank=True)
     
     # Team Manager Login Credentials (Auto-generated)
-    team_username = models.CharField(max_length=100, unique=True, blank=True)
-    team_password = models.CharField(max_length=50, blank=True)
+    team_username = models.CharField(max_length=100, blank=True)
+    team_password = models.CharField(max_length=128, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(fields=['school', 'name'], name='unique_school_team_name'),
+            models.UniqueConstraint(fields=['school', 'team_number'], name='unique_school_team_number'),
+            models.UniqueConstraint(fields=['school', 'team_username'], name='unique_school_team_username'),
+        ]
         
     def __str__(self):
         return self.name
+
+    def clean(self):
+        super().clean()
+        if self.team_manager_id:
+            if self.team_manager.role != 'team_manager':
+                raise ValidationError('The selected user is not a team manager.')
+            if self.team_manager.school_id != self.school_id:
+                raise ValidationError('The team manager must belong to the same school.')
     
     def save(self, *args, **kwargs):
         is_new = self.pk is None
 
-        # Auto-generate team credentials if not set
+        if not self.school_id and self.team_manager_id:
+            self.school_id = self.team_manager.school_id
+
+        if is_new and self.school_id:
+            # Serialize number/username allocation per school so concurrent team
+            # creation cannot produce duplicates from the same MAX()+1 value.
+            with transaction.atomic():
+                School = self._meta.get_field('school').remote_field.model
+                School.objects.select_for_update().only('pk').get(pk=self.school_id)
+                if not self.team_number:
+                    self.team_number = self.get_next_team_number()
+                if not self.team_username or not self.team_password:
+                    self.generate_team_credentials()
+                self.full_clean()
+                return super().save(*args, **kwargs)
+
         if not self.team_username or not self.team_password:
             self.generate_team_credentials()
-
-        super().save(*args, **kwargs)
-        
-        # For new teams, assign the next available team number
-        if is_new and not self.team_number:
-            self.team_number = self.get_next_team_number()
-            super().save(update_fields=['team_number'])
+        self.full_clean()
+        return super().save(*args, **kwargs)
 
     @classmethod
-    def reset_team_numbering(cls):
+    def reset_team_numbering(cls, school=None):
         """Reset team numbering to be sequential (1, 2, 3, etc.) based on creation order"""
-        # Get all teams ordered by creation date
-        teams = cls.objects.all().order_by('created_at')
-        
-        # Renumber teams sequentially starting from 1
-        for index, team in enumerate(teams, start=1):
-            if team.team_number != index:
-                team.team_number = index
-                team.save(update_fields=['team_number'])
+        if school is None:
+            return
+        if ChestNumber.objects.filter(event__school=school).exists():
+            raise ValidationError(
+                'Team numbering cannot be reset after event chest numbers have been issued.'
+            )
+        with transaction.atomic():
+            teams = list(cls.objects.select_for_update().filter(
+                school=school
+            ).order_by('created_at', 'id'))
+            temporary_base = max(
+                [team.team_number or 0 for team in teams] + [0]
+            ) + len(teams) + 1
+            for offset, team in enumerate(teams):
+                cls.objects.filter(pk=team.pk).update(team_number=temporary_base + offset)
+            for index, team in enumerate(teams, start=1):
+                cls.objects.filter(pk=team.pk).update(team_number=index)
     
-    @classmethod
-    def get_next_team_number(cls):
+    def get_next_team_number(self):
         """Get the next available team number, restarting from 1 if no teams exist"""
-        # Get the highest team number currently in use
-        max_number = cls.objects.aggregate(
+        max_number = Team.objects.filter(school_id=self.school_id).aggregate(
             max_number=models.Max('team_number')
         )['max_number']
         return (max_number or 0) + 1
@@ -220,7 +346,9 @@ class Team(models.Model):
             return self.team_number
         
         # Fallback: find position in creation order
-        teams = Team.objects.filter(created_at__lte=self.created_at).order_by('created_at')
+        teams = Team.objects.filter(
+            school_id=self.school_id, created_at__lte=self.created_at
+        ).order_by('created_at')
         for index, team in enumerate(teams, start=1):
             if team.id == self.id:
                 return index
@@ -235,16 +363,20 @@ class Team(models.Model):
         # Ensure team_username uniqueness
         counter = 1
         original_team_username = team_username
-        while Team.objects.filter(team_username=team_username).exclude(id=self.id).exists():
+        while Team.objects.filter(
+            school_id=self.school_id, team_username=team_username
+        ).exclude(id=self.id).exists():
             team_username = f"{original_team_username}_{counter}"
             counter += 1
         
         # Generate secure password
-        password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+        password = secrets.token_urlsafe(18)
         
         # Store credentials in team model (don't call save() here to avoid infinite loop)
         self.team_username = team_username
-        self.team_password = password
+        from django.contrib.auth.hashers import make_password
+        self.team_password = make_password(password)
+        self._plain_team_password = password
         
         return team_username, password
     
@@ -254,7 +386,7 @@ class Team(models.Model):
         if self.team_username and self.team_password:
             return {
                 'username': self.team_username,
-                'password': self.team_password
+                'password': None
             }
         return None
     
@@ -288,9 +420,6 @@ class Team(models.Model):
         
         # Call the parent delete method
         super().delete(*args, **kwargs)
-        
-        # After deletion, reset team numbering to ensure sequential numbering
-        Team.reset_team_numbering()
         
         # Clean up any orphaned program assignments for students who were in this team
         # This ensures students get new chest numbers when assigned to new teams
@@ -359,6 +488,18 @@ class IndividualParticipation(models.Model):
     def __str__(self):
         return f"{self.participant.get_full_name()} - {self.event.title}"
 
+    def clean(self):
+        super().clean()
+        if self.event_id and self.participant_id:
+            if self.participant.role != 'student':
+                raise ValidationError('Only students can participate in an event.')
+            if self.participant.school_id != self.event.school_id:
+                raise ValidationError('The participant and event must belong to the same school.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
 class EventAnnouncement(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='announcements')
     title = models.CharField(max_length=200)
@@ -373,8 +514,23 @@ class EventAnnouncement(models.Model):
     def __str__(self):
         return f"{self.title} - {self.event.title}"
 
+    def clean(self):
+        super().clean()
+        if self.event_id and self.created_by_id:
+            if self.created_by.school_id != self.event.school_id:
+                raise ValidationError('The announcement author and event must belong to the same school.')
+            if self.created_by.role not in ('admin', 'event_manager'):
+                raise ValidationError('Only school staff can author event announcements.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
 class PointsRecord(models.Model):
     """Track points awarded to teams or individuals"""
+    school = models.ForeignKey(
+        'accounts.School', on_delete=models.CASCADE, related_name='points_records'
+    )
     POINT_TYPES = [
         ('event_winner', 'Event Winner'),
         ('event_runner_up', 'Event Runner Up'),
@@ -389,6 +545,14 @@ class PointsRecord(models.Model):
     student = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='points_records')
     
     event = models.ForeignKey('Event', on_delete=models.CASCADE, null=True, blank=True, related_name='points_records')
+    source_result = models.ForeignKey(
+        'ProgramResult',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='generated_point_records',
+    )
+    is_automatic = models.BooleanField(default=False)
     
     points = models.IntegerField()  # Can be negative for penalties
     point_type = models.CharField(max_length=20, choices=POINT_TYPES)
@@ -401,15 +565,50 @@ class PointsRecord(models.Model):
     
     class Meta:
         ordering = ['-awarded_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['source_result', 'team'],
+                condition=models.Q(is_automatic=True, team__isnull=False),
+                name='unique_automatic_result_team_points',
+            ),
+            models.UniqueConstraint(
+                fields=['source_result', 'student'],
+                condition=models.Q(is_automatic=True, student__isnull=False),
+                name='unique_automatic_result_student_points',
+            ),
+        ]
     
     def __str__(self):
         recipient = self.team.name if self.team else self.student.display_name
         return f"{recipient}: {self.points} pts ({self.reason})"
     
     def save(self, *args, **kwargs):
+        if not self.school_id:
+            if self.event_id:
+                self.school_id = self.event.school_id
+            elif self.team_id:
+                self.school_id = self.team.school_id
+            elif self.student_id:
+                self.school_id = self.student.school_id
+        self.full_clean()
         super().save(*args, **kwargs)
         # Update total points when record is saved
         self.update_total_points()
+
+    def clean(self):
+        super().clean()
+        school_ids = {
+            value for value in (
+                self.school_id,
+                self.event.school_id if self.event_id else None,
+                self.team.school_id if self.team_id else None,
+                self.student.school_id if self.student_id else None,
+                self.source_result.program.event.school_id if self.source_result_id else None,
+                self.awarded_by.school_id if self.awarded_by_id else None,
+            ) if value is not None
+        }
+        if len(school_ids) > 1:
+            raise ValidationError('Points records cannot reference objects from different schools.')
     
     def update_total_points(self):
         """Update total points for team or student"""
@@ -453,32 +652,76 @@ class TeamProfile(models.Model):
             return 0
         return (self.events_won / self.events_participated) * 100
 
-class Program(models.Model):
-    CATEGORY_CHOICES = [
-        ('hs', 'High School'),
-        ('hss', 'Higher Secondary School'),
-        ('general', 'General'),
-    ]
+class EventStage(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='stages')
+    number = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    name = models.CharField(max_length=200, blank=True)
+    capacity = models.PositiveIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1)]
+    )
+    map_link = models.URLField(max_length=500, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        ordering = ['number', 'name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['event', 'number'], name='unique_stage_number_per_event'
+            ),
+        ]
+
+    @property
+    def display_name(self):
+        return self.name.strip() if self.name else f'Stage {self.number}'
+
+    def __str__(self):
+        return f'{self.event.title} - {self.display_name}'
+
+
+class Program(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='programs')
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
-    category = models.CharField(max_length=10, choices=CATEGORY_CHOICES, default='general')
+    category = models.CharField(max_length=20, default='general')
     
     # Program settings
     is_team_based = models.BooleanField(default=False)
     max_participants = models.PositiveIntegerField(null=True, blank=True)  # Overall limit (for individual programs)
     max_participants_per_team = models.PositiveIntegerField(null=True, blank=True)  # Per-team limit (for team-based programs)
     team_size = models.PositiveIntegerField(null=True, blank=True)  # Fixed team size for team-based programs
+    max_teams_per_school = models.PositiveIntegerField(default=1, null=True, blank=True)  # Number of sub-teams per school/team
+    grading_points = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Optional absolute points by event grade name, for example "
+            "{'A+': 10, 'A': 8}. Missing grades use placement points."
+        ),
+    )
     
     # Scheduling
+    stage = models.ForeignKey(
+        EventStage, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='programs',
+    )
     venue = models.CharField(max_length=200, blank=True)
     start_time = models.DateTimeField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True)
+    duration_minutes_per_entry = models.PositiveIntegerField(
+        default=5,
+        validators=[MinValueValidator(1)],
+        help_text='Minutes required for one participant or one group.',
+    )
+    schedule_end_is_manual = models.BooleanField(
+        default=False,
+        help_text='Preserve an administrator-confirmed ending time when assignments change.',
+    )
     
     # Status
     is_active = models.BooleanField(default=True)
     is_finished = models.BooleanField(default=False)
+    is_published = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -522,6 +765,29 @@ class Program(models.Model):
             return int(delta.total_seconds() / 60)
         return None
 
+    @property
+    def schedule_entry_count(self):
+        """Number of independently scheduled entries in this program."""
+        assignments = self.assignments.all()
+        if self.is_team_based:
+            return assignments.values('team_id', 'sub_team_number').distinct().count()
+        return assignments.values('student_id').distinct().count()
+
+    @property
+    def scheduled_duration_minutes(self):
+        """Total run time based on current entries (one slot before assignment)."""
+        return max(1, self.schedule_entry_count) * self.duration_minutes_per_entry
+
+    def refresh_schedule_end(self):
+        """Keep the stored end time aligned when assignments change."""
+        if not self.start_time or self.schedule_end_is_manual:
+            return None
+        from datetime import timedelta
+        calculated = self.start_time + timedelta(minutes=self.scheduled_duration_minutes)
+        Program.objects.filter(pk=self.pk).update(end_time=calculated)
+        self.end_time = calculated
+        return calculated
+
     def clean(self):
         if self.start_time and self.end_time and self.start_time >= self.end_time:
             raise ValidationError("End time must be after start time")
@@ -529,12 +795,17 @@ class Program(models.Model):
         # Team-based programs must have a team_size
         if self.is_team_based and not self.team_size:
             raise ValidationError("Team-based programs must have a team size specified")
+
+        if self.stage_id and self.event_id and self.stage.event_id != self.event_id:
+            raise ValidationError({'stage': 'The selected stage belongs to a different event.'})
     
     def save(self, *args, **kwargs):
         # Clear team_size for individual programs
         if not self.is_team_based:
             self.team_size = None
-        
+        if self.stage_id:
+            self.venue = self.stage.display_name
+        self.full_clean()
         super().save(*args, **kwargs)
     
     def delete(self, *args, **kwargs):
@@ -553,11 +824,26 @@ class ProgramAssignment(models.Model):
     student = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='program_assignments')
     team = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True, related_name='program_assignments')
     assigned_at = models.DateTimeField(auto_now_add=True)
-    assigned_by = models.ForeignKey('accounts.User', on_delete=models.SET_NULL, null=True, related_name='assigned_programs')
+    assigned_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_programs',
+    )
     chest_number = models.PositiveIntegerField(null=True, blank=True)
+    sub_team_number = models.PositiveIntegerField(default=1, null=True, blank=True)
+    is_leader = models.BooleanField(default=False, help_text="Designates if student is group leader for their sub-team")
 
     class Meta:
         unique_together = ['program', 'student']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['program', 'team', 'sub_team_number'],
+                condition=models.Q(is_leader=True),
+                name='unique_group_subteam_leader',
+            ),
+        ]
 
     def __str__(self):
         return f"{self.student.display_name} - {self.program.name}"
@@ -566,126 +852,69 @@ class ProgramAssignment(models.Model):
         # Auto-sync team assignment from global team membership if not set
         if not self.team and self.student.team_memberships.exists():
             self.team = self.student.team_memberships.first()
-        
-        # Check if team assignment has changed (for existing assignments)
-        if self.pk:  # This is an existing assignment
-            try:
-                old_assignment = ProgramAssignment.objects.get(pk=self.pk)
-                team_changed = old_assignment.team != self.team
-            except ProgramAssignment.DoesNotExist:
-                team_changed = False
-        else:
-            team_changed = False
-        
-        # Check if student already has a chest number for this event
-        existing_chest_number = None
-        try:
-            existing_chest = ChestNumber.objects.get(
-                event=self.program.event,
-                student=self.student
-            )
-            existing_chest_number = existing_chest.chest_number
-        except ChestNumber.DoesNotExist:
-            pass
-        
-        # If student already has a chest number for this event, use it
-        if existing_chest_number:
-            self.chest_number = existing_chest_number
-        # Auto-generate chest number if not provided OR if team has changed
-        elif not self.chest_number or team_changed:
-            # If team has changed, clear any existing chest number for this student in this event
-            if team_changed:
-                # Remove chest number from other assignments for this student in this event
-                ProgramAssignment.objects.filter(
-                    program__event=self.program.event,
-                    student=self.student
-                ).exclude(id=self.pk).update(chest_number=None)
-                
-                # Also remove from ChestNumber records
-                ChestNumber.objects.filter(
-                    event=self.program.event,
-                    student=self.student
-                ).delete()
-            
-            # Auto-generate chest number if not provided
-            if not self.chest_number:
-                if self.team:
-                    # For team-based programs, use team-based numbering
-                    team_base = self.team.team_number * 100  # Team 1: 100-199, Team 2: 200-299, etc.
-                    
-                    # Find the next available chest number in this team's range for this event
-                    # Check both ProgramAssignment and ChestNumber models
-                    max_chest_assignment = ProgramAssignment.objects.filter(
-                        program__event=self.program.event,
-                        team=self.team,
-                        chest_number__gte=team_base,
-                        chest_number__lt=team_base + 100
-                    ).aggregate(max_chest=models.Max('chest_number'))['max_chest']
-                    
-                    max_chest_chest = ChestNumber.objects.filter(
-                        event=self.program.event,
-                        team=self.team,
-                        chest_number__gte=team_base,
-                        chest_number__lt=team_base + 100
-                    ).aggregate(max_chest=models.Max('chest_number'))['max_chest']
-                    
-                    max_chest = max(max_chest_assignment or 0, max_chest_chest or 0)
-                    
-                    if max_chest >= team_base:
-                        self.chest_number = max_chest + 1
-                    else:
-                        self.chest_number = team_base  # Start from team_base (e.g., 100, 200, 300)
-                else:
-                    # For general category (open) programs without teams, use dynamic starting number
-                    # based on total number of teams in the event
-                    total_teams = Team.objects.count()
-                    
-                    # Calculate starting number for general category
-                    # 2 teams = start from 300, 3 teams = start from 400, etc.
-                    general_start = (total_teams + 1) * 100
-                    
-                    # Find the next available chest number in general range for this event
-                    max_chest_assignment = ProgramAssignment.objects.filter(
-                        program__event=self.program.event,
-                        team__isnull=True,
-                        chest_number__gte=general_start
-                    ).aggregate(max_chest=models.Max('chest_number'))['max_chest']
-                    
-                    max_chest_chest = ChestNumber.objects.filter(
-                        event=self.program.event,
-                        team__isnull=True,
-                        chest_number__gte=general_start
-                    ).aggregate(max_chest=models.Max('chest_number'))['max_chest']
-                    
-                    max_chest = max(max_chest_assignment or 0, max_chest_chest or 0)
-                    
-                    if max_chest >= general_start:
-                        self.chest_number = max_chest + 1
-                    else:
-                        self.chest_number = general_start  # Start from calculated general start
-        
-        # Generate chest code for the student if not already generated
-        if not self.student.chest_code:
-            self.student.generate_chest_code()
-        
-        super().save(*args, **kwargs)
-        
-        # Also create or update ChestNumber record for backward compatibility
-        ChestNumber.objects.update_or_create(
-            event=self.program.event,
-            student=self.student,
-            defaults={
-                'team': self.team,
-                'chest_number': self.chest_number,
-                'assigned_by': self.assigned_by
-            }
-        )
+
+        # The ChestNumber row is the authoritative event-level identity. Lock the
+        # event while allocating so two simultaneous assignments cannot choose the
+        # same MAX()+1 value. The assignment and chest creation also roll back
+        # together if either save fails.
+        with transaction.atomic():
+            Event.objects.select_for_update().only('pk').get(pk=self.program.event_id)
+            self.full_clean()
+
+            chest = ChestNumber.objects.select_for_update().filter(
+                event_id=self.program.event_id,
+                student_id=self.student_id,
+            ).first()
+            if chest is None:
+                chest = ChestNumber.objects.create(
+                    event_id=self.program.event_id,
+                    student_id=self.student_id,
+                    team_id=self.team_id,
+                    assigned_by_id=self.assigned_by_id,
+                )
+            elif chest.team_id != self.team_id:
+                other_assignments = ProgramAssignment.objects.filter(
+                    program__event_id=self.program.event_id,
+                    student_id=self.student_id,
+                ).exclude(pk=self.pk)
+                if other_assignments.exists():
+                    raise ValidationError(
+                        'A participant cannot use different teams within the same event.'
+                    )
+                # Preserve the event chest number if a previously unassigned record
+                # is repaired or the participant is moved before their first save.
+                ChestNumber.objects.filter(pk=chest.pk).update(team_id=self.team_id)
+                chest.team_id = self.team_id
+
+            # Ignore caller-supplied or stale values: every assignment in the event
+            # must copy the immutable authoritative number.
+            self.chest_number = chest.chest_number
+            super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        if not self.program_id or not self.student_id:
+            return
+        school_id = self.program.event.school_id
+        if self.student.school_id != school_id:
+            raise ValidationError('The participant and program must belong to the same school.')
+        if self.team_id and self.team.school_id != school_id:
+            raise ValidationError('The team and program must belong to the same school.')
+        if self.assigned_by_id and self.assigned_by.school_id != school_id:
+            raise ValidationError('The assigning user must belong to the same school.')
 
 class ProgramResult(models.Model):
+    ENTRY_STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('submitted', 'Submitted'),
+    ]
     program = models.ForeignKey(Program, on_delete=models.CASCADE, related_name='results')
     # assignment = models.ForeignKey(ProgramAssignment, on_delete=models.CASCADE, related_name='results')  # Temporarily commented out
     participant = models.ForeignKey(User, on_delete=models.CASCADE, related_name='program_results', db_column='participant_id')
     team = models.ForeignKey(Team, on_delete=models.CASCADE, null=True, blank=True)
+    sub_team_number = models.PositiveIntegerField(default=1, null=True, blank=True)
+    is_team_result = models.BooleanField(default=False)
+    entry_status = models.CharField(max_length=20, choices=ENTRY_STATUS_CHOICES, default='draft')
     
     # Result numbering - sequential number based on when marks were entered
     result_number = models.IntegerField(null=True, blank=True, help_text="Sequential result number (Result No. 1, 2, 3, etc.)")
@@ -693,16 +922,24 @@ class ProgramResult(models.Model):
     # Legacy marks field (still exists in database)
     marks = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     
-    # Judge marks (out of 100)
+    # Judge marks
     judge1_marks = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     judge2_marks = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     judge3_marks = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    judge4_marks = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     
     # Calculated fields
+    code_letter = models.CharField(max_length=10, blank=True, default='', help_text="Secret code letter for anonymous grading (A, B, C...)")
+    raw_total_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     total_marks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     average_marks = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     position = models.IntegerField(null=True, blank=True)  # 1st, 2nd, 3rd, etc.
     points_earned = models.IntegerField(default=0)  # Use original field name
+    grade = models.CharField(max_length=10, blank=True, default='', help_text="Grade assigned (A+, A, B+, B...)")
+    grade_extra_points = models.IntegerField(
+        default=0,
+        help_text="Absolute grade points awarded; retained under the legacy field name for API compatibility",
+    )
     
     # Additional fields - use existing database column names
     comments = models.TextField(blank=True)  # Keep original field name
@@ -713,12 +950,51 @@ class ProgramResult(models.Model):
     entered_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='entered_results', db_column='entered_by_id')
     
     class Meta:
-        unique_together = ['program', 'participant']  # Use original field name
-        ordering = ['-average_marks', '-total_marks']
+        ordering = ['-total_marks', '-average_marks']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['program', 'participant'],
+                condition=models.Q(is_team_result=False),
+                name='unique_individual_program_result',
+            ),
+            models.UniqueConstraint(
+                fields=['program', 'team', 'sub_team_number'],
+                condition=models.Q(is_team_result=True),
+                name='unique_group_subteam_result',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        if not self.program_id:
+            return
+        event = self.program.event
+        if self.participant_id and self.participant.school_id != event.school_id:
+            raise ValidationError('The participant and program must belong to the same school.')
+        if self.team_id and self.team.school_id != event.school_id:
+            raise ValidationError('The team and program must belong to the same school.')
+        if self.entered_by_id and self.entered_by.school_id != event.school_id:
+            raise ValidationError('The result author must belong to the same school.')
+        active_fields = [
+            self.judge1_marks,
+            self.judge2_marks,
+            self.judge3_marks,
+            self.judge4_marks,
+        ][:event.num_judges]
+        maximum = Decimal(str(event.max_mark_per_judge))
+        for index, mark in enumerate(active_fields, 1):
+            if mark is not None and (Decimal(str(mark)) < 0 or Decimal(str(mark)) > maximum):
+                raise ValidationError({
+                    f'judge{index}_marks': f'Mark must be between 0 and {maximum}.'
+                })
+        if self.entry_status == 'submitted' and any(mark is None for mark in active_fields):
+            raise ValidationError('All configured judge marks are required before submission.')
     
     def save(self, *args, **kwargs):
         from decimal import Decimal, InvalidOperation
         
+        self.is_team_result = bool(self.program_id and self.program.is_team_based)
+
         # Auto-sync team assignment from global team membership if not set
         if not self.team and self.participant.team_memberships.exists():
             self.team = self.participant.team_memberships.first()
@@ -727,44 +1003,58 @@ class ProgramResult(models.Model):
         if not self.result_number and self.has_marks():
             self.assign_result_number()
         
-        # Calculate total and average marks with proper type conversion
+        # Get event settings for judge count and score scaling
+        event_num_judges = 3
+        event_max_per_judge = Decimal('100.00')
+        event_converted_target = Decimal('100.00')
+        
+        if self.program and self.program.event:
+            event = self.program.event
+            event_num_judges = getattr(event, 'num_judges', 3) or 3
+            event_max_per_judge = Decimal(str(getattr(event, 'max_mark_per_judge', 100) or 100))
+            event_converted_target = Decimal(str(getattr(event, 'converted_total_mark', 100) or 100))
+
+        # Collect active judge marks
+        all_judge_values = [self.judge1_marks, self.judge2_marks, self.judge3_marks, self.judge4_marks]
+        active_judge_values = all_judge_values[:event_num_judges]
+        
         marks = []
-        if self.judge1_marks is not None:
-            try:
-                marks.append(Decimal(str(self.judge1_marks)))
-            except (InvalidOperation, TypeError):
-                pass
-        if self.judge2_marks is not None:
-            try:
-                marks.append(Decimal(str(self.judge2_marks)))
-            except (InvalidOperation, TypeError):
-                pass
-        if self.judge3_marks is not None:
-            try:
-                marks.append(Decimal(str(self.judge3_marks)))
-            except (InvalidOperation, TypeError):
-                pass
+        for val in active_judge_values:
+            if val is not None:
+                try:
+                    marks.append(Decimal(str(val)))
+                except (InvalidOperation, TypeError):
+                    pass
         
         if marks:
-            self.total_marks = sum(marks)
-            self.average_marks = self.total_marks / len(marks)
+            precision = Decimal('0.01')
+            self.raw_total_marks = sum(marks).quantize(precision, rounding=ROUND_HALF_UP)
+            max_possible_raw = Decimal(str(event_num_judges)) * event_max_per_judge
+            
+            if max_possible_raw > 0:
+                # Scaled total mark = (raw_total / max_possible_raw) * converted_total_mark
+                self.total_marks = (
+                    (self.raw_total_marks / max_possible_raw) * event_converted_target
+                ).quantize(precision, rounding=ROUND_HALF_UP)
+            else:
+                self.total_marks = self.raw_total_marks
+
+            self.average_marks = (
+                self.raw_total_marks / len(marks)
+            ).quantize(precision, rounding=ROUND_HALF_UP)
         else:
+            self.raw_total_marks = None
             self.total_marks = None
             self.average_marks = None
         
+        self.full_clean()
         super().save(*args, **kwargs)
-        
-        # Update positions and points for all results in this program
-        self.update_program_rankings()
-        
-        # Distribute points to team and individual members
-        self.distribute_points_to_team_and_members()
     
     def has_marks(self):
         """Check if this result has any marks entered"""
-        return (self.judge1_marks is not None and self.judge1_marks > 0) or \
-               (self.judge2_marks is not None and self.judge2_marks > 0) or \
-               (self.judge3_marks is not None and self.judge3_marks > 0)
+        judge_fields = ('judge1_marks', 'judge2_marks', 'judge3_marks', 'judge4_marks')
+        judge_count = max(1, min(int(self.program.event.num_judges or 1), len(judge_fields)))
+        return any(getattr(self, field) is not None for field in judge_fields[:judge_count])
     
     def assign_result_number(self):
         """Assign result number to the program when it gets its first result"""
@@ -791,6 +1081,9 @@ class ProgramResult(models.Model):
     
     def distribute_points_to_team_and_members(self):
         """Distribute points earned to team and individual student"""
+        from .services import rebuild_program_points
+        return rebuild_program_points(self.program)
+
         if self.points_earned > 0:
             from django.db import transaction
             
@@ -828,76 +1121,8 @@ class ProgramResult(models.Model):
     
     def update_program_rankings(self):
         """Update positions and points for all results in this program"""
-        from django.db import transaction
-        
-        with transaction.atomic():
-            # Get all results for this program, ordered by average marks
-            results = ProgramResult.objects.filter(
-                program=self.program
-            ).exclude(
-                average_marks__isnull=True
-            ).order_by('-average_marks', '-total_marks', 'participant__first_name')
-            
-            # Update positions and points
-            for index, result in enumerate(results, 1):
-                position = index
-                
-                # Assign points based on position and program type
-                # Team-based programs (any category): 10, 6, 3 points
-                # Individual HS/HSS: 5, 3, 1 points
-                # Individual General: 10, 6, 3 points
-                
-                if self.program.is_team_based:
-                    # All team-based programs use 10, 6, 3 points
-                    if position == 1:
-                        points = 10
-                    elif position == 2:
-                        points = 6
-                    elif position == 3:
-                        points = 3
-                    else:
-                        points = 0
-                elif self.program.category in ['hs', 'hss']:
-                    # Individual HS/HSS programs: 5, 3, 1 points
-                    if position == 1:
-                        points = 5
-                    elif position == 2:
-                        points = 3
-                    elif position == 3:
-                        points = 1
-                    else:
-                        points = 0
-                elif self.program.category == 'general':
-                    # Individual General programs: 10, 6, 3 points
-                    if position == 1:
-                        points = 10
-                    elif position == 2:
-                        points = 6
-                    elif position == 3:
-                        points = 3
-                    else:
-                        points = 0
-                else:
-                    # Fallback for any other category
-                    if position == 1:
-                        points = 5
-                    elif position == 2:
-                        points = 3
-                    elif position == 3:
-                        points = 1
-                    else:
-                        points = 0
-                
-                # Update without triggering save recursion
-                ProgramResult.objects.filter(id=result.id).update(
-                    position=position,
-                    points_earned=points
-                )
-                
-                # Distribute points for this result
-                if result.id != self.id:  # Don't distribute for self to avoid recursion
-                    updated_result = ProgramResult.objects.get(id=result.id)
-                    updated_result.distribute_points_to_team_and_members()
+        from .services import recalculate_program_results
+        return recalculate_program_results(self.program)
     
     def __str__(self):
         return f"{self.participant.get_full_name()} - {self.program.name} - Position: {self.position or 'Unranked'}"
@@ -911,7 +1136,13 @@ class ChestNumber(models.Model):
     
     # Metadata
     assigned_at = models.DateTimeField(auto_now_add=True)
-    assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='assigned_chest_numbers')
+    assigned_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_chest_numbers',
+    )
     
     class Meta:
         unique_together = [
@@ -921,40 +1152,54 @@ class ChestNumber(models.Model):
         ordering = ['chest_number']
     
     def __str__(self):
-        return f"Chest #{self.chest_number} - {self.student.display_name} ({self.event.name})"
+        return f"Chest #{self.chest_number} - {self.student.display_name} ({self.event.title})"
+
+    def clean(self):
+        super().clean()
+        if not self.event_id or not self.student_id:
+            return
+        if self.student.school_id != self.event.school_id:
+            raise ValidationError('The participant and event must belong to the same school.')
+        if self.team_id and self.team.school_id != self.event.school_id:
+            raise ValidationError('The team and event must belong to the same school.')
+        if self.assigned_by_id and self.assigned_by.school_id != self.event.school_id:
+            raise ValidationError('The assigning user must belong to the same school.')
     
     def save(self, *args, **kwargs):
-        # Auto-generate chest number if not provided
-        if not self.chest_number:
-            if self.team and self.team.team_number:
-                # Get team-based chest number range using team_number
-                # Team 1: 100-199, Team 2: 200-299, Team 3: 300-399, etc.
-                team_base = self.team.team_number * 100
-                
-                # Find the next available chest number in this team's range
-                max_chest = ChestNumber.objects.filter(
-                    event=self.event,
-                    team=self.team,
-                    chest_number__gte=team_base,
-                    chest_number__lt=team_base + 100
-                ).aggregate(max_chest=models.Max('chest_number'))['max_chest']
-                
-                if max_chest:
-                    self.chest_number = max_chest + 1
+        with transaction.atomic():
+            Event.objects.select_for_update().only('pk').get(pk=self.event_id)
+            if self.pk:
+                original = ChestNumber.objects.only('chest_number').get(pk=self.pk)
+                if self.chest_number != original.chest_number:
+                    raise ValidationError('A chest number cannot change after it is assigned.')
+            elif not self.chest_number:
+                if self.team_id:
+                    if not self.team.team_number:
+                        raise ValidationError('The selected team does not have a team number.')
+                    range_start = self.team.team_number * 1000
+                    range_end = range_start + 1000
+                    max_chest = ChestNumber.objects.filter(
+                        event_id=self.event_id,
+                        team_id=self.team_id,
+                        chest_number__gte=range_start,
+                        chest_number__lt=range_end,
+                    ).aggregate(max_chest=models.Max('chest_number'))['max_chest']
+                    self.chest_number = (max_chest + 1) if max_chest is not None else range_start
+                    if self.chest_number >= range_end:
+                        raise ValidationError(
+                            f'Chest-number range for {self.team.name} is exhausted.'
+                        )
                 else:
-                    self.chest_number = team_base  # Start from team_base (e.g., 100, 200, 300)
-            else:
-                # For individual assignments without teams, use general range starting from 1
-                # This avoids conflicts with team-based chest numbers (100+)
-                max_chest = ChestNumber.objects.filter(
-                    event=self.event,
-                    team__isnull=True,
-                    chest_number__lt=100  # Keep individual assignments below 100
-                ).aggregate(max_chest=models.Max('chest_number'))['max_chest']
-                
-                self.chest_number = max(1, (max_chest or 0) + 1)
-        
-        super().save(*args, **kwargs)
+                    max_chest = ChestNumber.objects.filter(
+                        event_id=self.event_id,
+                        team__isnull=True,
+                        chest_number__lt=1000,
+                    ).aggregate(max_chest=models.Max('chest_number'))['max_chest']
+                    self.chest_number = max(1, (max_chest or 0) + 1)
+                    if self.chest_number >= 1000:
+                        raise ValidationError('The individual chest-number range is exhausted.')
+            self.full_clean()
+            super().save(*args, **kwargs)
 
 class TeamManager(models.Model):
     """Model to track team manager relationships"""
@@ -969,9 +1214,104 @@ class TeamManager(models.Model):
     def __str__(self):
         return f"{self.user.get_full_name()} - {self.team.name} Team Manager"
 
+    def clean(self):
+        super().clean()
+        if self.user_id and self.team_id:
+            if self.user.role != 'team_manager':
+                raise ValidationError('The selected user is not a team manager.')
+            if self.user.school_id != self.team.school_id:
+                raise ValidationError('The team manager and team must belong to the same school.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+
+def certificate_template_upload_to(instance, filename):
+    extension = Path(filename).suffix.lower()
+    return (
+        f'certificate_templates/school_{instance.event.school_id}/'
+        f'event_{instance.event_id}/{instance.certificate_type}_{uuid4().hex}{extension}'
+    )
+
+
+class CertificateTemplate(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='certificate_templates')
+    certificate_type = models.CharField(max_length=24, choices=CERTIFICATE_TYPE_CHOICES)
+    background_image = models.ImageField(upload_to=certificate_template_upload_to, blank=True)
+    aspect_ratio = models.FloatField(default=4 / 3)
+    natural_width = models.PositiveIntegerField(null=True, blank=True)
+    natural_height = models.PositiveIntegerField(null=True, blank=True)
+    fields = models.JSONField(default=default_certificate_fields)
+    updated_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='updated_certificate_templates',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['event', 'certificate_type'],
+                name='unique_event_certificate_template',
+            ),
+        ]
+        ordering = ['certificate_type']
+
+    def clean(self):
+        super().clean()
+        self.fields = normalize_certificate_fields(self.fields)
+        if self.updated_by_id and self.updated_by.school_id != self.event.school_id:
+            raise ValidationError('The template editor and event must belong to the same school.')
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f'{self.event.title} - {self.get_certificate_type_display()}'
+
 # Django signals for automatic cleanup
-from django.db.models.signals import pre_delete, post_delete
+from django.db.models.signals import m2m_changed, pre_delete, post_delete
 from django.dispatch import receiver
+
+
+@receiver(m2m_changed, sender=Team.members.through)
+def prevent_cross_school_team_members(sender, instance, action, pk_set, **kwargs):
+    if action != 'pre_add' or not pk_set:
+        return
+    invalid = User.objects.filter(pk__in=pk_set).exclude(
+        school_id=instance.school_id, role='student'
+    )
+    if invalid.exists():
+        raise ValidationError('All team members must be students from the same school.')
+    already_assigned = User.objects.filter(
+        pk__in=pk_set,
+        team_memberships__school_id=instance.school_id,
+    ).exclude(team_memberships=instance).distinct()
+    if already_assigned.exists():
+        names = ', '.join(already_assigned.values_list('name', flat=True))
+        raise ValidationError(
+            f'Each participant can belong to only one team. Already assigned: {names}'
+        )
+
+
+@receiver(post_delete, sender=ProgramAssignment)
+def remove_unused_event_chest_number(sender, instance, **kwargs):
+    """Remove the event chest after the participant's final assignment is removed."""
+    try:
+        event_id = instance.program.event_id
+    except (Program.DoesNotExist, AttributeError):
+        return
+    if not ProgramAssignment.objects.filter(
+        program__event_id=event_id,
+        student_id=instance.student_id,
+    ).exists():
+        ChestNumber.objects.filter(
+            event_id=event_id,
+            student_id=instance.student_id,
+        ).delete()
 
 @receiver(pre_delete, sender=Team)
 def cleanup_team_data(sender, instance, **kwargs):
@@ -1005,3 +1345,9 @@ def cleanup_orphaned_assignments(sender, instance, **kwargs):
     
     if orphaned_assignments.exists():
         orphaned_assignments.delete()
+
+
+@receiver(post_delete, sender=CertificateTemplate)
+def delete_certificate_template_background(sender, instance, **kwargs):
+    if instance.background_image:
+        instance.background_image.delete(save=False)

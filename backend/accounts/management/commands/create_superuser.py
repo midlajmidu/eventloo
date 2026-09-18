@@ -1,5 +1,9 @@
-from django.core.management.base import BaseCommand
+import os
+
+from django.core.management.base import BaseCommand, CommandError
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.db import transaction
 
 User = get_user_model()
@@ -11,14 +15,8 @@ class Command(BaseCommand):
         parser.add_argument(
             '--email',
             type=str,
-            default='admin@eventloo.com',
+            required=True,
             help='Email for the superuser'
-        )
-        parser.add_argument(
-            '--password',
-            type=str,
-            default='admin123',
-            help='Password for the superuser'
         )
         parser.add_argument(
             '--username',
@@ -35,9 +33,16 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         email = options['email']
-        password = options['password']
+        password = os.environ.get('SUPER_ADMIN_PASSWORD')
+        if not password:
+            raise CommandError('Set SUPER_ADMIN_PASSWORD in the command environment.')
         username = options['username']
         name = options['name']
+
+        try:
+            validate_password(password)
+        except ValidationError as exc:
+            raise CommandError('; '.join(exc.messages)) from exc
 
         try:
             with transaction.atomic():
@@ -48,15 +53,17 @@ class Command(BaseCommand):
                     )
                     return
 
-                # Create superuser
+                # Create the application platform administrator. This role is
+                # intentionally separate from Django's unrestricted admin flags.
                 user = User.objects.create_user(
                     email=email,
                     username=username,
                     password=password,
                     name=name,
-                    role='admin',
-                    is_staff=True,
-                    is_superuser=True
+                    role='super_admin',
+                    school=None,
+                    is_staff=False,
+                    is_superuser=False
                 )
 
                 self.stdout.write(
@@ -65,11 +72,11 @@ class Command(BaseCommand):
                         f'Email: {email}\n'
                         f'Username: {username}\n'
                         f'Name: {name}\n'
-                        f'Role: Admin'
+                        f'Role: Super Admin'
                     )
                 )
 
-        except Exception as e:
-            self.stdout.write(
-                self.style.ERROR(f'Error creating superuser: {str(e)}')
-            ) 
+        except CommandError:
+            raise
+        except Exception as exc:
+            raise CommandError(f'Unable to create platform administrator: {exc}') from exc

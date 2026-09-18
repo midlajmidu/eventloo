@@ -54,9 +54,7 @@ The backend is running but **not connected to the PostgreSQL database**. It's li
 - ✅ Health check returns JSON
 - ✅ API endpoints respond
 - ✅ Admin panel accessible
-- ✅ **Admin user created automatically:**
-  - **Email:** `admin@eventloo.com`
-  - **Password:** `admin123`
+- ✅ **No default user is created automatically.** Provision the platform owner explicitly and create school administrators through the Super Admin portal.
 - ✅ **Persistent data storage**
 - ✅ **User accounts saved permanently**
 - ✅ **All CRUD operations working**

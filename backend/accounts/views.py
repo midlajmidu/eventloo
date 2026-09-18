@@ -1,14 +1,17 @@
 from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework.decorators import api_view, permission_classes, authentication_classes, action, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from .serializers import CustomTokenObtainPairSerializer, UserSerializer, StudentSerializer, StudentCreateUpdateSerializer, TeamManagerLoginSerializer, TeamManagerResponseSerializer
+from .serializers import CustomTokenObtainPairSerializer, UserSerializer, SchoolUserSerializer, StudentSerializer, StudentCreateUpdateSerializer, TeamManagerLoginSerializer, TeamManagerResponseSerializer, SchoolSerializer, SchoolCreateSerializer
 from rest_framework import viewsets, status, filters, permissions
+from rest_framework.exceptions import ValidationError as DRFValidationError
 from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q, Sum, Count, Max
-from .models import User, SchoolSettings
-from events.permissions import CanManageStudents
+from django.db import transaction
+from django.db.models import Q, Sum, Count
+from .models import User, School, SchoolSettings, StudentCategory, StudentClass
+from events.permissions import CanManageStudents, IsTeamManagerOrAdmin, TeamManagerAuthentication, IsSuperAdmin, IsAdminOrEventManager, IsApplicationStaff, IsSchoolAdmin, IsSameSchool
+from .authentication import SchoolJWTAuthentication
 from events.pagination import StandardPagination, LargePagination, SmallPagination
 import pandas as pd
 import re
@@ -17,12 +20,49 @@ import string
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.utils import get_md5_hash_password
+from .throttles import LoginRateThrottle, UploadRateThrottle
+import hashlib
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.utils import timezone
 from events.models import Team, Event, Program, ProgramAssignment, PointsRecord as EventPointsRecord
 from datetime import datetime
+from difflib import SequenceMatcher
 from .serializers import SchoolSettingsSerializer
+from django.conf import settings
+from .upload_security import (
+    validate_excel_upload,
+    validate_excel_shape,
+)
+from .security_audit import audit_security_event
+from .mfa import generate_totp_secret, matching_totp_step, provisioning_uri, verify_totp
+from .quotas import lock_and_enforce_quota
+import logging
+
+logger = logging.getLogger(__name__)
+
+
+def set_auth_cookies(response, refresh_token, access_token):
+    response.set_cookie(
+        settings.REFRESH_COOKIE_NAME,
+        refresh_token,
+        max_age=int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+        httponly=True,
+        secure=settings.REFRESH_COOKIE_SECURE,
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+        path='/api/',
+    )
+    response.set_cookie(
+        settings.ACCESS_COOKIE_NAME,
+        access_token,
+        max_age=int(settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds()),
+        httponly=True,
+        secure=settings.REFRESH_COOKIE_SECURE,
+        samesite=settings.REFRESH_COOKIE_SAMESITE,
+        path='/api/',
+    )
+    return response
 
 def get_paginated_response(data, request, pagination_class=StandardPagination):
     """Helper function to get paginated response for API views"""
@@ -34,19 +74,465 @@ def get_paginated_response(data, request, pagination_class=StandardPagination):
 
 class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
+    throttle_classes = [LoginRateThrottle]
+
+    def post(self, request, *args, **kwargs):
+        if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+            return Response({'error': 'Invalid authentication request.'}, status=400)
+        candidate = _authenticate_school_staff_credentials(request)
+        if candidate and (settings.REQUIRE_SCHOOL_STAFF_MFA or candidate.mfa_enabled):
+            if not candidate.mfa_enabled:
+                audit_security_event(request, 'school_login', 'mfa_setup_required', actor=candidate)
+                return Response({
+                    'error': 'Multi-factor authentication setup is required.',
+                    'code': 'mfa_setup_required',
+                }, status=status.HTTP_403_FORBIDDEN)
+            matched_step = matching_totp_step(candidate.mfa_secret, request.data.get('otp'))
+            if matched_step is None or not _consume_mfa_step(candidate, matched_step):
+                audit_security_event(request, 'school_login', 'mfa_denied', actor=candidate)
+                return Response({
+                    'error': 'A valid unused authenticator code is required.',
+                    'code': 'mfa_required',
+                }, status=status.HTTP_401_UNAUTHORIZED)
+        try:
+            response = super().post(request, *args, **kwargs)
+        except Exception:
+            audit_security_event(request, 'school_login', 'denied')
+            raise
+        refresh = response.data.pop('refresh', None)
+        access = response.data.pop('access', None)
+        if refresh and access:
+            set_auth_cookies(response, refresh, access)
+        audit_security_event(request, 'school_login', 'success', actor=response.data.get('user'))
+        return response
+
+
+def _consume_mfa_step(user, matched_step):
+    with transaction.atomic():
+        locked_user = User.objects.select_for_update().get(pk=user.pk)
+        if locked_user.mfa_last_used_step is not None and matched_step <= locked_user.mfa_last_used_step:
+            return False
+        locked_user.mfa_last_used_step = matched_step
+        locked_user.save(update_fields=['mfa_last_used_step'])
+    return True
+
+
+def _authenticate_school_staff_credentials(request):
+    email = str(request.data.get('email', '')).strip().lower()
+    school_code = str(request.data.get('school_code', '')).strip().lower()
+    user = authenticate(request, email=email, password=request.data.get('password', ''))
+    if not user or user.role not in ('admin', 'event_manager') or not user.is_active:
+        return None
+    if not user.school_id or user.school.status != 'active' or user.school.code != school_code:
+        return None
+    return user
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([LoginRateThrottle])
+def school_staff_mfa_setup(request):
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
+    user = _authenticate_school_staff_credentials(request)
+    if not user:
+        audit_security_event(request, 'school_mfa_setup', 'denied')
+        return Response({'error': 'Invalid school code or credentials.'}, status=401)
+    if user.mfa_enabled:
+        return Response({'error': 'Multi-factor authentication is already enabled.'}, status=400)
+    if not user.mfa_secret:
+        user.mfa_secret = generate_totp_secret()
+        user.save(update_fields=['mfa_secret'])
+    audit_security_event(request, 'school_mfa_setup', 'started', actor=user)
+    return Response({
+        'secret': user.mfa_secret,
+        'provisioning_uri': provisioning_uri(user, user.mfa_secret),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([LoginRateThrottle])
+def school_staff_mfa_confirm(request):
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
+    user = _authenticate_school_staff_credentials(request)
+    if not user:
+        audit_security_event(request, 'school_mfa_confirm', 'denied')
+        return Response({'error': 'Invalid school code or credentials.'}, status=401)
+    if not user.mfa_secret or not verify_totp(user.mfa_secret, request.data.get('otp')):
+        audit_security_event(request, 'school_mfa_confirm', 'denied', actor=user)
+        return Response({'error': 'Invalid authenticator code.'}, status=400)
+    user.mfa_enabled = True
+    user.session_version += 1
+    user.save(update_fields=['mfa_enabled', 'session_version'])
+    audit_security_event(request, 'school_mfa_confirm', 'success', actor=user)
+    return Response({'message': 'Multi-factor authentication enabled.'})
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def logout_view(request):
+    """Revoke the supplied refresh token; clients then clear local session state."""
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
+    refresh_value = request.data.get('refresh') or request.COOKIES.get(settings.REFRESH_COOKIE_NAME)
+    outcome = 'cleared'
+    if refresh_value:
+        try:
+            RefreshToken(refresh_value).blacklist()
+            outcome = 'revoked'
+        except Exception:
+            # Always clear client cookies and do not disclose token validity.
+            outcome = 'stale_token_cleared'
+    response = Response(status=status.HTTP_204_NO_CONTENT)
+    response.delete_cookie(settings.REFRESH_COOKIE_NAME, path='/api/')
+    response.delete_cookie(settings.ACCESS_COOKIE_NAME, path='/api/')
+    audit_security_event(request, 'logout', outcome)
+    return response
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([LoginRateThrottle])
+def super_admin_login(request):
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
+    email = str(request.data.get('email', '')).strip().lower()
+    password = request.data.get('password', '')
+    user = authenticate(request, email=email, password=password)
+    if not user or user.role != 'super_admin' or user.school_id is not None:
+        audit_security_event(request, 'super_admin_login', 'denied')
+        return Response({'error': 'Invalid super-admin credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
+    if not user.is_active:
+        audit_security_event(request, 'super_admin_login', 'denied', actor=user)
+        return Response({'error': 'This account is inactive.'}, status=status.HTTP_403_FORBIDDEN)
+    if (settings.REQUIRE_SUPER_ADMIN_MFA or user.mfa_enabled) and not user.mfa_enabled:
+        audit_security_event(request, 'super_admin_login', 'mfa_setup_required', actor=user)
+        return Response({
+            'error': 'Multi-factor authentication setup is required.',
+            'code': 'mfa_setup_required',
+        }, status=status.HTTP_403_FORBIDDEN)
+    if user.mfa_enabled:
+        matched_step = matching_totp_step(user.mfa_secret, request.data.get('otp'))
+        if matched_step is None:
+            audit_security_event(request, 'super_admin_login', 'mfa_denied', actor=user)
+            return Response({
+                'error': 'A valid authenticator code is required.',
+                'code': 'mfa_required',
+            }, status=status.HTTP_401_UNAUTHORIZED)
+        if not _consume_mfa_step(user, matched_step):
+            audit_security_event(request, 'super_admin_login', 'mfa_replay_denied', actor=user)
+            return Response({
+                'error': 'That authenticator code has already been used.',
+                'code': 'mfa_required',
+            }, status=status.HTTP_401_UNAUTHORIZED)
+    refresh = RefreshToken.for_user(user)
+    refresh['access_type'] = 'super_admin'
+    refresh['role'] = 'super_admin'
+    refresh['pwd'] = get_md5_hash_password(user.password)
+    refresh['session_version'] = user.session_version
+    access = refresh.access_token
+    access['access_type'] = 'super_admin'
+    access['role'] = 'super_admin'
+    access['pwd'] = get_md5_hash_password(user.password)
+    access['session_version'] = user.session_version
+    response = Response({
+        'user': {'id': user.id, 'email': user.email, 'name': user.display_name, 'role': user.role},
+    })
+    audit_security_event(request, 'super_admin_login', 'success', actor=user)
+    return set_auth_cookies(response, str(refresh), str(access))
+
+
+def _authenticate_super_admin_credentials(request):
+    email = str(request.data.get('email', '')).strip().lower()
+    user = authenticate(request, email=email, password=request.data.get('password', ''))
+    if not user or user.role != 'super_admin' or user.school_id is not None or not user.is_active:
+        return None
+    return user
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([LoginRateThrottle])
+def super_admin_mfa_setup(request):
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
+    user = _authenticate_super_admin_credentials(request)
+    if not user:
+        audit_security_event(request, 'super_admin_mfa_setup', 'denied')
+        return Response({'error': 'Invalid super-admin credentials.'}, status=401)
+    if user.mfa_enabled:
+        return Response({'error': 'Multi-factor authentication is already enabled.'}, status=400)
+    if not user.mfa_secret:
+        user.mfa_secret = generate_totp_secret()
+        user.save(update_fields=['mfa_secret'])
+    audit_security_event(request, 'super_admin_mfa_setup', 'started', actor=user)
+    return Response({
+        'secret': user.mfa_secret,
+        'provisioning_uri': provisioning_uri(user, user.mfa_secret),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([LoginRateThrottle])
+def super_admin_mfa_confirm(request):
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
+    user = _authenticate_super_admin_credentials(request)
+    if not user:
+        audit_security_event(request, 'super_admin_mfa_confirm', 'denied')
+        return Response({'error': 'Invalid super-admin credentials.'}, status=401)
+    if not user.mfa_secret or not verify_totp(user.mfa_secret, request.data.get('otp')):
+        audit_security_event(request, 'super_admin_mfa_confirm', 'denied', actor=user)
+        return Response({'error': 'Invalid authenticator code.'}, status=400)
+    user.mfa_enabled = True
+    user.session_version += 1
+    user.save(update_fields=['mfa_enabled', 'session_version'])
+    audit_security_event(request, 'super_admin_mfa_confirm', 'success', actor=user)
+    return Response({'message': 'Multi-factor authentication enabled.'})
+
+
+class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsSuperAdmin]
+    pagination_class = SmallPagination
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'code', 'email', 'phone']
+    queryset = School.objects.all()
+
+    def get_queryset(self):
+        return School.objects.annotate(
+            admin_count=Count('users', filter=Q(users__role='admin'), distinct=True),
+            user_count=Count('users', filter=~Q(users__role='student'), distinct=True),
+            student_count=Count('users', filter=Q(users__role='student'), distinct=True),
+            event_count=Count('events', distinct=True),
+        ).order_by('name')
+
+    def get_serializer_class(self):
+        return SchoolCreateSerializer if self.action == 'create' else SchoolSerializer
+
+    def perform_create(self, serializer):
+        school = serializer.save()
+        audit_security_event(
+            self.request, 'school_create', 'success', school_id=school.id, target=school.id
+        )
+
+    def perform_update(self, serializer):
+        school = serializer.save()
+        SchoolSettings.objects.filter(school=school).update(
+            school_name=school.name,
+            school_email=school.email,
+            school_phone=school.phone,
+            school_address=school.address,
+        )
+        audit_security_event(
+            self.request, 'school_update', 'success', school_id=school.id, target=school.id
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        from django.db import transaction
+
+        school = self.get_object()
+        deleted_school_id = school.id
+        confirmation = str(request.data.get('confirm_name', '')).strip()
+        if confirmation != school.name:
+            return Response(
+                {'confirm_name': ['Type the exact school name to confirm deletion.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            # User.school is protected to prevent accidental deletion elsewhere.
+            # This explicit super-admin action removes tenant users first; their
+            # dependent records and the remaining school data then cascade safely.
+            school.users.all().delete()
+            school.delete()
+        audit_security_event(
+            request, 'school_delete', 'success',
+            school_id=deleted_school_id, target=deleted_school_id,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=['get', 'post'])
+    def admins(self, request, pk=None):
+        school = self.get_object()
+        if request.method == 'GET':
+            return Response(UserSerializer(school.users.filter(role='admin'), many=True).data)
+        email = str(request.data.get('email', '')).strip().lower()
+        name = str(request.data.get('name', '')).strip()
+        password = request.data.get('password', '')
+        if not email or not name or not password:
+            return Response({'error': 'Name, email and password are required.'}, status=400)
+        if User.objects.filter(email__iexact=email).exists():
+            return Response({'error': 'An account with this email already exists.'}, status=400)
+        from django.contrib.auth.password_validation import validate_password
+        try:
+            validate_password(password)
+        except ValidationError as exc:
+            return Response({'error': exc.messages}, status=400)
+        with transaction.atomic():
+            school = lock_and_enforce_quota(school.id, 'users')
+            admin = User.objects.create_user(
+                username=email, email=email, password=password, name=name,
+                role='admin', school=school, is_staff=False, is_superuser=False,
+            )
+        audit_security_event(
+            request, 'school_admin_create', 'success', school_id=school.id, target=admin.id
+        )
+        return Response(UserSerializer(admin).data, status=201)
+
+    @action(detail=True, methods=['post'], url_path='reset-admin-password')
+    def reset_admin_password(self, request, pk=None):
+        school = self.get_object()
+        admin = school.users.filter(pk=request.data.get('admin_id'), role='admin').first()
+        password = request.data.get('password', '')
+        if not admin:
+            return Response({'error': 'School administrator not found.'}, status=404)
+        from django.contrib.auth.password_validation import validate_password
+        try:
+            validate_password(password, admin)
+        except ValidationError as exc:
+            return Response({'error': exc.messages}, status=400)
+        admin.set_password(password)
+        admin.session_version += 1
+        admin.save(update_fields=['password', 'session_version'])
+        audit_security_event(
+            request, 'school_admin_password_reset', 'success',
+            school_id=school.id, target=admin.id,
+        )
+        return Response({'message': 'Administrator password reset successfully.'})
+
+    @action(detail=True, methods=['post'], url_path='reset-staff-mfa')
+    def reset_staff_mfa(self, request, pk=None):
+        """Clear MFA only after an authenticated platform admin confirms identity."""
+        school = self.get_object()
+        staff_user = school.users.filter(
+            pk=request.data.get('staff_id'), role__in=('admin', 'event_manager')
+        ).first()
+        if not staff_user:
+            return Response({'error': 'School staff account not found.'}, status=404)
+        confirmation = str(request.data.get('confirm_email', '')).strip().lower()
+        if confirmation != str(staff_user.email or '').lower():
+            return Response(
+                {'confirm_email': ['Type the exact staff email to confirm the MFA reset.']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        staff_user.mfa_secret = ''
+        staff_user.mfa_enabled = False
+        staff_user.mfa_last_used_step = None
+        staff_user.session_version += 1
+        staff_user.save(update_fields=[
+            'mfa_secret', 'mfa_enabled', 'mfa_last_used_step', 'session_version'
+        ])
+        audit_security_event(
+            request, 'school_staff_mfa_reset', 'success',
+            school_id=school.id, target=staff_user.id,
+        )
+        return Response({'message': 'Staff MFA reset. Enrollment is required at next login.'})
+
+
+class SchoolUserViewSet(viewsets.ModelViewSet):
+    """Let a school administrator manage only staff accounts in their tenant."""
+
+    permission_classes = [IsSchoolAdmin]
+    serializer_class = SchoolUserSerializer
+    pagination_class = SmallPagination
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'email']
+
+    def get_queryset(self):
+        queryset = User.objects.filter(
+            school=self.request.user.school,
+            role__in=('admin', 'event_manager'),
+        ).order_by('-is_active', 'name', 'email')
+        status_filter = self.request.query_params.get('status')
+        if status_filter == 'active':
+            queryset = queryset.filter(is_active=True)
+        elif status_filter == 'inactive':
+            queryset = queryset.filter(is_active=False)
+        role = self.request.query_params.get('role')
+        if role in ('admin', 'event_manager'):
+            queryset = queryset.filter(role=role)
+        return queryset
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        school = lock_and_enforce_quota(self.request.user.school_id, 'users')
+        # The serializer derives tenant scope from request.user; retaining the
+        # locked school through the transaction makes this check race-safe.
+        user = serializer.save()
+        audit_security_event(
+            self.request, 'school_user_create', 'success',
+            school_id=self.request.user.school_id, target=user.id,
+        )
+
+    def perform_update(self, serializer):
+        target = self.get_object()
+        if target.pk == self.request.user.pk:
+            requested_role = serializer.validated_data.get('role', target.role)
+            requested_active = serializer.validated_data.get('is_active', target.is_active)
+            if requested_role != 'admin' or not requested_active:
+                from rest_framework.exceptions import ValidationError as DRFValidationError
+                raise DRFValidationError('You cannot remove your own administrator access.')
+        user = serializer.save()
+        audit_security_event(
+            self.request, 'school_user_update', 'success',
+            school_id=self.request.user.school_id, target=user.id,
+        )
+
+    def destroy(self, request, *args, **kwargs):
+        user = self.get_object()
+        if user.pk == request.user.pk:
+            return Response(
+                {'error': 'You cannot delete your own account.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user_id = user.id
+        user.delete()
+        audit_security_event(
+            request, 'school_user_delete', 'success',
+            school_id=request.user.school_id, target=user_id,
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        queryset = User.objects.filter(
+            school=request.user.school,
+            role__in=('admin', 'event_manager'),
+        )
+        return Response({
+            'total': queryset.count(),
+            'active': queryset.filter(is_active=True).count(),
+            'inactive': queryset.filter(is_active=False).count(),
+        })
+
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSuperAdmin])
+def super_admin_dashboard(request):
+    return Response({
+        'schools': School.objects.count(),
+        'active_schools': School.objects.filter(status='active').count(),
+        'suspended_schools': School.objects.filter(status='suspended').count(),
+        'school_admins': User.objects.filter(role='admin', school__isnull=False).count(),
+        'students': User.objects.filter(role='student', school__isnull=False).count(),
+        'events': Event.objects.filter(school__isnull=False).count(),
+    })
+
+@api_view(['GET'])
+@permission_classes([IsApplicationStaff])
 def user_profile(request):
     """Get current user profile"""
     serializer = UserSerializer(request.user)
     return Response(serializer.data)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSameSchool])
 def school_settings(request):
     """Get school settings including logo"""
-    settings = SchoolSettings.get_settings()
+    settings = SchoolSettings.get_settings(request.user.school)
     return Response({
         'school_name': settings.school_name,
         'school_logo': settings.school_logo,
@@ -54,14 +540,8 @@ def school_settings(request):
         'secondary_color': settings.secondary_color,
     })
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def logout_view(request):
-    """Logout user (frontend will handle token removal)"""
-    return Response({'message': 'Logged out successfully'})
-
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsSchoolAdmin])
 def admin_dashboard_summary(request):
     """Get dashboard summary data for admin, including global points and event breakdowns"""
     # Check if user is admin
@@ -71,61 +551,61 @@ def admin_dashboard_summary(request):
     # Get actual data from database
     from events.models import Event, Team, PointsRecord
 
-    total_events = Event.objects.count()
-    total_teams = Team.objects.count()
-    total_students = User.objects.filter(role='student').count()
-    total_programs = Event.objects.filter(status='completed').count()
+    school = request.user.school
+    total_events = Event.objects.filter(school=school).count()
+    active_events = Event.objects.filter(
+        school=school, status__in=['published', 'ongoing']
+    ).count()
+    completed_events = Event.objects.filter(school=school, status='completed').count()
+    total_teams = Team.objects.filter(school=school).count()
+    total_students = User.objects.filter(role='student', school=school).count()
+    students_in_teams = User.objects.filter(
+        role='student', school=school, team_memberships__school=school
+    ).distinct().count()
+    total_programs = Program.objects.filter(event__school=school).count()
 
-    # Calculate global points using percentage-based calculation
+    # Use the same published-results calculation as the Points page.
+    from events.services import calculate_global_points_for_school
+    canonical_global_points = calculate_global_points_for_school(school)
+    global_by_team = {item['id']: item for item in canonical_global_points['teams']}
     teams_with_points = []
-    teams = Team.objects.prefetch_related('members', 'program_assignments__program__event').all()
+    teams = Team.objects.filter(school=school).prefetch_related('members', 'program_assignments__program__event')
     
+    students_by_team = []
     for team in teams:
-        # Calculate percentage-based global points (same as global points calculation)
-        from events.models import ProgramResult
-        from django.db.models import Sum
-        
-        # Get all events this team participated in
-        team_results = ProgramResult.objects.filter(
-            team=team,
-            points_earned__gt=0
-        ).select_related('program__event')
-        
-        total_global_percentage = 0
-        events_participated = 0
-        
-        if team_results.exists():
-            # Group by event
-            event_breakdown = {}
-            for result in team_results:
-                event_name = result.program.event.title
-                if event_name not in event_breakdown:
-                    event_breakdown[event_name] = {
-                        'team_points': 0,
-                        'total_event_points': 0
-                    }
-                event_breakdown[event_name]['team_points'] += result.points_earned
-            
-            # Calculate total event points for each event
-            for event_name in event_breakdown:
-                total_event_points = ProgramResult.objects.filter(
-                    program__event__title=event_name,
-                    points_earned__gt=0
-                ).aggregate(total=Sum('points_earned'))['total'] or 0
-                
-                # Calculate percentage for this event
-                if total_event_points > 0:
-                    event_percentage = (event_breakdown[event_name]['team_points'] / total_event_points) * 100
-                    total_global_percentage += event_percentage
-                    events_participated += 1
+        students_by_team.append({
+            'id': team.id,
+            'name': team.name,
+            # Team membership is school-wide and includes every registered
+            # student, regardless of whether they joined an event program.
+            'students': team.member_count,
+        })
+        score = global_by_team.get(team.id, {})
         
         teams_with_points.append({
             'id': team.id,
             'name': team.name,
-            'global_points': round(total_global_percentage, 2),
+            'global_points': score.get('global_points', 0),
             'members': team.member_count,
-            'events_participated': events_participated,
-            'event_breakdown': {}
+            'events_participated': score.get('events_participated', 0),
+            'event_breakdown': score.get('event_breakdown', []),
+        })
+
+    # A participant is a student with at least one program assignment in any
+    # event owned by this school. Count each student once in their own category.
+    participants_by_category = []
+    for category in StudentCategory.objects.filter(school=school, is_active=True).order_by('id'):
+        participant_count = User.objects.filter(
+            role='student',
+            school=school,
+            category=category.code,
+            program_assignments__program__event__school=school,
+        ).distinct().count()
+        participants_by_category.append({
+            'id': category.id,
+            'name': category.name,
+            'code': category.code,
+            'participants': participant_count,
         })
     
     # Sort by points and take top 4
@@ -145,7 +625,7 @@ def admin_dashboard_summary(request):
 
     # Get recent activities
     recent_activities = []
-    recent_points = EventPointsRecord.objects.select_related('team', 'student', 'event')[:5]
+    recent_points = EventPointsRecord.objects.filter(school=school).select_related('team', 'student', 'event')[:5]
     for record in recent_points:
         recipient = record.team.name if record.team else record.student.display_name
         recent_activities.append({
@@ -157,9 +637,15 @@ def admin_dashboard_summary(request):
     
     dashboard_data = {
         'totalEvents': total_events,
+        'activeEvents': active_events,
+        'completedEvents': completed_events,
         'totalTeams': total_teams,
         'totalStudents': total_students,
+        'studentsInTeams': students_in_teams,
+        'unassignedStudents': max(total_students - students_in_teams, 0),
         'totalPrograms': total_programs,
+        'studentsByTeam': students_by_team,
+        'participantsByCategory': participants_by_category,
         'pointsByTeam': points_by_team,
         'topTeams': points_by_team,  # Add this for compatibility
         'recentActivities': recent_activities
@@ -168,7 +654,8 @@ def admin_dashboard_summary(request):
     return Response(dashboard_data)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 def team_manager_dashboard(request):
     """Get dashboard data for team managers"""
     if request.user.role != 'team_manager':
@@ -178,7 +665,10 @@ def team_manager_dashboard(request):
     from django.db.models import Sum
     
     # Get teams managed by this team manager
-    managed_teams = Team.objects.filter(team_manager=request.user)
+    if getattr(request.user, 'team_id', None):
+        managed_teams = Team.objects.filter(id=request.user.team_id)
+    else:
+        managed_teams = Team.objects.filter(team_manager=request.user)
     
     # Get events these teams are participating in
     events = Event.objects.filter(programs__assignments__team__in=managed_teams).distinct()
@@ -202,50 +692,23 @@ def team_manager_dashboard(request):
             'type': 'points'
         })
     
-    # Calculate global points for each team
+    from events.services import calculate_global_points_for_school
+    global_scores = calculate_global_points_for_school(request.user.school)
+    global_by_team = {item['id']: item for item in global_scores['teams']}
+
+    # Calculate global points for each managed team
     teams_with_global_points = []
     for team in managed_teams:
-        # Calculate percentage-based global points
-        team_results = ProgramResult.objects.filter(
-            team=team,
-            points_earned__gt=0
-        ).select_related('program__event')
-        
-        total_global_percentage = 0
-        events_participated = 0
-        
-        if team_results.exists():
-            # Group by event
-            event_breakdown = {}
-            for result in team_results:
-                event_name = result.program.event.title
-                if event_name not in event_breakdown:
-                    event_breakdown[event_name] = {
-                        'team_points': 0,
-                        'total_event_points': 0
-                    }
-                event_breakdown[event_name]['team_points'] += result.points_earned
-            
-            # Calculate total event points for each event
-            for event_name in event_breakdown:
-                total_event_points = ProgramResult.objects.filter(
-                    program__event__title=event_name,
-                    points_earned__gt=0
-                ).aggregate(total=Sum('points_earned'))['total'] or 0
-                
-                # Calculate percentage for this event
-                if total_event_points > 0:
-                    event_percentage = (event_breakdown[event_name]['team_points'] / total_event_points) * 100
-                    total_global_percentage += event_percentage
-                    events_participated += 1
+        score = global_by_team.get(team.id, {})
         
         teams_with_global_points.append({
             'id': team.id,
             'name': team.name,
             'points': team.points_earned,  # Keep original points for backward compatibility
-            'global_points': round(total_global_percentage, 2),  # Add global points
+            'global_points': score.get('global_points', 0),
             'members': team.member_count,
-            'events_participated': events_participated
+            'events_participated': score.get('events_participated', 0),
+            'event_breakdown': score.get('event_breakdown', []),
         })
     
     dashboard_data = {
@@ -260,8 +723,11 @@ def team_manager_dashboard(request):
 
 @api_view(['POST'])
 @permission_classes([])
+@throttle_classes([LoginRateThrottle])
 def team_manager_login(request):
     """Team manager login using team credentials"""
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
     serializer = TeamManagerLoginSerializer(data=request.data)
     
     if serializer.is_valid():
@@ -272,38 +738,47 @@ def team_manager_login(request):
         
         # Create a JWT token for team authentication
         from rest_framework_simplejwt.tokens import RefreshToken
-        
-        # Create a special token payload for team authentication
-        token_payload = {
-            'team_id': team.id,
-            'team_name': team.name,
-            'access_type': 'team_manager'
-        }
-        
-        # Create refresh token with custom payload
+        # Team tokens are scoped principals; they never impersonate an admin user.
         refresh = RefreshToken()
         refresh['team_id'] = team.id
+        refresh['school_id'] = team.school_id
         refresh['team_name'] = team.name
         refresh['access_type'] = 'team_manager'
+        refresh['credential_hash'] = hashlib.sha256(team.team_password.encode()).hexdigest()
+        refresh.outstand()
+        
+        # Ensure access token has the user_id and custom claims as well
+        access = refresh.access_token
+        access['team_id'] = team.id
+        access['school_id'] = team.school_id
+        access['team_name'] = team.name
+        access['access_type'] = 'team_manager'
+        access['credential_hash'] = refresh['credential_hash']
         
         response_data = {
             'success': True,
             'message': f'Welcome, {team.name}!',
             'team': team_data,
             'access_type': 'team_manager',
-            'access': str(refresh.access_token),
-            'refresh': str(refresh)
+            'school': {'id': team.school_id, 'name': team.school.name, 'code': team.school.code},
         }
-        
-        return Response(response_data, status=status.HTTP_200_OK)
-    
+        response = Response(response_data, status=status.HTTP_200_OK)
+        audit_security_event(
+            request, 'team_manager_login', 'success', school_id=team.school_id,
+            target=team.id,
+        )
+        return set_auth_cookies(response, str(refresh), str(access))
+
+    audit_security_event(request, 'team_manager_login', 'denied')
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 def team_manager_profile(request, team_id):
     """Get team manager profile and team details"""
     try:
-        team = Team.objects.get(id=team_id)
+        team = Team.objects.get(id=team_id, school_id=request.user.school_id)
         
         # Get team members
         members = team.members.all()
@@ -314,6 +789,7 @@ def team_manager_profile(request, team_id):
                 'id': member.id,
                 'name': member.display_name,
                 'student_id': member.student_id,
+                'gender': member.gender,
                 'category': member.category,
                 'grade': member.grade,
                 'section': member.section,
@@ -371,11 +847,12 @@ def team_manager_profile(request, team_id):
         return Response({'error': 'Team not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
-@permission_classes([])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 def team_manager_students(request, team_id):
     """Get team's students with their points"""
     try:
-        team = Team.objects.get(id=team_id)
+        team = Team.objects.get(id=team_id, school_id=request.user.school_id)
         members = team.members.all()
         
         student_data = []
@@ -390,6 +867,7 @@ def team_manager_students(request, team_id):
                 'id': member.id,
                 'name': member.display_name,
                 'student_id': member.student_id,
+                'gender': member.gender,
                 'category': member.category,
                 'grade': member.grade,
                 'section': member.section,
@@ -407,15 +885,19 @@ def team_manager_students(request, team_id):
         return Response({'error': 'Team not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
-@permission_classes([])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 def team_manager_events(request, team_id):
     """Get all events for a team manager (paginated)"""
     try:
         from events.models import Team, Event, Program, ProgramAssignment
 
-        team = Team.objects.get(id=team_id)
-        # Get all events this team is participating in
-        events = Event.objects.filter(programs__assignments__team=team).distinct().order_by('-start_date')
+        team = Team.objects.get(id=team_id, school_id=request.user.school_id)
+        # Get all active events (published, ongoing, or completed)
+        events = Event.objects.filter(
+            school_id=request.user.school_id,
+            status__in=['published', 'ongoing', 'completed']
+        ).distinct().order_by('-start_date')
 
         # Build event data list
         event_data = []
@@ -441,22 +923,25 @@ def team_manager_events(request, team_id):
                 'status': event.status,
                 'start_date': event.start_date,
                 'end_date': event.end_date,
+                'registration_deadline': event.registration_deadline,
+                'is_registration_open': event.is_registration_open,
                 'venue': event.venue,
                 'description': event.description,
                 'programs': program_data,
                 'total_programs': len(program_data)
             })
 
-        return get_paginated_response({
+        return Response({
             'events': event_data,
             'total_events': len(event_data)
-        }, request, StandardPagination)
+        })
         
     except Team.DoesNotExist:
         return Response({'error': 'Team not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['GET'])
-@permission_classes([])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 def team_manager_available_programs(request):
     """Get all available programs for team managers"""
     try:
@@ -466,6 +951,7 @@ def team_manager_available_programs(request):
         
         # Get all active programs from published/ongoing events
         programs = Program.objects.filter(
+            event__school_id=request.user.school_id,
             event__status__in=['published', 'ongoing'],
             is_active=True
         ).select_related('event').order_by('event__start_date', 'start_time')
@@ -481,18 +967,20 @@ def team_manager_available_programs(request):
         return Response(serializer.data)
         
     except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        logger.exception('Failed to load available team-manager programs')
+        return Response({'error': 'Unable to load programs.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
-@permission_classes([])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 def team_manager_event_programs(request, team_id, event_id):
     """Get programs for a specific event and current assignments"""
     try:
-        team = Team.objects.get(id=team_id)
+        team = Team.objects.get(id=team_id, school_id=request.user.school_id)
         from events.models import Event, Program, ProgramAssignment
         
-        event = Event.objects.get(id=event_id)
-        programs = Program.objects.filter(event=event)
+        event = Event.objects.get(id=event_id, school_id=request.user.school_id)
+        programs = Program.objects.filter(event=event, is_active=True)
         
         program_data = []
         for program in programs:
@@ -506,29 +994,37 @@ def team_manager_event_programs(request, team_id, event_id):
             for assignment in team_assignments:
                 assigned_students.append({
                     'id': assignment.student.id,
+                    'assignment_id': assignment.id,
                     'name': assignment.student.display_name,
                     'student_id': assignment.student.student_id,
+                    'gender': assignment.student.gender,
                     'chest_number': assignment.chest_number,
+                    'sub_team_number': getattr(assignment, 'sub_team_number', 1) or 1,
+                    'is_leader': getattr(assignment, 'is_leader', False) or False,
+                    'category': getattr(assignment.student, 'category', ''),
+                    'grade': getattr(assignment.student, 'grade', ''),
                     'assigned_at': assignment.assigned_at
                 })
             
             # Calculate limits and available slots based on program type
             if program.is_team_based:
                 # For team-based programs, use team_size
-                per_team_limit = program.team_size if program.team_size else 0
+                per_team_limit = (
+                    (program.team_size or 0) * (program.max_teams_per_school or 1)
+                )
                 assigned_count = len(assigned_students)
-                available_slots = per_team_limit - assigned_count if per_team_limit > 0 else 0
-                program_type = 'Team'
+                available_slots = max(0, per_team_limit - assigned_count) if per_team_limit > 0 else 0
+                participation_type = 'Team'
                 limit_description = f'Team size: {per_team_limit} members required'
             else:
                 # For individual programs, max_participants represents participants per team
                 per_team_limit = program.max_participants if program.max_participants else 1
                 assigned_count = len(assigned_students)
                 available_slots = per_team_limit - assigned_count if assigned_count < per_team_limit else 0
-                program_type = 'Individual'
+                participation_type = 'Individual'
                 
                 # Calculate total capacity (teams × participants per team)
-                total_teams = Team.objects.count()
+                total_teams = Team.objects.filter(school_id=request.user.school_id).count()
                 total_capacity = total_teams * per_team_limit
                 total_assigned = ProgramAssignment.objects.filter(program=program).count()
                 
@@ -538,17 +1034,23 @@ def team_manager_event_programs(request, team_id, event_id):
                 'id': program.id,
                 'name': program.name,
                 'category': program.category,
-                'program_type': program_type,
+                'program_type': program.program_type,
+                'participation_type': participation_type,
                 'is_team_based': program.is_team_based,
+                'is_active': program.is_active,
+                'is_finished': program.is_finished,
+                'start_time': program.start_time,
                 'max_participants': program.max_participants,  # Overall limit for individual programs
+                'max_participants_per_team': getattr(program, 'max_participants_per_team', None),
                 'team_size': program.team_size,  # Required team size for team-based programs
+                'max_teams_per_school': getattr(program, 'max_teams_per_school', 1) or 1,
                 'description': program.description,
                 'assigned_students': assigned_students,
                 'assigned_count': assigned_count,
                 'available_slots': available_slots,
                 'per_team_limit': per_team_limit,
                 'limit_description': limit_description,
-                'total_teams': Team.objects.count()
+                'total_teams': Team.objects.filter(school_id=request.user.school_id).count()
             })
         
         # Get team members for assignment
@@ -559,6 +1061,7 @@ def team_manager_event_programs(request, team_id, event_id):
                 'id': member.id,
                 'name': member.display_name,
                 'student_id': member.student_id,
+                'gender': member.gender,
                 'category': member.category,
                 'grade': member.grade,
                 'section': member.section
@@ -569,7 +1072,27 @@ def team_manager_event_programs(request, team_id, event_id):
                 'id': event.id,
                 'title': event.title,
                 'event_type': event.event_type,
-                'status': event.status
+                'status': event.status,
+                'start_date': event.start_date,
+                'end_date': event.end_date,
+                'start_time': event.start_time,
+                'end_time': event.end_time,
+                'venue': event.venue,
+                'registration_deadline': event.registration_deadline,
+                'registration_open': (
+                    event.status in ('published', 'ongoing')
+                    and (
+                        not event.registration_deadline
+                        or timezone.now() <= event.registration_deadline
+                    )
+                ),
+                'is_registration_open': (
+                    event.status in ('published', 'ongoing')
+                    and (
+                        not event.registration_deadline
+                        or timezone.now() <= event.registration_deadline
+                    )
+                ),
             },
             'programs': program_data,
             'team_members': member_data,
@@ -580,154 +1103,149 @@ def team_manager_event_programs(request, team_id, event_id):
         return Response({'error': 'Team or Event not found'}, status=status.HTTP_404_NOT_FOUND)
 
 @api_view(['POST'])
-@permission_classes([])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 def team_manager_assign_student(request, team_id, event_id, program_id):
-    """Assign a student to a program"""
+    """Assign participants through the shared transactional rule engine."""
+    from events.models import Program
+    from events.services import assign_students
+
     try:
-        team = Team.objects.get(id=team_id)
-        from events.models import Event, Program, ProgramAssignment, User
-        
-        event = Event.objects.get(id=event_id)
-        program = Program.objects.get(id=program_id, event=event)
-        student_id = request.data.get('student_id')
-        
-        # Validate student belongs to team
-        student = User.objects.get(id=student_id, role='student')
-        if not team.members.filter(id=student_id).exists():
-            return Response({'error': 'Student does not belong to this team'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check if student is already assigned to this program
-        existing_assignment = ProgramAssignment.objects.filter(
+        team = Team.objects.get(id=team_id, school_id=request.user.school_id)
+        program = Program.objects.select_related('event').get(id=program_id, event_id=event_id)
+        raw_ids = request.data.get('student_ids', [])
+        student_ids = list(raw_ids) if isinstance(raw_ids, (list, tuple)) else []
+        single_id = request.data.get('student_id')
+        if single_id is not None and single_id not in student_ids:
+            student_ids.append(single_id)
+        assignments = assign_students(
+            user=request.user,
             team=team,
             program=program,
-            student=student
-        ).first()
-        
-        if existing_assignment:
-            return Response({'error': 'Student is already assigned to this program'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Handle team-based programs
-        if program.is_team_based:
-            # For team-based programs, check team_size limit
-            if program.team_size is None:
-                return Response({'error': 'Program team size is not set. Please contact admin.'}, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Count assignments for this specific team in this program
-            team_assignments = ProgramAssignment.objects.filter(
-                team=team,
-                program=program
-            ).count()
-            
-            if team_assignments >= program.team_size:
-                return Response({
-                    'error': f'Your team has already assigned {team_assignments} students to this team-based program. The required team size is {program.team_size}. No more students can be added.'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # Show progress message
-            remaining_slots = program.team_size - team_assignments
-            if remaining_slots > 1:
-                print(f"Team {team.name}: Assigned {team_assignments + 1}/{program.team_size} students to {program.name}. {remaining_slots - 1} more needed.")
-        
-        # Handle general programs (non-team-based)
-        else:
-            # For general programs, each team can assign up to max_participants students
-            team_assignments = ProgramAssignment.objects.filter(
-                team=team,
-                program=program
-            ).count()
-            
-            # Use max_participants as the limit per team for general programs
-            max_per_team = program.max_participants if program.max_participants else 1
-            
-            if team_assignments >= max_per_team:
-                return Response({
-                    'error': f'Your team has already reached the maximum limit of {max_per_team} participants for this program. Each team can assign up to {max_per_team} students.'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            # For individual programs, max_participants represents participants per team
-            # No need to check total assignments across all teams
-        
-        # Create assignment
-        assignment = ProgramAssignment.objects.create(
-            team=team,
-            program=program,
-            student=student
+            student_ids=student_ids,
+            sub_team_number=request.data.get('sub_team_number', 1),
+            leader_id=request.data.get('leader_id'),
+            allow_partial_group=(len(student_ids) == 1),
         )
-        
-        # Build response message
-        message = 'Student assigned successfully'
-        if program.is_team_based:
-            current_count = ProgramAssignment.objects.filter(team=team, program=program).count()
-            if current_count < program.team_size:
-                remaining = program.team_size - current_count
-                message = f'Student assigned successfully! {current_count}/{program.team_size} students assigned. {remaining} more needed to complete the team.'
-            else:
-                message = f'Student assigned successfully! Team is now complete with {program.team_size}/{program.team_size} students.'
-        
         return Response({
-            'message': message,
-            'assignment': {
-                'id': assignment.id,
-                'student_name': student.display_name,
-                'program_name': program.name,
-                'assigned_at': assignment.assigned_at
-            },
-            'team_progress': {
-                'current': ProgramAssignment.objects.filter(team=team, program=program).count(),
-                'required': program.team_size if program.is_team_based else program.max_participants,
-                'is_complete': ProgramAssignment.objects.filter(team=team, program=program).count() >= (program.team_size if program.is_team_based else program.max_participants)
-            } if program.is_team_based or program.max_participants else None
+            'message': f'Successfully assigned {len(assignments)} participant(s).',
+            'assignments_count': len(assignments),
+            'assignment_ids': [assignment.id for assignment in assignments],
         }, status=status.HTTP_201_CREATED)
-        
-    except (Team.DoesNotExist, Event.DoesNotExist, Program.DoesNotExist, User.DoesNotExist):
-        return Response({'error': 'Invalid team, event, program, or student'}, status=status.HTTP_404_NOT_FOUND)
+    except (Team.DoesNotExist, Program.DoesNotExist):
+        return Response({'error': 'Team, event, or program not found.'}, status=status.HTTP_404_NOT_FOUND)
+    except ValidationError as exc:
+        message = exc.messages[0] if getattr(exc, 'messages', None) else str(exc)
+        return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['DELETE'])
-@permission_classes([])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 def team_manager_remove_assignment(request, team_id, assignment_id):
     """Remove a student assignment from a program"""
     try:
-        team = Team.objects.get(id=team_id)
+        team = Team.objects.get(id=team_id, school_id=request.user.school_id)
         from events.models import ProgramAssignment
         
         assignment = ProgramAssignment.objects.get(id=assignment_id, team=team)
-        assignment.delete()
-        
-        return Response({'message': 'Assignment removed successfully'}, status=status.HTTP_200_OK)
+        from events.services import remove_assignment_group
+        remove_assignment_group(user=request.user, assignment=assignment)
+        return Response({'message': 'Assignment group removed successfully'}, status=status.HTTP_200_OK)
         
     except (Team.DoesNotExist, ProgramAssignment.DoesNotExist):
         return Response({'error': 'Assignment not found'}, status=status.HTTP_404_NOT_FOUND)
+    except ValidationError as exc:
+        return Response({'error': exc.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
+def team_manager_set_subteam_leader(request, team_id, event_id, program_id):
+    """Set or toggle the sub-team group leader"""
+    from events.models import Event, Program, ProgramAssignment, User
+    try:
+        team = Team.objects.get(id=team_id, school_id=request.user.school_id)
+        event = Event.objects.get(id=event_id, school_id=request.user.school_id)
+        program = Program.objects.get(id=program_id, event=event)
+    except (Team.DoesNotExist, Event.DoesNotExist, Program.DoesNotExist):
+        return Response({'error': 'Resource not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    student_id = request.data.get('student_id')
+    sub_team_number = request.data.get('sub_team_number', 1)
+
+    if not student_id:
+        return Response({'error': 'Student ID required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        from events.services import set_subteam_leader
+        set_subteam_leader(
+            user=request.user,
+            team=team,
+            program=program,
+            student_id=student_id,
+            sub_team_number=sub_team_number,
+        )
+        return Response({'message': 'Sub-team leader updated successfully'}, status=status.HTTP_200_OK)
+    except ValidationError as exc:
+        return Response({'error': exc.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['DELETE'])
-@permission_classes([])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 def team_manager_remove_student_from_program(request, team_id, event_id, program_id, student_id):
     """Remove a specific student from a specific program"""
+    from events.models import Event, Program, ProgramAssignment, User
+    
     try:
-        team = Team.objects.get(id=team_id)
-        from events.models import Event, Program, ProgramAssignment, User
-        
-        event = Event.objects.get(id=event_id)
+        team = Team.objects.get(id=team_id, school_id=request.user.school_id)
+    except Team.DoesNotExist:
+        return Response({'error': f'Team (ID: {team_id}) not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        event = Event.objects.get(id=event_id, school_id=request.user.school_id)
+    except Event.DoesNotExist:
+        return Response({'error': f'Event (ID: {event_id}) not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Check registration deadline for non-admin users
+    from django.utils import timezone
+    if event.registration_deadline and timezone.now() > event.registration_deadline:
+        is_admin = request.user and request.user.is_authenticated and (request.user.is_superuser or getattr(request.user, 'role', '') in ['admin', 'event_manager'])
+        if not is_admin:
+            deadline_str = timezone.localtime(
+                event.registration_deadline
+            ).strftime('%d-%m-%Y %I:%M %p')
+            return Response({
+                'error': f'The registration deadline for entering team details has passed ({deadline_str} IST). You can no longer modify team assignments.'
+            }, status=status.HTTP_403_FORBIDDEN)
+
+    try:
         program = Program.objects.get(id=program_id, event=event)
-        student = User.objects.get(id=student_id, role='student')
+    except Program.DoesNotExist:
+        return Response({'error': f'Program (ID: {program_id}) not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        student = User.objects.get(id=student_id, role='student', school_id=request.user.school_id)
+    except User.DoesNotExist:
+        return Response({'error': f'Student (ID: {student_id}) not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        # Validate student belongs to team
-        if not team.members.filter(id=student_id).exists():
-            return Response({'error': 'Student does not belong to this team'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Find and delete the assignment
+    # Validate student belongs to team
+    if not team.members.filter(id=student_id).exists():
+        return Response({'error': 'Student does not belong to this team'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Find and delete the assignment
+    try:
         assignment = ProgramAssignment.objects.get(
             team=team,
             program=program,
             student=student
         )
-        assignment.delete()
-        
-        return Response({'message': 'Student removed from program successfully'}, status=status.HTTP_200_OK)
-        
-    except (Team.DoesNotExist, Event.DoesNotExist, Program.DoesNotExist, User.DoesNotExist):
-        return Response({'error': 'Invalid team, event, program, or student'}, status=status.HTTP_404_NOT_FOUND)
+        from events.services import remove_assignment_group
+        remove_assignment_group(user=request.user, assignment=assignment)
+        return Response({'message': 'Assignment group removed successfully'}, status=status.HTTP_200_OK)
     except ProgramAssignment.DoesNotExist:
         return Response({'error': 'Student is not assigned to this program'}, status=status.HTTP_404_NOT_FOUND)
+    except ValidationError as exc:
+        return Response({'error': exc.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
 
 class StudentViewSet(viewsets.ModelViewSet):
     """ViewSet for Student management"""
@@ -739,7 +1257,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         user = self.request.user
         
         # Base queryset
-        queryset = User.objects.filter(role='student')
+        queryset = User.objects.filter(role='student', school_id=user.school_id)
         
         # Filter based on user role
         if user.role == 'admin':
@@ -748,7 +1266,15 @@ class StudentViewSet(viewsets.ModelViewSet):
         elif user.role == 'team_manager':
             # Team managers can only see their team's students
             from events.models import Team
-            managed_teams = Team.objects.filter(team_manager=user)
+            token_team_id = getattr(user, 'team_id', None)
+            if token_team_id is not None:
+                managed_teams = Team.objects.filter(
+                    id=token_team_id, school_id=user.school_id
+                )
+            else:
+                managed_teams = Team.objects.filter(
+                    team_manager=user, school_id=user.school_id
+                )
             queryset = queryset.filter(
                 Q(team_memberships__in=managed_teams)
             ).distinct()
@@ -780,6 +1306,10 @@ class StudentViewSet(viewsets.ModelViewSet):
         section = self.request.query_params.get('section', '')
         if section:
             queryset = queryset.filter(section=section)
+
+        gender = self.request.query_params.get('gender', '')
+        if gender in ('male', 'female', 'other'):
+            queryset = queryset.filter(gender=gender)
         
         # Apply team filter
         team = self.request.query_params.get('team', '')
@@ -791,7 +1321,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             else:
                 # Show students assigned to specific team
                 try:
-                    team_obj = Team.objects.get(id=team)
+                    team_obj = Team.objects.get(id=team, school=self.request.user.school)
                     queryset = queryset.filter(team_memberships=team_obj)
                 except Team.DoesNotExist:
                     queryset = queryset.none()
@@ -805,46 +1335,48 @@ class StudentViewSet(viewsets.ModelViewSet):
     
     def get_permissions(self):
         """Only admins can manage students"""
-        if self.request.user.role != 'admin':
-            return [permissions.IsAuthenticated()]
-        return [permissions.IsAuthenticated()]
+        if self.action in [
+            'create', 'update', 'partial_update', 'destroy', 'assign_to_team',
+            'remove_from_team',
+            'bulk_upload', 'download_template',
+        ]:
+            return [IsSchoolAdmin()]
+        return [IsSchoolAdmin()]
     
+    @transaction.atomic
     def perform_create(self, serializer):
         """Create student with auto-generated password, student_id, and chest_code"""
-        import random
-        import string
         from datetime import datetime
-        
-        # Generate random password
-        password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+
+        lock_and_enforce_quota(self.request.user.school_id, 'students')
         
         # Auto-generate student_id based on current year and sequence per category
         current_year = datetime.now().year
         category = serializer.validated_data.get('category', 'gen')
         grade = serializer.validated_data.get('grade', '00')
         
-        # Map HSS grades to shorter codes for student ID generation
-        grade_mapping = {
-            'plus_one_science': '11S',
-            'plus_one_commerce': '11C',
-            'plus_two_science': '12S',
-            'plus_two_commerce': '12C'
-        }
-        
-        # Use mapped grade for student ID generation
-        grade_code = grade_mapping.get(grade, grade)
+        # Try to find class in StudentClass to get the code (dynamic lookup)
+        try:
+            student_class = StudentClass.objects.get(code=grade, school=self.request.user.school)
+            grade_code = student_class.code
+        except StudentClass.DoesNotExist:
+            # Fallback
+            grade_code = grade
         
         # Find the next sequence number for this year/category/grade
         existing_students = User.objects.filter(
             student_id__startswith=f"STU{current_year}{grade_code}",
-            category=category
+            category=category,
+            school=self.request.user.school,
         ).count()
         sequence = existing_students + 1
         
         student_id = f"STU{current_year}{grade_code}{sequence:03d}"
         
         # Ensure student_id is unique within the category
-        while User.objects.filter(student_id=student_id, category=category).exists():
+        while User.objects.filter(
+            student_id=student_id, category=category, school=self.request.user.school
+        ).exists():
             sequence += 1
             student_id = f"STU{current_year}{grade_code}{sequence:03d}"
         
@@ -861,19 +1393,15 @@ class StudentViewSet(viewsets.ModelViewSet):
         user = serializer.save(
             role='student',
             username=username,
-            student_id=student_id
+            student_id=student_id,
+            school=self.request.user.school,
         )
-        user.set_password(password)
-        
-        # Generate chest code
-        user.generate_chest_code()
+        # Participants do not authenticate directly; avoid creating dormant,
+        # guessable credentials that are never delivered to them.
+        user.set_unusable_password()
         
         user.save()
         
-        # In a real app, you'd send this password via email or SMS
-        # For now, we'll just log it
-        print(f"Created student {user.student_id} with password: {password}")
-        print(f"Generated chest code: {user.chest_code}")
     
     @action(detail=True, methods=['post'])
     def assign_to_team(self, request, pk=None):
@@ -889,7 +1417,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             from events.models import Team
             
             try:
-                team = Team.objects.get(id=team_id)
+                team = Team.objects.get(id=team_id, school=self.request.user.school)
             except Team.DoesNotExist:
                 return Response({'error': 'Team not found'}, status=status.HTTP_404_NOT_FOUND)
             
@@ -929,7 +1457,8 @@ class StudentViewSet(viewsets.ModelViewSet):
             })
             
         except Exception as e:
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception('Failed to assign a student to a team')
+            return Response({'error': 'Unable to assign the student.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])
     def remove_from_team(self, request, pk=None):
@@ -1009,9 +1538,12 @@ class StudentViewSet(viewsets.ModelViewSet):
         
         # Import here to avoid circular import
         from events.models import ProgramResult
+        from events.services import program_points_count_for_student
         
         results = ProgramResult.objects.filter(
-            participant=student
+            participant=student,
+            program__is_published=True,
+            entry_status='submitted',
         ).select_related('program', 'program__event', 'team').order_by('-entered_at')
         
         results_data = []
@@ -1023,7 +1555,7 @@ class StudentViewSet(viewsets.ModelViewSet):
                     'name': result.program.name,
                     'description': result.program.description,
                     'category': result.program.category,
-                    'category_display': result.program.get_category_display(),
+                    'category_display': str(result.program.category or 'general').upper(),
                     'start_time': result.program.start_time,
                     'end_time': result.program.end_time,
                     'venue': result.program.venue,
@@ -1040,7 +1572,11 @@ class StudentViewSet(viewsets.ModelViewSet):
                     'name': result.team.name,
                 } if result.team else None,
                 'position': result.position,
-                'points_earned': result.points_earned,
+                'points_earned': (
+                    result.points_earned
+                    if program_points_count_for_student(result.program)
+                    else 0
+                ),
                 'marks': result.marks,
                 'comments': result.comments,
                 'entered_at': result.entered_at,
@@ -1056,6 +1592,7 @@ class StudentViewSet(viewsets.ModelViewSet):
         
         # Import here to avoid circular import
         from events.models import ProgramAssignment, ProgramResult, Event, Team
+        from events.services import program_points_count_for_student
         
         # Get all events the student has participated in
         events = Event.objects.filter(
@@ -1077,7 +1614,9 @@ class StudentViewSet(viewsets.ModelViewSet):
             # Get results for this event
             results = ProgramResult.objects.filter(
                 participant=student,
-                program__event=event
+                program__event=event,
+                program__is_published=True,
+                entry_status='submitted',
             ).select_related('program', 'team')
             
             # Combine assignments and results
@@ -1121,7 +1660,11 @@ class StudentViewSet(viewsets.ModelViewSet):
                         'result': {
                             'id': result.id,
                             'position': result.position,
-                            'points_earned': result.points_earned,
+                            'points_earned': (
+                                result.points_earned
+                                if program_points_count_for_student(result.program)
+                                else 0
+                            ),
                             'total_marks': result.total_marks,
                             'average_marks': result.average_marks,
                             'judge1_marks': result.judge1_marks,
@@ -1138,7 +1681,11 @@ class StudentViewSet(viewsets.ModelViewSet):
                             program['result'] = {
                                 'id': result.id,
                                 'position': result.position,
-                                'points_earned': result.points_earned,
+                                'points_earned': (
+                                    result.points_earned
+                                    if program_points_count_for_student(result.program)
+                                    else 0
+                                ),
                                 'total_marks': result.total_marks,
                                 'average_marks': result.average_marks,
                                 'judge1_marks': result.judge1_marks,
@@ -1167,26 +1714,23 @@ class StudentViewSet(viewsets.ModelViewSet):
         
         return Response(participation_data)
 
-    @action(detail=False, methods=['post'])
+    @action(detail=False, methods=['post'], throttle_classes=[UploadRateThrottle])
     def bulk_upload(self, request):
         """AI-powered bulk upload students via Excel file with team assignments"""
         if 'file' not in request.FILES:
             return Response({'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
         
         file = request.FILES['file']
-        if not file.name.endswith(('.xlsx', '.xls')):
-            return Response({'error': 'Please upload an Excel file (.xlsx or .xls)'}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Check file size (limit to 10MB)
-        if file.size > 10 * 1024 * 1024:  # 10MB
-            return Response({'error': 'File size too large. Please upload a file smaller than 10MB.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_excel_upload(file)
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         
         # Check openpyxl version for .xlsx files
         if file.name.endswith('.xlsx'):
             try:
                 import openpyxl
                 openpyxl_version = openpyxl.__version__
-                print(f"Current openpyxl version: {openpyxl_version}")
                 # More flexible version check - allow newer versions
                 if openpyxl_version < '3.0.0':
                     return Response({
@@ -1250,17 +1794,16 @@ class StudentViewSet(viewsets.ModelViewSet):
                 else:
                     return Response({'error': 'Please upload an Excel file (.xlsx or .xls)'}, status=status.HTTP_400_BAD_REQUEST)
                 
-                print(f"Successfully read Excel file: {file.name}, Shape: {df.shape}")
-                
             except Exception as e:
-                print(f"Error reading Excel file {file.name}: {str(e)}")
-                return Response({'error': f'Error reading Excel file: {str(e)}. Please ensure the file is a valid Excel file and not corrupted.'}, status=status.HTTP_400_BAD_REQUEST)
+                logger.info('Rejected unreadable Excel upload: %s', type(e).__name__)
+                return Response({'error': 'The workbook could not be read. Check that it is valid and not corrupted.'}, status=status.HTTP_400_BAD_REQUEST)
             
+            try:
+                validate_excel_shape(df)
+            except ValueError as exc:
+                return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
             # AI-powered column detection and data validation
-            print(f"Processing Excel data with {len(df)} rows...")
             results = self._process_student_excel_with_ai(df)
-            
-            print(f"Validation results: {len(results['valid_students'])} valid, {len(results['errors'])} errors")
             
             if results['errors']:
                 return Response({
@@ -1269,209 +1812,118 @@ class StudentViewSet(viewsets.ModelViewSet):
                     'suggestions': results['suggestions']
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Process successful student creations
+            if not results['valid_students']:
+                return Response({
+                    'error': 'No student rows were found in the workbook.',
+                    'suggestions': ['Add at least one student to the Students sheet and upload it again.'],
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            # All rows are validated before this transaction starts, so a failed
+            # create cannot leave a partially imported class or team roster.
             created_students = []
-            skipped = []
-            team_assignments = []
-            
-            print(f"Starting to process {len(results['valid_students'])} valid students...")
-            
-            for index, student_data in enumerate(results['valid_students']):
-                print(f"Processing student {index + 1}/{len(results['valid_students'])}: {student_data.get('name', 'Unknown')}")
-                try:
-                    # Auto-generate student_id
-                    from datetime import datetime
+            team_assignment_results = []
+
+            with transaction.atomic():
+                lock_and_enforce_quota(
+                    self.request.user.school_id,
+                    'students',
+                    additional=len(results['valid_students']),
+                )
+                for student_data in results['valid_students']:
                     current_year = datetime.now().year
-                    category = student_data.get('category', 'hs')
-                    class_name = student_data.get('class', '9')
-                    
-                    # Generate student_id based on category and class
-                    if category == 'hs':
-                        grade = class_name
-                    else:  # hss
-                        if 'Plus One' in class_name:
-                            grade = '11'
-                        else:  # Plus Two
-                            grade = '12'
-                    
-                    # Find the next sequence number
+                    category = student_data['category']
+                    grade = student_data['class_code']
+
                     existing_students = User.objects.filter(
-                        student_id__startswith=f"STU{current_year}{grade}"
+                        student_id__startswith=f"STU{current_year}{grade}",
+                        school=self.request.user.school,
                     ).count()
                     sequence = existing_students + 1
-                    
                     student_id = f"STU{current_year}{grade}{sequence:03d}"
-                    
-                    # Ensure student_id is unique
-                    while User.objects.filter(student_id=student_id).exists():
+                    while User.objects.filter(
+                        student_id=student_id, school=self.request.user.school
+                    ).exists():
                         sequence += 1
                         student_id = f"STU{current_year}{grade}{sequence:03d}"
-                    
-                    # Auto-generate email
-                    name = student_data['name'].lower().replace(' ', '.')
-                    email = f"{name}@school.edu"
-                    
-                    # Ensure email is unique
+
+                    email_name = re.sub(r'[^a-z0-9]+', '.', student_data['name'].lower()).strip('.') or 'student'
+                    school_code = re.sub(r'[^a-z0-9]+', '', self.request.user.school.code.lower()) or 'school'
+                    email = f"{email_name}.{school_code}@students.local"
                     counter = 1
-                    original_email = email
                     while User.objects.filter(email=email).exists():
-                        email = f"{name}{counter}@school.edu"
+                        email = f"{email_name}.{school_code}{counter}@students.local"
                         counter += 1
-                    
-                    # Check if student already exists
-                    existing_student = User.objects.filter(
-                        Q(student_id=student_id) |
-                        Q(email=email)
-                    ).first()
-                    
-                    if existing_student:
-                        skipped.append({
-                            'student_id': student_id,
-                            'name': student_data['name'],
-                            'email': email,
-                            'reason': 'Student already exists with this ID or email'
-                        })
-                        continue
-                    
-                    # Create new student
+
                     student = User.objects.create(
                         student_id=student_id,
                         name=student_data['name'],
                         email=email,
                         role='student',
-                        username=student_id.lower(),
-                        password=make_password(student_id),  # Default password is student_id
+                        username=f"{school_code}.{student_id.lower()}",
+                        password=make_password(None),
+                        school=self.request.user.school,
                         category=category,
+                        gender=student_data['gender'],
                         grade=grade,
-                        section=class_name,  # Store the full class name in section
+                        section=student_data.get('section', ''),
+                        address=student_data.get('address', ''),
+                        phone_number=student_data.get('phone_number', ''),
+                        date_of_birth=student_data.get('date_of_birth'),
+                        guardian_name=student_data.get('guardian_name', ''),
+                        guardian_phone=student_data.get('guardian_phone', ''),
                         is_active=True
                     )
-                    
-                    # Generate chest code after student is created
-                    try:
-                        student.generate_chest_code()
-                    except Exception as e:
-                        print(f"Warning: Could not generate chest code for {student.student_id}: {str(e)}")
-                        # Continue without chest code - it's not critical
-                    
+
+                    # Chest numbers are event-specific and are generated only
+                    # when the student is assigned to a program.
                     created_students.append(student)
-                    print(f"Successfully created student: {student.student_id} - {student.name}")
-                    
-                    # Handle team assignment
-                    team_name = student_data.get('team_name', '').strip()
-                    if team_name:
-                        team_assignments.append({
-                            'student': student,
-                            'team_name': team_name
+                    if student_data.get('team_id'):
+                        team = Team.objects.get(
+                            pk=student_data['team_id'], school=self.request.user.school
+                        )
+                        team.members.add(student)
+                        team_assignment_results.append({
+                            'student': student.display_name,
+                            'team': team.name,
+                            'team_name': team.name,
+                            'action': 'Added as team member',
+                            'success': True,
                         })
-                        print(f"Queued team assignment: {student.name} -> {team_name}")
-                    
-                except Exception as e:
-                    error_msg = f'Error creating student: {str(e)}'
-                    print(f"Error creating student {student_data.get('name', 'Unknown')}: {error_msg}")
-                    skipped.append({
-                        'student_id': student_data.get('student_id', 'Unknown'),
-                        'name': student_data.get('name', ''),
-                        'email': student_data.get('email', ''),
-                        'reason': error_msg
-                    })
-            
-            # Process team assignments
-            team_assignment_results = []
-            if team_assignments:
-                team_assignment_results = self._process_team_assignments(team_assignments)
-            
+
             # Only return a summary and first 10 skipped/error entries to avoid large responses
             summary = {
                 'total_processed': len(results['valid_students']),
                 'successful_creations': len(created_students),
-                'skipped_creations': len(skipped),
+                'skipped_creations': 0,
                 'team_assignments_processed': len(team_assignment_results)
             }
-            
-            print(f"Bulk upload completed: {summary}")
             
             response_data = {
                 'success': True,
                 'message': f'Successfully processed {len(created_students)} students',
                 'summary': summary,
-                'skipped': skipped[:10],  # Only first 10 skipped
-                'team_assignments': team_assignment_results[:10]  # Only first 10
+                'skipped': [],
+                'team_assignments': team_assignment_results[:10],
+                'corrections': results['corrections'][:20],
             }
             return Response(response_data)
             
+        except DRFValidationError:
+            raise
         except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            print(f"Bulk upload error: {str(e)}")
-            print(f"Traceback: {error_details}")
+            logger.exception('Student bulk upload failed')
             return Response({
                 'error': 'An unexpected error occurred while processing the file',
-                'details': [f'Server error: {str(e)}'],
                 'suggestions': ['Please try again with a different file', 'Ensure the file format is correct', 'Contact support if the issue persists']
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
-    def _process_team_assignments(self, team_assignments):
-        """Process team assignments for bulk uploaded students"""
-        from events.models import Team
-        
-        assignment_results = []
-        
-        for assignment in team_assignments:
-            student = assignment['student']
-            team_name = assignment['team_name']
-            
-            try:
-                # Try to find existing team
-                team = Team.objects.filter(name__iexact=team_name).first()
-                
-                if not team:
-                    # Create new team if it doesn't exist
-                    # Get the next team number
-                    max_team_number = Team.objects.aggregate(max_num=Max('team_number'))['max_num'] or 0
-                    new_team_number = max_team_number + 1
-                    
-                    team = Team.objects.create(
-                        name=team_name,
-                        team_number=new_team_number
-                    )
-                    
-                    # Generate team credentials
-                    team.generate_team_credentials()
-                    team.save()
-                    
-                    assignment_results.append({
-                        'student': student.display_name,
-                        'team_name': team_name,
-                        'action': 'Team created and student assigned as member',
-                        'success': True
-                    })
-                else:
-                    # Add student to existing team
-                    team.members.add(student)
-                    assignment_results.append({
-                        'student': student.display_name,
-                        'team_name': team_name,
-                        'action': 'Added as team member',
-                        'success': True
-                    })
-                        
-            except Exception as e:
-                assignment_results.append({
-                    'student': student.display_name,
-                    'team_name': team_name,
-                    'action': f'Error: {str(e)}',
-                    'success': False
-                })
-        
-        return assignment_results
-
     def _process_student_excel_with_ai(self, df):
         """AI-powered processing of Excel data for student creation (name only, no first/last required)"""
         results = {
             'valid_students': [],
             'errors': [],
-            'suggestions': []
+            'suggestions': [],
+            'corrections': [],
         }
         
         # Clean column names
@@ -1481,12 +1933,12 @@ class StudentViewSet(viewsets.ModelViewSet):
         column_mapping = self._detect_student_columns(df.columns.tolist())
         
         # Validate required columns (simplified)
-        required_fields = ['name', 'category', 'class']
+        required_fields = ['name', 'gender', 'category', 'class']
         missing_fields = [field for field in required_fields if not column_mapping.get(field)]
         
         if missing_fields:
             results['errors'].append(f'Missing required columns: {", ".join(missing_fields)}')
-            results['suggestions'].append('Please ensure your Excel file has columns for: name, category, class')
+            results['suggestions'].append('Please ensure your Excel file has columns for: name, gender, category, class')
             return results
         
         # Process each row
@@ -1496,45 +1948,160 @@ class StudentViewSet(viewsets.ModelViewSet):
                 full_name = str(row[column_mapping['name']]).strip()
                 category = str(row[column_mapping['category']]).strip()
                 class_name = str(row[column_mapping['class']]).strip()
+                raw_gender = str(row[column_mapping['gender']]).strip().casefold()
                 
                 # Skip empty rows
                 if pd.isna(full_name) or full_name == '' or full_name.lower() == 'nan':
                     continue
-                
-                # Validate category
-                if category not in ['hs', 'hss']:
-                    results['errors'].append(f'Row {index + 2}: Invalid category "{category}". Must be "hs" or "hss"')
-                    continue
-                
-                # Validate class based on category
-                valid_classes = {
-                    'hs': ['8', '9', '10'],
-                    'hss': ['Plus One Science', 'Plus One Commerce', 'Plus Two Science', 'Plus Two Commerce']
+
+                gender_aliases = {
+                    'male': 'male', 'm': 'male', 'boy': 'male',
+                    'female': 'female', 'f': 'female', 'girl': 'female',
+                    'other': 'other', 'o': 'other',
                 }
-                
-                if class_name not in valid_classes[category]:
-                    results['errors'].append(f'Row {index + 2}: Invalid class "{class_name}" for category "{category}". Valid classes for {category}: {", ".join(valid_classes[category])}')
+                gender = gender_aliases.get(raw_gender)
+                if not gender:
+                    results['errors'].append(
+                        f'Row {index + 2}: Invalid gender "{raw_gender}". Choose Male, Female, or Other.'
+                    )
                     continue
+                
+                category_obj, corrected_category = self._match_import_option(
+                    category,
+                    StudentCategory.objects.filter(
+                        is_active=True, is_mixing=False, school=self.request.user.school,
+                    ),
+                    lambda item: (item.code, item.name),
+                )
+                if not category_obj:
+                    results['errors'].append(f'Row {index + 2}: Invalid or inactive category "{category}".')
+                    continue
+                if corrected_category:
+                    results['corrections'].append(
+                        f'Row {index + 2}: category "{category}" matched to "{category_obj.name}".'
+                    )
+                
+                # Validate class based on category dynamically
+                class_options = StudentClass.objects.filter(
+                    category=category_obj, is_active=True, school=self.request.user.school,
+                )
+                student_class, corrected_class = self._match_import_option(
+                    class_name, class_options, lambda item: (item.code, item.name)
+                )
+                
+                if not student_class:
+                    valid_classes_list = class_options.values_list('name', flat=True)
+                    results['errors'].append(f'Row {index + 2}: Invalid class "{class_name}" for category "{category}". Valid classes for {category_obj.name}: {", ".join(valid_classes_list)}')
+                    continue
+                if corrected_class:
+                    results['corrections'].append(
+                        f'Row {index + 2}: class "{class_name}" matched to "{student_class.name}".'
+                    )
                 
                 # Build student data
                 student_data = {
                     'name': full_name,  # Only use full name
-                    'category': category,
-                    'class': class_name,
+                    'gender': gender,
+                    'category': category_obj.code,
+                    'class': student_class.name,
+                    'class_code': student_class.code,
                 }
                 
                 # Add optional team field
                 if column_mapping.get('team_name'):
                     team_value = str(row[column_mapping['team_name']]).strip()
                     if team_value and team_value.lower() != 'nan':
-                        student_data['team_name'] = team_value
+                        team, corrected_team = self._match_import_option(
+                            team_value,
+                            Team.objects.filter(school=self.request.user.school),
+                            lambda item: (item.name,),
+                        )
+                        if not team:
+                            results['errors'].append(
+                                f'Row {index + 2}: Team "{team_value}" does not exist for this school. Choose a team listed in the template.'
+                            )
+                            continue
+                        if corrected_team:
+                            results['corrections'].append(
+                                f'Row {index + 2}: team "{team_value}" matched to "{team.name}".'
+                            )
+                        student_data['team_id'] = team.id
+                        student_data['team_name'] = team.name
+
+                for optional_field in ('section', 'address', 'guardian_name'):
+                    column = column_mapping.get(optional_field)
+                    if column:
+                        value = str(row[column]).strip()
+                        if value and value.lower() != 'nan':
+                            student_data[optional_field] = value
+
+                invalid_optional = False
+                for phone_field in ('phone_number', 'guardian_phone'):
+                    column = column_mapping.get(phone_field)
+                    if not column or pd.isna(row[column]):
+                        continue
+                    value = str(row[column]).strip()
+                    if value.endswith('.0') and value[:-2].isdigit():
+                        value = value[:-2]
+                    if len(value) > 15:
+                        results['errors'].append(
+                            f'Row {index + 2}: {phone_field} cannot exceed 15 characters.'
+                        )
+                        invalid_optional = True
+                    elif value:
+                        student_data[phone_field] = value
+
+                date_column = column_mapping.get('date_of_birth')
+                if date_column and not pd.isna(row[date_column]):
+                    parsed_date = pd.to_datetime(row[date_column], errors='coerce')
+                    if pd.isna(parsed_date):
+                        results['errors'].append(
+                            f'Row {index + 2}: Invalid date_of_birth. Use YYYY-MM-DD.'
+                        )
+                        invalid_optional = True
+                    else:
+                        student_data['date_of_birth'] = parsed_date.date()
+
+                if invalid_optional:
+                    continue
                 
                 results['valid_students'].append(student_data)
                 
-            except Exception as e:
-                results['errors'].append(f'Row {index + 2}: Error processing data: {str(e)}')
+            except Exception:
+                logger.exception('Student spreadsheet row processing failed', extra={'row': index + 2})
+                results['errors'].append(f'Row {index + 2}: This row could not be processed.')
         
         return results
+
+    @staticmethod
+    def _match_import_option(raw_value, options, aliases_getter):
+        """Return an exact or safely unambiguous fuzzy match for a workbook value."""
+        def normalize(value):
+            return re.sub(r'[^a-z0-9]+', '', str(value).casefold())
+
+        target = normalize(raw_value)
+        if not target:
+            return None, False
+
+        scored = []
+        for option in options:
+            aliases = [normalize(alias) for alias in aliases_getter(option) if alias]
+            if target in aliases:
+                return option, False
+            score = max((SequenceMatcher(None, target, alias).ratio() for alias in aliases), default=0)
+            scored.append((score, option))
+
+        scored.sort(key=lambda item: item[0], reverse=True)
+        if not scored:
+            return None, False
+        best_score, best_option = scored[0]
+        second_score = scored[1][0] if len(scored) > 1 else 0
+        # Conservative matching prevents a typo from silently selecting the
+        # wrong class/team. Short codes must be especially clear.
+        threshold = 0.75 if len(target) >= 3 else 0.85
+        if best_score < threshold or best_score - second_score < 0.08:
+            return None, False
+        return best_option, True
     
     def _detect_student_columns(self, columns):
         """AI-powered column detection for student data"""
@@ -1543,9 +2110,16 @@ class StudentViewSet(viewsets.ModelViewSet):
         # Define patterns for different fields (simplified)
         patterns = {
             'name': [r'name', r'full.*name', r'student.*name', r'student'],
+            'gender': [r'^gender$', r'^sex$'],
             'category': [r'category', r'type', r'level'],
             'class': [r'class', r'grade', r'standard', r'level'],
-            'team_name': [r'team.*name', r'team', r'group.*name', r'group']
+            'team_name': [r'team.*name', r'^team$', r'group.*name', r'^group$'],
+            'section': [r'^section$', r'class.*section'],
+            'address': [r'^address$', r'home.*address'],
+            'phone_number': [r'^phone_number$', r'^phone$', r'student.*phone'],
+            'date_of_birth': [r'^date_of_birth$', r'^dob$', r'birth.*date'],
+            'guardian_name': [r'^guardian_name$', r'parent.*name'],
+            'guardian_phone': [r'^guardian_phone$', r'parent.*phone'],
         }
         
         for field, field_patterns in patterns.items():
@@ -1561,118 +2135,146 @@ class StudentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def download_template(self, request):
-        """Download Excel template for student bulk upload with team assignments"""
+        """Build a tenant-specific student workbook with selectable reference data."""
         try:
             import io
             from django.http import HttpResponse
-            
-            # Get existing teams for the template
-            from events.models import Team
-            existing_teams = Team.objects.all()[:3]  # Get first 3 teams as examples
-            
-            # Create simplified sample data with proper HSS classes
-            sample_data = {
-                'name': ['Arjun Sharma', 'Priya Nair', 'Rahul Patel', 'Ananya Reddy', 'Kiran Kumar', 'Divya Singh', 'Ravi Menon', 'Sneha Pillai'],
-                'category': ['hs', 'hss', 'hs', 'hss', 'hs', 'hss', 'hss', 'hss'],
-                'class': ['9', 'Plus One Science', '10', 'Plus Two Commerce', '9', 'Plus One Commerce', 'Plus Two Science', 'Plus One Science'],
-                'team_name': []
-            }
-            
-            # Assign teams to students
+            from openpyxl import Workbook
+            from openpyxl.styles import Alignment, Font, PatternFill
+            from openpyxl.worksheet.datavalidation import DataValidation
+
+            existing_teams = list(Team.objects.filter(
+                school=self.request.user.school
+            ).order_by('team_number', 'name'))
+            active_cats = list(StudentCategory.objects.filter(
+                is_active=True, is_mixing=False, school=self.request.user.school
+            ).order_by('name'))
+            active_classes = list(StudentClass.objects.filter(
+                is_active=True, category__isnull=False,
+                category__is_active=True, category__is_mixing=False,
+                school=self.request.user.school,
+            ).select_related('category').order_by('category__name', 'name'))
+
+            workbook = Workbook()
+            students_sheet = workbook.active
+            students_sheet.title = 'Students'
+            headers = ['name', 'gender', 'category', 'class', 'section', 'team_name', 'address']
+            students_sheet.append(headers)
+            students_sheet.freeze_panes = 'A2'
+            students_sheet.auto_filter.ref = 'A1:G1000'
+            students_sheet.sheet_view.showGridLines = False
+
+            header_fill = PatternFill('solid', fgColor='4F46E5')
+            for cell in students_sheet[1]:
+                cell.fill = header_fill
+                cell.font = Font(color='FFFFFF', bold=True)
+                cell.alignment = Alignment(horizontal='center')
+            for column, width in {'A': 28, 'B': 14, 'C': 18, 'D': 24, 'E': 16, 'F': 24, 'G': 38}.items():
+                students_sheet.column_dimensions[column].width = width
+
+            setup_sheet = workbook.create_sheet('Setup')
+            setup_sheet.append([
+                'Category Code', 'Category Name', 'Class Name',
+                'Class Code', 'Class Category', 'Team Name'
+            ])
+            max_options = max(len(active_cats), len(active_classes), len(existing_teams), 1)
+            for index in range(max_options):
+                category = active_cats[index] if index < len(active_cats) else None
+                student_class = active_classes[index] if index < len(active_classes) else None
+                team = existing_teams[index] if index < len(existing_teams) else None
+                setup_sheet.append([
+                    category.code if category else '',
+                    category.name if category else '',
+                    student_class.name if student_class else '',
+                    student_class.code if student_class else '',
+                    student_class.category.code if student_class else '',
+                    team.name if team else '',
+                ])
+            setup_sheet.freeze_panes = 'A2'
+            setup_sheet.sheet_view.showGridLines = False
+            for cell in setup_sheet[1]:
+                cell.fill = header_fill
+                cell.font = Font(color='FFFFFF', bold=True)
+            for column, width in {'A': 18, 'B': 24, 'C': 24, 'D': 16, 'E': 18, 'F': 24}.items():
+                setup_sheet.column_dimensions[column].width = width
+
+            def add_dropdown(cell_range, formula, prompt):
+                validation = DataValidation(
+                    type='list', formula1=formula, allow_blank=False,
+                    error='Choose a value from the Setup sheet.',
+                    errorTitle='Invalid value', showErrorMessage=True,
+                    prompt=prompt, promptTitle='Choose an option', showInputMessage=True,
+                )
+                students_sheet.add_data_validation(validation)
+                validation.add(cell_range)
+
+            if active_cats:
+                add_dropdown('C2:C1001', f"'Setup'!$A$2:$A${len(active_cats) + 1}", 'Select a school category.')
+            if active_classes:
+                add_dropdown('D2:D1001', f"'Setup'!$C$2:$C${len(active_classes) + 1}", 'Select a class that belongs to the chosen category.')
+            gender_validation = DataValidation(
+                type='list', formula1='"Male,Female,Other"', allow_blank=False,
+                error='Choose Male, Female, or Other.', errorTitle='Invalid gender',
+                showErrorMessage=True,
+            )
+            students_sheet.add_data_validation(gender_validation)
+            gender_validation.add('B2:B1001')
             if existing_teams:
-                team_names = [team.name for team in existing_teams]
-                # Cycle through teams for assignment
-                for i in range(len(sample_data['name'])):
-                    sample_data['team_name'].append(team_names[i % len(team_names)])
-            else:
-                # Use default team names if no teams exist
-                default_teams = ['Phoenix Risers', 'Thunder Bolts', 'Ocean Waves']
-                for i in range(len(sample_data['name'])):
-                    sample_data['team_name'].append(default_teams[i % len(default_teams)])
-            
-            df = pd.DataFrame(sample_data)
-            
-            # Create Excel file in memory
+                team_validation = DataValidation(
+                    type='list', formula1=f"'Setup'!$F$2:$F${len(existing_teams) + 1}",
+                    allow_blank=True, error='Choose an existing school team.',
+                    errorTitle='Invalid team', showErrorMessage=True,
+                    prompt='Optional: select an existing team.',
+                    promptTitle='Choose a team', showInputMessage=True,
+                )
+                students_sheet.add_data_validation(team_validation)
+                team_validation.add('F2:F1001')
+
+            instructions_sheet = workbook.create_sheet('Instructions')
+            instruction_rows = [
+                ('Field', 'Required', 'How to complete it'),
+                ('name', 'Yes', 'Enter the student full name.'),
+                ('gender', 'Yes', 'Select Male, Female, or Other.'),
+                ('category', 'Yes', 'Select an active category code from the dropdown.'),
+                ('class', 'Yes', 'Select a class belonging to that category.'),
+                ('section', 'No', 'Enter only the section, for example A or B.'),
+                ('team_name', 'No', 'Select an existing team. Blank leaves the student unassigned.'),
+                ('address', 'No', 'Enter the student address.'),
+                ('Generated automatically', '—', 'Student ID, login email and disabled password.'),
+            ]
+            for row in instruction_rows:
+                instructions_sheet.append(row)
+            for cell in instructions_sheet[1]:
+                cell.fill = header_fill
+                cell.font = Font(color='FFFFFF', bold=True)
+            instructions_sheet.column_dimensions['A'].width = 28
+            instructions_sheet.column_dimensions['B'].width = 14
+            instructions_sheet.column_dimensions['C'].width = 72
+            instructions_sheet.freeze_panes = 'A2'
+            instructions_sheet.sheet_view.showGridLines = False
+
+            example_sheet = workbook.create_sheet('Example', 1)
+            example_sheet.append(headers)
+            example_class = active_classes[0] if active_classes else None
+            example_team = existing_teams[0] if existing_teams else None
+            example_sheet.append([
+                'Demo Student',
+                'Female',
+                example_class.category.code if example_class else (active_cats[0].code if active_cats else ''),
+                example_class.name if example_class else '',
+                'A',
+                example_team.name if example_team else '',
+                'Example address',
+            ])
+            for cell in example_sheet[1]:
+                cell.fill = header_fill
+                cell.font = Font(color='FFFFFF', bold=True)
+            for column, width in {'A': 28, 'B': 14, 'C': 18, 'D': 24, 'E': 16, 'F': 24, 'G': 38}.items():
+                example_sheet.column_dimensions[column].width = width
+            example_sheet.sheet_view.showGridLines = False
+
             output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                # Main data sheet
-                df.to_excel(writer, sheet_name='Students', index=False)
-                
-                # Instructions sheet
-                instructions = pd.DataFrame({
-                    'Field': ['name', 'category', 'class', 'team_name'],
-                    'Description': [
-                        'Student full name (Required)',
-                        'Student category: hs (High School), hss (Higher Secondary)',
-                        'Student class: For HS: 8, 9, 10 | For HSS: Plus One Science, Plus One Commerce, Plus Two Science, Plus Two Commerce',
-                        'Team name for assignment (Optional, will create/assign to team)'
-                    ],
-                    'Required': ['Yes', 'Yes', 'Yes', 'No'],
-                    'Example': ['Arjun Sharma', 'hs', '9', 'Phoenix Risers']
-                })
-                instructions.to_excel(writer, sheet_name='Instructions', index=False)
-                
-                # Available teams sheet
-                if existing_teams:
-                    teams_data = pd.DataFrame({
-                        'Team Name': [team.name for team in existing_teams],
-                        'Current Members': [team.member_count for team in existing_teams],
-                        'Team Number': [team.team_number for team in existing_teams]
-                    })
-                else:
-                    teams_data = pd.DataFrame({
-                        'Team Name': ['Phoenix Risers', 'Thunder Bolts', 'Ocean Waves'],
-                        'Current Members': [0, 0, 0],
-                        'Team Number': [1, 2, 3]
-                    })
-                teams_data.to_excel(writer, sheet_name='Available Teams', index=False)
-                
-                # Class structure sheet
-                class_structure = pd.DataFrame({
-                    'Category': ['hs', 'hs', 'hs', 'hss', 'hss', 'hss', 'hss'],
-                    'Class': ['8', '9', '10', 'Plus One Science', 'Plus One Commerce', 'Plus Two Science', 'Plus Two Commerce'],
-                    'Description': [
-                        'High School Grade 8',
-                        'High School Grade 9',
-                        'High School Grade 10',
-                        'Higher Secondary First Year - Science Stream',
-                        'Higher Secondary First Year - Commerce Stream',
-                        'Higher Secondary Second Year - Science Stream',
-                        'Higher Secondary Second Year - Commerce Stream'
-                    ]
-                })
-                class_structure.to_excel(writer, sheet_name='Class Structure', index=False)
-                
-                # Format the worksheets
-                workbook = writer.book
-                
-                # Format Students sheet
-                students_sheet = workbook['Students']
-                students_sheet.column_dimensions['A'].width = 20  # name
-                students_sheet.column_dimensions['B'].width = 10  # category
-                students_sheet.column_dimensions['C'].width = 20  # class
-                students_sheet.column_dimensions['D'].width = 18  # team_name
-                
-                # Format Instructions sheet
-                instructions_sheet = workbook['Instructions']
-                instructions_sheet.column_dimensions['A'].width = 15
-                instructions_sheet.column_dimensions['B'].width = 60
-                instructions_sheet.column_dimensions['C'].width = 10
-                instructions_sheet.column_dimensions['D'].width = 25
-                
-                # Format Available Teams sheet
-                teams_sheet = workbook['Available Teams']
-                teams_sheet.column_dimensions['A'].width = 18
-                teams_sheet.column_dimensions['B'].width = 20
-                teams_sheet.column_dimensions['C'].width = 15
-                teams_sheet.column_dimensions['D'].width = 20
-                
-                # Format Class Structure sheet
-                class_sheet = workbook['Class Structure']
-                class_sheet.column_dimensions['A'].width = 15
-                class_sheet.column_dimensions['B'].width = 25
-                class_sheet.column_dimensions['C'].width = 50
-            
+            workbook.save(output)
             output.seek(0)
             
             response = HttpResponse(
@@ -1683,11 +2285,12 @@ class StudentViewSet(viewsets.ModelViewSet):
             return response
             
         except Exception as e:
-            return Response({'error': f'Error generating template: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.exception('Student template generation failed')
+            return Response({'error': 'Unable to generate the template.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class PointsViewSet(viewsets.ModelViewSet):
-    """ViewSet for Points management"""
-    permission_classes = [IsAuthenticated]
+class PointsViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only access to points generated from published program results."""
+    permission_classes = [IsAdminOrEventManager]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['point_type', 'team', 'student', 'event']
     ordering = ['-awarded_at']
@@ -1695,23 +2298,13 @@ class PointsViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         from events.models import PointsRecord
-        return EventPointsRecord.objects.all().select_related('team', 'student', 'event', 'awarded_by')
+        return EventPointsRecord.objects.filter(
+            school_id=self.request.user.school_id
+        ).select_related('team', 'student', 'event', 'awarded_by')
     
     def get_serializer_class(self):
-        from events.serializers import PointsRecordSerializer, PointsRecordCreateSerializer
-        if self.action in ['create', 'update', 'partial_update']:
-            return PointsRecordCreateSerializer
+        from events.serializers import PointsRecordSerializer
         return PointsRecordSerializer
-    
-    def get_permissions(self):
-        """Only admins can manage points"""
-        if self.request.user.role != 'admin':
-            return [permissions.IsAuthenticated()]
-        return [permissions.IsAuthenticated()]
-    
-    def perform_create(self, serializer):
-        """Award points and track who awarded them"""
-        serializer.save(awarded_by=self.request.user)
     
     @action(detail=False, methods=['get'])
     def leaderboard(self, request):
@@ -1724,6 +2317,7 @@ class PointsViewSet(viewsets.ModelViewSet):
         for i, team_info in enumerate(sorted(global_points['teams'], key=lambda x: x['global_points'], reverse=True), 1):
             team_data.append({
                 'rank': i,
+                'id': team_info['id'],
                 'name': team_info['name'],
                 'points': team_info['global_points'],
                 'members': team_info['members'],
@@ -1753,17 +2347,29 @@ class PointsViewSet(viewsets.ModelViewSet):
     def student_details(self, request, pk=None):
         """Get detailed student performance breakdown across all events"""
         try:
-            from events.models import Event, ProgramResult, ProgramAssignment
-            student = User.objects.get(id=pk, role='student')
+            from django.db.models import Sum
+            from events.models import ProgramResult, ProgramAssignment
+            student = User.objects.get(
+                id=pk, role='student', school_id=request.user.school_id
+            )
             
-            # Get all individual program results for this student across all events
+            # Only official individual results contribute to the student score.
+            from events.services import program_points_count_for_student
+            eligible_program_ids = [
+                program.id for program in Program.objects.filter(
+                    event__school_id=request.user.school_id,
+                    is_team_based=False,
+                    is_published=True,
+                ).select_related('event') if program_points_count_for_student(program)
+            ]
             results = ProgramResult.objects.filter(
                 participant=student,
-                program__is_team_based=False
+                program_id__in=eligible_program_ids,
+                entry_status='submitted',
+                points_earned__gt=0,
             ).select_related('program', 'program__event', 'team')
             
-            # Calculate totals (only individual programs)
-            total_points = sum(result.points_earned for result in results)
+            raw_points = sum(result.points_earned for result in results)
             events_participated = results.values('program__event').distinct().count()
             programs_participated = results.values('program').distinct().count()
             programs_won = results.filter(position=1).count()
@@ -1778,13 +2384,13 @@ class PointsViewSet(viewsets.ModelViewSet):
                 if event_id not in event_totals:
                     event_totals[event_id] = {
                         'event': result.program.event,
-                        'total_points': 0,
+                        'earned_points': 0,
                         'programs_participated': 0,
                         'programs_won': 0,
                         'programs': []
                     }
                 
-                event_totals[event_id]['total_points'] += result.points_earned
+                event_totals[event_id]['earned_points'] += result.points_earned
                 event_totals[event_id]['programs_participated'] += 1
                 if result.position == 1:
                     event_totals[event_id]['programs_won'] += 1
@@ -1806,20 +2412,33 @@ class PointsViewSet(viewsets.ModelViewSet):
                     ).exists() else None
                 })
             
-            # Convert to list format
+            global_percentage = 0
             for event_id, event_data in event_totals.items():
+                total_event_points = ProgramResult.objects.filter(
+                    program__event_id=event_id,
+                    program__event__school_id=request.user.school_id,
+                    program__is_published=True,
+                    entry_status='submitted',
+                    points_earned__gt=0,
+                ).aggregate(total=Sum('points_earned'))['total'] or 0
+                percentage = (
+                    event_data['earned_points'] / total_event_points * 100
+                    if total_event_points else 0
+                )
+                global_percentage += percentage
                 event_breakdown.append({
                     'event_id': event_data['event'].id,
                     'event_name': event_data['event'].title,
                     'event_type': event_data['event'].event_type,
-                    'total_points': event_data['total_points'],
+                    'event_points': event_data['earned_points'],
+                    'total_event_points': total_event_points,
+                    'percentage': round(percentage, 2),
                     'programs_participated': event_data['programs_participated'],
                     'programs_won': event_data['programs_won'],
                     'programs': event_data['programs']
                 })
             
-            # Sort event breakdown by total points
-            event_breakdown.sort(key=lambda x: x['total_points'], reverse=True)
+            event_breakdown.sort(key=lambda x: x['percentage'], reverse=True)
             
             # Get team memberships
             team_memberships = []
@@ -1834,10 +2453,12 @@ class PointsViewSet(viewsets.ModelViewSet):
                 'student_id': student.id,
                 'student_name': student.get_full_name(),
                 'student_code': student.student_id,
-                'category': student.get_category_display() if student.category else 'N/A',
+                'category': str(student.category).upper() if student.category else 'N/A',
                 'grade': student.grade,
                 'section': student.section,
-                'total_points': total_points,
+                'total_points': round(global_percentage, 2),
+                'global_percentage': round(global_percentage, 2),
+                'raw_points': raw_points,
                 'events_participated': events_participated,
                 'programs_participated': programs_participated,
                 'programs_won': programs_won,
@@ -1852,12 +2473,20 @@ class PointsViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'])
     def calculate_global_points(self, request=None):
-        """Calculate global points based on percentage performance across all events"""
+        """Sum each recipient's percentage share across published events."""
+        from events.services import calculate_global_points_for_school
+
+        result = calculate_global_points_for_school(self.request.user.school)
+        return Response(result) if request else result
+
+        # Historical inline implementation retained below temporarily for
+        # migration review; execution always uses the shared service above.
         from events.models import Event, Team, ProgramResult
         from django.db.models import Sum
         
         # Get all events that have results
         events_with_results = Event.objects.filter(
+            school=self.request.user.school,
             programs__results__isnull=False
         ).distinct()
         
@@ -1868,6 +2497,8 @@ class PointsViewSet(viewsets.ModelViewSet):
             # Get all results for this event
             event_results = ProgramResult.objects.filter(
                 program__event=event,
+                program__is_published=True,
+                entry_status='submitted',
                 points_earned__gt=0
             ).select_related('participant', 'team', 'program')
             
@@ -1904,10 +2535,10 @@ class PointsViewSet(viewsets.ModelViewSet):
                 # Calculate percentage for this event
                 event_percentage = (team_data['points'] / total_event_points) * 100
                 
-                # Add percentage to global points (this is the key change)
                 team_global_points[team_id]['global_points'] += event_percentage
                 team_global_points[team_id]['events_participated'] += 1
                 team_global_points[team_id]['event_breakdown'].append({
+                    'event_id': event.id,
                     'event_name': event.title,
                     'event_points': team_data['points'],
                     'total_event_points': total_event_points,
@@ -1916,7 +2547,10 @@ class PointsViewSet(viewsets.ModelViewSet):
             
             # Calculate student points for this event (only individual programs)
             student_event_points = {}
+            from events.services import program_points_count_for_student
             for result in event_results.filter(program__is_team_based=False):
+                if not program_points_count_for_student(result.program):
+                    continue
                 student_id = result.participant.id
                 if student_id not in student_event_points:
                     student_event_points[student_id] = {
@@ -1938,10 +2572,10 @@ class PointsViewSet(viewsets.ModelViewSet):
                 # Calculate percentage for this event
                 event_percentage = (student_data['points'] / total_event_points) * 100
                 
-                # Add percentage to global points (this is the key change)
                 student_global_points[student_id]['global_points'] += event_percentage
                 student_global_points[student_id]['events_participated'] += 1
                 student_global_points[student_id]['event_breakdown'].append({
+                    'event_id': event.id,
                     'event_name': event.title,
                     'event_points': student_data['points'],
                     'total_event_points': total_event_points,
@@ -1973,7 +2607,7 @@ class PointsViewSet(viewsets.ModelViewSet):
                 'name': student_name,
                 'student_id': student.student_id,
                 'global_points': round(student_data['global_points'], 2),
-                'category': student.get_category_display() if student.category else 'N/A',
+                'category': str(student.category).upper() if student.category else 'N/A',
                 'events_participated': student_data['events_participated'],
                 'event_breakdown': student_data['event_breakdown']
             })
@@ -1988,72 +2622,13 @@ class PointsViewSet(viewsets.ModelViewSet):
         else:
             return result
     
-    @action(detail=False, methods=['post'])
-    def recalculate_global_points(self, request):
-        """Recalculate and update global points for all teams and students"""
-        if request.user.role != 'admin':
-            return Response({'error': 'Only admins can recalculate global points'}, status=403)
-        
-        # Calculate global points
-        global_points = self.calculate_global_points()
-        
-        # Update team global points (store in points_earned field)
-        from events.models import Team
-        for team_info in global_points['teams']:
-            try:
-                team = Team.objects.get(id=team_info['id'])
-                team.points_earned = int(team_info['global_points'])
-                team.save()
-            except Team.DoesNotExist:
-                continue
-        
-        # Update student global points (store in total_points field)
-        for student_info in global_points['students']:
-            try:
-                student = User.objects.get(id=student_info['id'])
-                student.total_points = int(student_info['global_points'])
-                student.save()
-            except User.DoesNotExist:
-                continue
-        
-        return Response({
-            'message': 'Global points recalculated successfully',
-            'teams_updated': len(global_points['teams']),
-            'students_updated': len(global_points['students'])
-        })
-    
-    @action(detail=False, methods=['post'])
-    def award_manual_points(self, request):
-        """Award manual points to a team or student"""
-        if request.user.role != 'admin':
-            return Response({'error': 'Only admins can award manual points'}, status=403)
-        
-        from events.serializers import PointsRecordCreateSerializer
-        
-        # Add point_type to the data before validation
-        data = request.data.copy()
-        points = int(data.get('points', 0))
-        data['point_type'] = 'manual_bonus' if points > 0 else 'manual_penalty'
-        
-        serializer = PointsRecordCreateSerializer(data=data)
-        if serializer.is_valid():
-            serializer.save(awarded_by=request.user)
-            return Response({
-                'message': 'Points awarded successfully',
-                'record': serializer.data
-            })
-        else:
-            return Response(serializer.errors, status=400) 
-
 class SchoolSettingsViewSet(viewsets.ModelViewSet):
     queryset = SchoolSettings.objects.all()
     serializer_class = SchoolSettingsSerializer
-    permission_classes = [permissions.IsAdminUser]
+    permission_classes = [IsSchoolAdmin]
 
     def get_object(self):
-        # Always return the singleton settings object (pk=1)
-        obj, created = SchoolSettings.objects.get_or_create(pk=1)
-        return obj
+        return SchoolSettings.get_settings(self.request.user.school)
 
     def list(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -2070,60 +2645,72 @@ class SchoolSettingsViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         return self.update(request, *args, **kwargs) 
 
-@api_view(['POST'])
-@permission_classes([])
-def create_admin_user(request):
-    """Create an admin user for testing"""
-    from django.contrib.auth import get_user_model
+class StudentCategoryViewSet(viewsets.ModelViewSet):
+    queryset = StudentCategory.objects.all()
+    authentication_classes = [TeamManagerAuthentication, SchoolJWTAuthentication]
+    
+    def get_serializer_class(self):
+        from .serializers import StudentCategorySerializer
+        return StudentCategorySerializer
+
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsSchoolAdmin()]
+        return [IsTeamManagerOrAdmin()]
+
+    def get_queryset(self):
+        return StudentCategory.objects.filter(school_id=self.request.user.school_id)
+
     from django.db import transaction
-    
-    User = get_user_model()
-    
-    try:
-        with transaction.atomic():
-            email = 'admin@eventloo.com'
-            password = 'admin123'
-            name = 'Admin User'
-            
-            # Check if user already exists and activate if needed
-            existing_user = User.objects.filter(email=email).first()
-            if existing_user:
-                # Update existing user to ensure it's active
-                existing_user.is_active = True
-                existing_user.is_staff = True
-                existing_user.is_superuser = True
-                existing_user.role = 'admin'
-                existing_user.save()
-                return Response({
-                    'message': 'Admin user activated successfully',
-                    'email': email,
-                    'password': password
-                }, status=200)
-            
-            # Create admin user
-            user = User.objects.create_user(
-                email=email,
-                username=email,
-                password=password,
-                name=name,
-                role='admin',
-                is_staff=True,
-                is_superuser=True,
-                is_active=True
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        category = serializer.save(school=self.request.user.school)
+        classes = self.request.data.get('classes', [])
+        mixed_cats = self.request.data.get('mixed_categories', [])
+        from .models import StudentClass
+        StudentClass.objects.filter(id__in=classes, school=self.request.user.school).update(category=category)
+        if mixed_cats:
+            category.mixed_categories.set(
+                StudentCategory.objects.filter(id__in=mixed_cats, school=self.request.user.school)
             )
-            
-            return Response({
-                'message': 'Admin user created successfully',
-                'email': email,
-                'password': password,
-                'name': name,
-                'role': user.role
-            }, status=201)
-            
-    except Exception as e:
-        return Response({
-            'error': f'Error creating user: {str(e)}'
-        }, status=500)
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        category = serializer.save()
+        classes = self.request.data.get('classes', [])
+        mixed_cats = self.request.data.get('mixed_categories', [])
+        from .models import StudentClass
+        # Remove previously assigned classes not in the new selection
+        StudentClass.objects.filter(category=category, school=self.request.user.school).exclude(id__in=classes).update(category=None)
+        # Assign new selection
+        StudentClass.objects.filter(id__in=classes, school=self.request.user.school).update(category=category)
+        category.mixed_categories.set(
+            StudentCategory.objects.filter(id__in=mixed_cats, school=self.request.user.school)
+        )
+
+
+class StudentClassViewSet(viewsets.ModelViewSet):
+    authentication_classes = [TeamManagerAuthentication, SchoolJWTAuthentication]
+    def get_serializer_class(self):
+        from .serializers import StudentClassSerializer
+        return StudentClassSerializer
+
+    def get_queryset(self):
+        queryset = StudentClass.objects.filter(school_id=self.request.user.school_id)
+        category = self.request.query_params.get('category')
+        if category:
+            queryset = queryset.filter(category__code=category)
+        return queryset
+
+    def get_permissions(self):
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsSchoolAdmin()]
+        return [IsTeamManagerOrAdmin()]
+
+    def perform_create(self, serializer):
+        serializer.save(school=self.request.user.school)
+
 
 
 

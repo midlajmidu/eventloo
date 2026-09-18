@@ -67,12 +67,7 @@ curl -I https://eventloo-backend-qkvm.onrender.com/admin/
 
 ## 🎯 **Admin User Creation**
 
-Once the database is connected, the backend will automatically:
-1. ✅ Run database migrations
-2. ✅ Create admin user with credentials:
-   - **Email:** `admin@eventloo.com`
-   - **Password:** `admin123`
-3. ✅ Start serving requests
+Once the database is connected, the backend automatically runs migrations and starts serving requests. It never creates a default account. Provision the platform owner with `seed_super_admin --email ... --password ...`, then create each school administrator from the Super Admin portal.
 
 ## 🔗 **Database Information**
 

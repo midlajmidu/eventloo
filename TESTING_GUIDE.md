@@ -24,9 +24,7 @@ location.reload();
 #### Admin Login
 1. Go to `http://localhost:3001/login`
 2. Select "User Login" tab
-3. Enter credentials:
-   - Email: `admin@eventloo.com`
-   - Password: `admin123`
+3. Enter credentials for a school administrator created through the Super Admin portal. There are no default credentials.
 4. Click "Sign In"
 5. **Expected:** Redirect to `/admin` (Admin Dashboard)
 6. **Expected:** No console errors
@@ -152,23 +150,9 @@ location.reload();
 3. **Expected:** Network error message displayed
 4. **Expected:** No infinite loops
 
-## Known Issues (Backend Related)
+## Account troubleshooting
 
-### ⚠️ Admin User Role Issue
-The backend is returning `"role": "student"` for the admin user instead of `"role": "admin"`. This is a **backend data issue**, not a frontend issue.
-
-**To Fix:**
-```bash
-# Run Django shell
-cd backend
-python manage.py shell
-
-# Update admin user role
-from accounts.models import User
-admin = User.objects.get(email='admin@eventloo.com')
-admin.role = 'admin'
-admin.save()
-```
+Do not mutate roles directly in Django shell. If an account has the wrong tenant or role, create or reset it through the Super Admin portal so ownership and authorization invariants remain enforced.
 
 ## Success Criteria
 

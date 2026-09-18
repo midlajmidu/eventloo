@@ -1,10 +1,34 @@
 from rest_framework import permissions
-from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 from django.contrib.auth.models import AnonymousUser
+import hashlib
+from secrets import compare_digest
+
+
+class TeamScopedPrincipal:
+    """Authenticated, non-database principal carried by a team access token."""
+
+    is_authenticated = True
+    is_anonymous = False
+    is_superuser = False
+    role = 'team_manager'
+
+    def __init__(self, team):
+        self.team_id = team.id
+        self.school_id = team.school_id
+        self.school = team.school
+        self.team = team
+        self.id = None
+        self.pk = None
+        self.username = team.team_username
+        self.name = team.name
+
+    @property
+    def display_name(self):
+        return self.name
 
 class IsAdminOrEventManager(permissions.BasePermission):
     """
@@ -12,11 +36,95 @@ class IsAdminOrEventManager(permissions.BasePermission):
     """
     
     def has_permission(self, request, view):
-        return (
+        allowed = (
             request.user and 
             request.user.is_authenticated and 
             request.user.role in ['admin', 'event_manager']
+            and getattr(request.user, 'school_id', None) is not None
+            and request.user.school.status == 'active'
         )
+        if not allowed:
+            return False
+        school_id = request.user.school_id
+        from .models import Event, Program, Team
+        event_id = view.kwargs.get('event_id') or view.kwargs.get('event_pk')
+        program_id = view.kwargs.get('program_id') or view.kwargs.get('program_pk')
+        team_id = view.kwargs.get('team_id')
+        if event_id and not Event.objects.filter(id=event_id, school_id=school_id).exists():
+            return False
+        if program_id and not Program.objects.filter(id=program_id, event__school_id=school_id).exists():
+            return False
+        if team_id and not Team.objects.filter(id=team_id, school_id=school_id).exists():
+            return False
+        return True
+
+
+class IsSchoolAdmin(permissions.BasePermission):
+    """Allow only an active tenant's school administrator."""
+
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and getattr(request.user, 'role', None) == 'admin'
+            and getattr(request.user, 'school_id', None) is not None
+            and request.user.school.status == 'active'
+        )
+
+    def has_object_permission(self, request, view, obj):
+        return object_school_id(obj) == request.user.school_id
+
+
+class IsSuperAdmin(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and getattr(request.user, 'role', None) == 'super_admin'
+            and getattr(request.user, 'school_id', None) is None
+            and request.user.is_active
+        )
+
+
+class IsApplicationStaff(permissions.BasePermission):
+    """Allow active platform administrators and active school staff principals."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated or not getattr(user, 'is_active', True):
+            return False
+        if getattr(user, 'role', None) == 'super_admin':
+            return getattr(user, 'school_id', None) is None
+        return bool(
+            getattr(user, 'role', None) in ('admin', 'event_manager')
+            and getattr(user, 'school_id', None) is not None
+            and user.school.status == 'active'
+        )
+
+
+def object_school_id(obj):
+    if hasattr(obj, 'school_id'):
+        return obj.school_id
+    for attr in ('event', 'program', 'team', 'student', 'participant'):
+        related = getattr(obj, attr, None)
+        if related is not None:
+            school_id = object_school_id(related)
+            if school_id is not None:
+                return school_id
+    return None
+
+
+class IsSameSchool(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and getattr(request.user, 'school_id', None)
+            and request.user.school.status == 'active'
+        )
+
+    def has_object_permission(self, request, view, obj):
+        return object_school_id(obj) == request.user.school_id
 
 class IsOwnerOrAdmin(permissions.BasePermission):
     """
@@ -52,11 +160,38 @@ class IsTeamManagerOrAdmin(permissions.BasePermission):
     """
     
     def has_permission(self, request, view):
-        return (
-            request.user and 
-            request.user.is_authenticated and 
-            request.user.role in ['admin', 'team_manager']
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if getattr(request.user, 'role', None) in ['admin', 'event_manager']:
+            school_id = getattr(request.user, 'school_id', None)
+            route_team_id = view.kwargs.get('team_id') or view.kwargs.get('pk')
+            from .models import Event, Program, Team
+            event_id = view.kwargs.get('event_id') or view.kwargs.get('event_pk')
+            program_id = view.kwargs.get('program_id') or view.kwargs.get('program_pk')
+            return bool(
+                school_id is not None
+                and (not route_team_id or Team.objects.filter(id=route_team_id, school_id=school_id).exists())
+                and (not event_id or Event.objects.filter(id=event_id, school_id=school_id).exists())
+                and (not program_id or Program.objects.filter(id=program_id, event__school_id=school_id).exists())
+            )
+        token_team_id = getattr(request.user, 'team_id', None)
+        route_team_id = view.kwargs.get('team_id') or view.kwargs.get('pk')
+        allowed = (
+            getattr(request.user, 'role', None) == 'team_manager'
+            and token_team_id is not None
+            and getattr(request.user, 'school_id', None) is not None
+            and (route_team_id is None or str(token_team_id) == str(route_team_id))
         )
+        if not allowed:
+            return False
+        from .models import Event, Program
+        event_id = view.kwargs.get('event_id') or view.kwargs.get('event_pk')
+        program_id = view.kwargs.get('program_id') or view.kwargs.get('program_pk')
+        if event_id and not Event.objects.filter(id=event_id, school_id=request.user.school_id).exists():
+            return False
+        if program_id and not Program.objects.filter(id=program_id, event__school_id=request.user.school_id).exists():
+            return False
+        return True
     
     def has_object_permission(self, request, view, obj):
         # Admins can do everything
@@ -94,8 +229,16 @@ class CanManageStudents(permissions.BasePermission):
         if request.user.role == 'team_manager':
             from .models import Team
             # Check if student is in any of the manager's teams
+            token_team_id = getattr(request.user, 'team_id', None)
+            if token_team_id is not None:
+                return Team.objects.filter(
+                    id=token_team_id,
+                    school_id=request.user.school_id,
+                    members=obj,
+                ).exists()
             return Team.objects.filter(
                 team_manager=request.user,
+                school_id=request.user.school_id,
                 members=obj
             ).exists()
             
@@ -133,11 +276,13 @@ class TeamManagerAuthentication(BaseAuthentication):
     def authenticate(self, request):
         # Get the authorization header
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
-        
-        if not auth_header.startswith('Bearer '):
-            return None
-        
-        token = auth_header.split(' ')[1]
+        if auth_header.startswith('Bearer '):
+            token = auth_header.split(' ', 1)[1]
+        else:
+            from django.conf import settings
+            token = request.COOKIES.get(settings.ACCESS_COOKIE_NAME)
+            if not token:
+                return None
         
         try:
             # Decode the token
@@ -145,31 +290,31 @@ class TeamManagerAuthentication(BaseAuthentication):
             
             # Check if this is a team manager token
             if access_token.get('access_type') == 'team_manager':
-                # Create a mock user for team manager
-                from accounts.models import User
-                
-                # Create or get a special team manager user
+                from events.models import Team
+
                 team_id = access_token.get('team_id')
-                team_name = access_token.get('team_name', 'Team Manager')
-                
-                # Create a mock user for team authentication
-                mock_user = User(
-                    id=team_id,
-                    username=f'team_{team_id}',
-                    email=f'team_{team_id}@example.com',
-                    name=team_name,
-                    role='team_manager'
-                )
-                mock_user.is_authenticated = True
-                mock_user._state = User._meta._state  # Set the model state
-                
-                return (mock_user, access_token)
+                if not team_id:
+                    raise AuthenticationFailed('Team token is missing its team scope.')
+                try:
+                    team = Team.objects.select_related('school').get(
+                        id=team_id, school__status='active'
+                    )
+                except Team.DoesNotExist as exc:
+                    raise AuthenticationFailed('The team for this token no longer exists.') from exc
+
+                expected = hashlib.sha256(team.team_password.encode()).hexdigest()
+                presented = str(access_token.get('credential_hash', ''))
+                if not presented or not compare_digest(presented, expected):
+                    raise AuthenticationFailed('This team session has been revoked.')
+
+                return (TeamScopedPrincipal(team), access_token)
             
             return None
             
-        except (InvalidToken, TokenError, Exception) as e:
-            print(f"Authentication error: {e}")
-            return None  # Return None instead of raising exception to allow other auth classes to try
+        except AuthenticationFailed:
+            raise
+        except (InvalidToken, TokenError):
+            return None
     
     def authenticate_header(self, request):
         return 'Bearer realm="api"' 
