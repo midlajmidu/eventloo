@@ -283,6 +283,11 @@ class Team(models.Model):
         if not self.school_id and self.team_manager_id:
             self.school_id = self.team_manager.school_id
 
+        if self.team_password and not self.team_password.startswith(('pbkdf2_sha256$', 'bcrypt$', 'argon2$')):
+            from django.contrib.auth.hashers import make_password
+            self._plain_team_password = self.team_password
+            self.team_password = make_password(self.team_password)
+
         if is_new and self.school_id:
             # Serialize number/username allocation per school so concurrent team
             # creation cannot produce duplicates from the same MAX()+1 value.
@@ -292,12 +297,12 @@ class Team(models.Model):
                 if not self.team_number:
                     self.team_number = self.get_next_team_number()
                 if not self.team_username or not self.team_password:
-                    self.generate_team_credentials()
+                    self.generate_team_credentials(username=self.team_username, password=getattr(self, '_plain_team_password', None))
                 self.full_clean()
                 return super().save(*args, **kwargs)
 
         if not self.team_username or not self.team_password:
-            self.generate_team_credentials()
+            self.generate_team_credentials(username=self.team_username, password=getattr(self, '_plain_team_password', None))
         self.full_clean()
         return super().save(*args, **kwargs)
 
@@ -354,31 +359,45 @@ class Team(models.Model):
                 return index
         return None
     
-    def generate_team_credentials(self):
-        """Generate or regenerate team manager credentials"""
-        # Generate team username for internal tracking
-        base_username = self.name.lower().replace(' ', '_').replace('-', '_')
-        team_username = f"{base_username}_team"
+    def generate_team_credentials(self, username=None, password=None):
+        """Generate or use provided team manager credentials"""
+        if username and str(username).strip():
+            team_username = str(username).strip()
+        elif not self.team_username:
+            # Generate team username for internal tracking
+            base_username = self.name.lower().replace(' ', '_').replace('-', '_')
+            team_username = f"{base_username}_team"
+            
+            # Ensure team_username uniqueness
+            counter = 1
+            original_team_username = team_username
+            while Team.objects.filter(
+                school_id=self.school_id, team_username=team_username
+            ).exclude(id=self.id).exists():
+                team_username = f"{original_team_username}_{counter}"
+                counter += 1
+        else:
+            team_username = self.team_username
         
-        # Ensure team_username uniqueness
-        counter = 1
-        original_team_username = team_username
-        while Team.objects.filter(
-            school_id=self.school_id, team_username=team_username
-        ).exclude(id=self.id).exists():
-            team_username = f"{original_team_username}_{counter}"
-            counter += 1
-        
-        # Generate secure password
-        password = secrets.token_urlsafe(18)
+        # Use provided or generate secure password
+        chosen_password = str(password).strip() if (password and str(password).strip()) else secrets.token_urlsafe(18)
         
         # Store credentials in team model (don't call save() here to avoid infinite loop)
         self.team_username = team_username
         from django.contrib.auth.hashers import make_password
-        self.team_password = make_password(password)
-        self._plain_team_password = password
+        self.team_password = make_password(chosen_password)
+        self._plain_team_password = chosen_password
         
-        return team_username, password
+        return team_username, chosen_password
+
+    def set_team_credentials(self, username=None, password=None):
+        """Set explicit custom team leader username and/or password"""
+        from django.contrib.auth.hashers import make_password
+        if username and str(username).strip():
+            self.team_username = str(username).strip()
+        if password and str(password).strip():
+            self.team_password = make_password(str(password).strip())
+            self._plain_team_password = str(password).strip()
     
     @property
     def team_credentials(self):
@@ -687,6 +706,12 @@ class Program(models.Model):
     
     # Program settings
     is_team_based = models.BooleanField(default=False)
+    num_judges = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(4)],
+        help_text="Number of judges evaluating this program (1 to 4). If null, defaults to event.num_judges.",
+    )
     max_participants = models.PositiveIntegerField(null=True, blank=True)  # Overall limit (for individual programs)
     max_participants_per_team = models.PositiveIntegerField(null=True, blank=True)  # Per-team limit (for team-based programs)
     team_size = models.PositiveIntegerField(null=True, blank=True)  # Fixed team size for team-based programs
@@ -770,13 +795,30 @@ class Program(models.Model):
         """Number of independently scheduled entries in this program."""
         assignments = self.assignments.all()
         if self.is_team_based:
-            return assignments.values('team_id', 'sub_team_number').distinct().count()
-        return assignments.values('student_id').distinct().count()
+            count = assignments.values('team_id', 'sub_team_number').distinct().count()
+        else:
+            count = assignments.values('student_id').distinct().count()
+        if count > 0:
+            return count
+        if not self.is_team_based and self.max_participants:
+            return self.max_participants
+        if self.is_team_based and self.max_teams_per_school:
+            return self.max_teams_per_school
+        return 0
 
     @property
     def scheduled_duration_minutes(self):
         """Total run time based on current entries (one slot before assignment)."""
         return max(1, self.schedule_entry_count) * self.duration_minutes_per_entry
+
+    @property
+    def effective_num_judges(self):
+        """Effective number of judges evaluating this program (falls back to event.num_judges or 3)."""
+        if self.num_judges:
+            return self.num_judges
+        if self.event_id and getattr(self.event, 'num_judges', None):
+            return self.event.num_judges
+        return 3
 
     def refresh_schedule_end(self):
         """Keep the stored end time aligned when assignments change."""
@@ -969,6 +1011,7 @@ class ProgramResult(models.Model):
         if not self.program_id:
             return
         event = self.program.event
+        effective_num_judges = self.program.effective_num_judges
         if self.participant_id and self.participant.school_id != event.school_id:
             raise ValidationError('The participant and program must belong to the same school.')
         if self.team_id and self.team.school_id != event.school_id:
@@ -980,7 +1023,7 @@ class ProgramResult(models.Model):
             self.judge2_marks,
             self.judge3_marks,
             self.judge4_marks,
-        ][:event.num_judges]
+        ][:effective_num_judges]
         maximum = Decimal(str(event.max_mark_per_judge))
         for index, mark in enumerate(active_fields, 1):
             if mark is not None and (Decimal(str(mark)) < 0 or Decimal(str(mark)) > maximum):
@@ -1003,20 +1046,21 @@ class ProgramResult(models.Model):
         if not self.result_number and self.has_marks():
             self.assign_result_number()
         
-        # Get event settings for judge count and score scaling
-        event_num_judges = 3
+        # Get event and program settings for judge count and score scaling
+        program_num_judges = 3
         event_max_per_judge = Decimal('100.00')
         event_converted_target = Decimal('100.00')
         
-        if self.program and self.program.event:
-            event = self.program.event
-            event_num_judges = getattr(event, 'num_judges', 3) or 3
-            event_max_per_judge = Decimal(str(getattr(event, 'max_mark_per_judge', 100) or 100))
-            event_converted_target = Decimal(str(getattr(event, 'converted_total_mark', 100) or 100))
+        if self.program:
+            program_num_judges = self.program.effective_num_judges
+            if self.program.event:
+                event = self.program.event
+                event_max_per_judge = Decimal(str(getattr(event, 'max_mark_per_judge', 100) or 100))
+                event_converted_target = Decimal(str(getattr(event, 'converted_total_mark', 100) or 100))
 
         # Collect active judge marks
         all_judge_values = [self.judge1_marks, self.judge2_marks, self.judge3_marks, self.judge4_marks]
-        active_judge_values = all_judge_values[:event_num_judges]
+        active_judge_values = all_judge_values[:program_num_judges]
         
         marks = []
         for val in active_judge_values:
@@ -1029,7 +1073,7 @@ class ProgramResult(models.Model):
         if marks:
             precision = Decimal('0.01')
             self.raw_total_marks = sum(marks).quantize(precision, rounding=ROUND_HALF_UP)
-            max_possible_raw = Decimal(str(event_num_judges)) * event_max_per_judge
+            max_possible_raw = Decimal(str(program_num_judges)) * event_max_per_judge
             
             if max_possible_raw > 0:
                 # Scaled total mark = (raw_total / max_possible_raw) * converted_total_mark
@@ -1053,7 +1097,8 @@ class ProgramResult(models.Model):
     def has_marks(self):
         """Check if this result has any marks entered"""
         judge_fields = ('judge1_marks', 'judge2_marks', 'judge3_marks', 'judge4_marks')
-        judge_count = max(1, min(int(self.program.event.num_judges or 1), len(judge_fields)))
+        effective_num_judges = self.program.effective_num_judges if self.program_id else 3
+        judge_count = max(1, min(int(effective_num_judges or 1), len(judge_fields)))
         return any(getattr(self, field) is not None for field in judge_fields[:judge_count])
     
     def assign_result_number(self):

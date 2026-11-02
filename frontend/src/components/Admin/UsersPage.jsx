@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   CheckCircle2, ChevronLeft, ChevronRight, Eye, Pencil, Plus, Search,
   ShieldCheck, Trash2, UserCog, Users, X,
@@ -21,12 +22,66 @@ const apiError = (error) => {
   }).join(' ');
 };
 
-const Modal = ({ title, subtitle, onClose, children }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm">
-    <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
-      <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
-        <div><h2 className="text-xl font-bold text-slate-900">{title}</h2>{subtitle && <p className="mt-1 text-sm text-slate-500">{subtitle}</p>}</div>
-        <button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close"><X className="h-5 w-5" /></button>
+const Drawer = ({ title, subtitle, onClose, children }) => {
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-hidden">
+      <div
+        className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div className="fixed inset-y-0 right-0 flex max-w-full pl-6 md:pl-10">
+        <div className="w-screen max-w-lg bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 shrink-0">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+              {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {children}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ConfirmDialog = ({ title, subtitle, onClose, children }) => (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+      <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+          {subtitle && <p className="mt-0.5 text-xs text-slate-500">{subtitle}</p>}
+        </div>
+        <button type="button" onClick={onClose} className="rounded-xl p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close">
+          <X className="h-4 w-4" />
+        </button>
       </div>
       {children}
     </div>
@@ -38,6 +93,7 @@ const Input = ({ label, ...props }) => (
 );
 
 const UsersPage = () => {
+  const location = useLocation();
   const [users, setUsers] = useState([]);
   const [summary, setSummary] = useState({ total: 0, active: 0, inactive: 0 });
   const [query, setQuery] = useState('');
@@ -51,6 +107,17 @@ const UsersPage = () => {
   const [form, setForm] = useState(emptyForm);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') === 'create' || params.get('create') === 'true') {
+      setForm(emptyForm);
+      setSelected(null);
+      setError('');
+      setMessage('');
+      setModal('create');
+    }
+  }, [location.search]);
   const pageSize = 10;
   const totalPages = Math.max(1, Math.ceil(count / pageSize));
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
@@ -117,8 +184,14 @@ const UsersPage = () => {
 
   return <div className="mx-auto max-w-7xl space-y-6 pb-10">
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">Organization</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">Users</h1><p className="mt-1 text-sm text-slate-500">Manage the people who can access this school dashboard.</p></div>
-      <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700"><Plus className="h-4 w-4" /> Add user</button>
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">Organization</p>
+        <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Users</h1>
+        <p className="text-xs text-slate-400 mt-1 font-normal">Manage the people who can access this school dashboard.</p>
+      </div>
+      <button onClick={openCreate} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700">
+        <Plus className="h-3.5 w-3.5" /> Add user
+      </button>
     </div>
 
     {message && <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700"><CheckCircle2 className="h-4 w-4" />{message}</div>}
@@ -139,11 +212,165 @@ const UsersPage = () => {
       <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3"><p className="text-xs text-slate-500">{count ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, count)} of ${count}` : 'No records'}</p><div className="flex items-center gap-2"><button disabled={page === 1 || loading} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-600 disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button><span className="text-xs font-medium text-slate-600">{page} / {totalPages}</span><button disabled={page >= totalPages || loading} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-600 disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button></div></div>
     </section>
 
-    {(modal === 'create' || modal === 'edit') && <Modal title={modal === 'create' ? 'Add user' : 'Edit user'} subtitle={modal === 'create' ? 'Create a new school dashboard account.' : 'Update access and account details.'} onClose={close}><form onSubmit={save} className="space-y-4 p-6"><Input label="Full name" required value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="Jane Smith" /><Input label="Email address" type="email" required value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} placeholder="jane@school.com" /><label className="block"><span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Role</span><select value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value })} className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500"><option value="event_manager">Event Manager</option><option value="admin">Admin</option></select><span className="mt-1.5 block text-xs text-slate-500">Admins manage school settings and users. Event Managers manage events only.</span></label><div className="grid gap-4 sm:grid-cols-2"><Input label={modal === 'create' ? 'Password' : 'New password (optional)'} type="password" required={modal === 'create'} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete="new-password" /><Input label="Confirm password" type="password" required={Boolean(form.password)} value={form.confirmPassword} onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })} autoComplete="new-password" /></div>{modal === 'edit' && <label className="flex items-center justify-between rounded-xl border border-slate-200 p-3"><span><span className="block text-sm font-semibold text-slate-800">Active account</span><span className="block text-xs text-slate-500">Inactive users cannot sign in.</span></span><input type="checkbox" checked={form.is_active} onChange={(event) => setForm({ ...form, is_active: event.target.checked })} className="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500" /></label>}{error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}<div className="flex justify-end gap-3 border-t border-slate-100 pt-5"><button type="button" onClick={close} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button><button disabled={saving} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">{saving ? 'Saving…' : modal === 'create' ? 'Create user' : 'Save changes'}</button></div></form></Modal>}
+    {(modal === 'create' || modal === 'edit') && (
+      <Drawer
+        title={modal === 'create' ? 'Add Staff User' : 'Edit Staff User'}
+        subtitle={modal === 'create' ? 'Create a new dashboard account for your school.' : 'Update staff access and account details.'}
+        onClose={close}
+      >
+        <form onSubmit={save} className="flex flex-col h-full">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <Input
+              label="Full name *"
+              required
+              value={form.name}
+              onChange={(event) => setForm({ ...form, name: event.target.value })}
+              placeholder="Jane Smith"
+            />
+            <Input
+              label="Email address *"
+              type="email"
+              required
+              value={form.email}
+              onChange={(event) => setForm({ ...form, email: event.target.value })}
+              placeholder="jane@school.com"
+            />
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-500">Role *</span>
+              <select
+                value={form.role}
+                onChange={(event) => setForm({ ...form, role: event.target.value })}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+              >
+                <option value="event_manager">Event Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+              <span className="mt-1.5 block text-xs text-slate-400">Admins manage school settings and users. Event Managers manage events only.</span>
+            </label>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Input
+                label={modal === 'create' ? 'Password *' : 'New password (optional)'}
+                type="password"
+                required={modal === 'create'}
+                value={form.password}
+                onChange={(event) => setForm({ ...form, password: event.target.value })}
+                autoComplete="new-password"
+              />
+              <Input
+                label={modal === 'create' ? 'Confirm password *' : 'Confirm new password'}
+                type="password"
+                required={Boolean(form.password)}
+                value={form.confirmPassword}
+                onChange={(event) => setForm({ ...form, confirmPassword: event.target.value })}
+                autoComplete="new-password"
+              />
+            </div>
+            {modal === 'edit' && (
+              <label className="flex items-center justify-between rounded-xl border border-slate-200 p-3 bg-slate-50">
+                <span>
+                  <span className="block text-sm font-semibold text-slate-800">Active account</span>
+                  <span className="block text-xs text-slate-500">Inactive users cannot sign in.</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={form.is_active}
+                  onChange={(event) => setForm({ ...form, is_active: event.target.checked })}
+                  className="h-5 w-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                />
+              </label>
+            )}
+            {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 font-medium">{error}</div>}
+          </div>
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-6 py-4 shrink-0">
+            <button
+              type="button"
+              onClick={close}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={saving}
+              className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition shadow-sm"
+            >
+              {saving ? 'Saving…' : modal === 'create' ? 'Create Staff User' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </Drawer>
+    )}
 
-    {modal === 'view' && selected && <Modal title={selected.name || 'User details'} subtitle={selected.email} onClose={close}><div className="space-y-5 p-6"><div className="grid grid-cols-2 gap-3"><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Role</p><p className="mt-1 font-semibold text-slate-800">{roleLabel(selected.role)}</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Status</p><p className="mt-1 font-semibold text-slate-800">{selected.is_active ? 'Active' : 'Inactive'}</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">Joined</p><p className="mt-1 font-semibold text-slate-800">{joined(selected.date_joined)}</p></div><div className="rounded-xl bg-slate-50 p-4"><p className="text-xs font-bold uppercase tracking-wide text-slate-400">MFA</p><p className="mt-1 font-semibold text-slate-800">{selected.mfa_enabled ? 'Enabled' : 'Not enabled'}</p></div></div>{error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}<div className="flex items-center gap-2 border-t border-slate-100 pt-5"><button onClick={() => openEdit(selected)} className="inline-flex items-center gap-2 rounded-xl bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100"><Pencil className="h-4 w-4" /> Edit user</button>{selected.id !== currentUser.id && <button onClick={() => setModal('delete')} className="ml-auto inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50"><Trash2 className="h-4 w-4" /> Delete</button>}</div></div></Modal>}
+    {modal === 'view' && selected && (
+      <Drawer
+        title={selected.name || 'Staff User Details'}
+        subtitle={selected.email}
+        onClose={close}
+      >
+        <div className="space-y-5 p-6">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Role</p>
+              <p className="mt-1 font-semibold text-slate-800">{roleLabel(selected.role)}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Status</p>
+              <p className="mt-1 font-semibold text-slate-800">{selected.is_active ? 'Active' : 'Inactive'}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Joined</p>
+              <p className="mt-1 font-semibold text-slate-800">{joined(selected.date_joined)}</p>
+            </div>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">MFA</p>
+              <p className="mt-1 font-semibold text-slate-800">{selected.mfa_enabled ? 'Enabled' : 'Not enabled'}</p>
+            </div>
+          </div>
+          {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 font-medium">{error}</div>}
+          <div className="flex items-center gap-2 border-t border-slate-100 pt-5">
+            <button
+              onClick={() => openEdit(selected)}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-100 transition"
+            >
+              <Pencil className="h-4 w-4" /> Edit user
+            </button>
+            {selected.id !== currentUser.id && (
+              <button
+                onClick={() => setModal('delete')}
+                className="ml-auto inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-50 transition"
+              >
+                <Trash2 className="h-4 w-4" /> Delete
+              </button>
+            )}
+          </div>
+        </div>
+      </Drawer>
+    )}
 
-    {modal === 'delete' && selected && <Modal title="Delete user?" subtitle="This action cannot be undone." onClose={close}><div className="space-y-5 p-6"><p className="text-sm leading-6 text-slate-600">Permanently delete <strong className="text-slate-900">{selected.name || selected.email}</strong>? They will immediately lose access to this school.</p>{error && <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</div>}<div className="flex justify-end gap-3 border-t border-slate-100 pt-5"><button onClick={close} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button><button disabled={saving} onClick={remove} className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">{saving ? 'Deleting…' : 'Delete user'}</button></div></div></Modal>}
+    {modal === 'delete' && selected && (
+      <ConfirmDialog title="Delete staff user?" subtitle="This action cannot be undone." onClose={close}>
+        <div className="space-y-5 p-6">
+          <p className="text-sm leading-6 text-slate-600">
+            Permanently delete <strong className="text-slate-900">{selected.name || selected.email}</strong>? They will immediately lose access to this school dashboard.
+          </p>
+          {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 font-medium">{error}</div>}
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+            <button
+              onClick={close}
+              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+            >
+              Cancel
+            </button>
+            <button
+              disabled={saving}
+              onClick={remove}
+              className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition"
+            >
+              {saving ? 'Deleting…' : 'Delete user'}
+            </button>
+          </div>
+        </div>
+      </ConfirmDialog>
+    )}
   </div>;
 };
 

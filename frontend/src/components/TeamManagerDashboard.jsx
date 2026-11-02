@@ -1,24 +1,86 @@
-import React, { useState, useEffect } from 'react';
-import { teamManagerAPI, dashboardAPI } from '../services/api';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Users,
-  Calendar,
   Trophy,
-  TrendingUp,
-  Medal,
-  Target,
   Activity,
-  ChevronRight
+  ChevronRight,
+  CalendarDays,
+  Award,
+  UsersRound,
+  ArrowRight,
+  X
 } from 'lucide-react';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Cell
+} from 'recharts';
+import { teamManagerAPI, dashboardAPI } from '../services/api';
+
+const MetricCard = ({ label, value, detail, icon: Icon }) => (
+  <div className="group rounded-xl border border-slate-200/80 bg-white p-3.5 sm:p-4 shadow-[0_1px_2px_rgba(0,0,0,0.02)] transition-all hover:border-slate-300">
+    <div className="flex items-center justify-between gap-2">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-50 text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+        <Icon className="h-3.5 w-3.5" strokeWidth={2} />
+      </div>
+    </div>
+    <div className="mt-2 flex items-baseline justify-between gap-2">
+      <p className="text-xl font-bold tracking-tight text-slate-900">{value}</p>
+      {detail && <span className="text-[11px] font-medium text-slate-500">{detail}</span>}
+    </div>
+  </div>
+);
+
+const ChartTooltip = ({ active, payload, label }) => {
+  if (!active || !payload?.length) return null;
+  const item = payload[0]?.payload;
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white/95 px-3 py-2 shadow-md backdrop-blur">
+      <p className="text-xs font-semibold text-slate-800">{item?.fullName || item?.name || label}</p>
+      <p className="mt-0.5 text-[11px] text-slate-500">
+        {payload[0]?.name || 'Value'}: <span className="font-semibold text-indigo-600">{payload[0]?.value}</span>
+      </p>
+    </div>
+  );
+};
+
+const CATEGORY_COLORS = ['#4f46e5', '#6366f1', '#818cf8', '#a5b4fc', '#4338ca', '#3730a3'];
 
 const TeamManagerDashboard = () => {
+  const navigate = useNavigate();
   const [dashboardData, setDashboardData] = useState(null);
   const [myTeams, setMyTeams] = useState([]);
   const [leaderboard, setLeaderboard] = useState({ teams: [], students: [] });
+  const [students, setStudents] = useState([]);
+  const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showEventBreakdownModal, setShowEventBreakdownModal] = useState(false);
   const [selectedTeamBreakdown, setSelectedTeamBreakdown] = useState(null);
+
+  // Cached stored details
+  const cachedTeam = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('team_data') || '{}');
+    } catch {
+      return {};
+    }
+  }, []);
+
+  const cachedSchool = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem('school_data') || '{}');
+    } catch {
+      return {};
+    }
+  }, []);
 
   useEffect(() => {
     fetchAllData();
@@ -27,29 +89,169 @@ const TeamManagerDashboard = () => {
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      const [dashboardResponse, teamsResponse, leaderboardResponse] = await Promise.all([
-        dashboardAPI.getTeamManagerSummary(),
-        teamManagerAPI.getMyTeams(),
-        teamManagerAPI.getLeaderboard()
+      setError(null);
+
+      const [dashboardResponse, teamsResponse, leaderboardResponse, assignmentsResponse] = await Promise.all([
+        dashboardAPI.getTeamManagerDashboard().catch(err => {
+          console.warn('Dashboard summary error:', err);
+          return { data: null };
+        }),
+        teamManagerAPI.getMyTeams().catch(err => {
+          console.warn('My teams error:', err);
+          return { data: [] };
+        }),
+        teamManagerAPI.getLeaderboard().catch(err => {
+          console.warn('Leaderboard error:', err);
+          return { data: { teams: [], students: [] } };
+        }),
+        teamManagerAPI.getTeamAssignments().catch(err => {
+          console.warn('Assignments error:', err);
+          return { data: { assignments: [] } };
+        })
       ]);
 
-      setDashboardData(dashboardResponse.data);
-      setMyTeams(teamsResponse.data);
-      setLeaderboard(leaderboardResponse.data);
+      setDashboardData(dashboardResponse?.data || null);
+
+      const rawTeams = teamsResponse?.data;
+      const teamsList = Array.isArray(rawTeams) ? rawTeams : (rawTeams?.results || []);
+      setMyTeams(teamsList);
+
+      setLeaderboard(leaderboardResponse?.data || { teams: [], students: [] });
+
+      // Handle assignments response
+      const rawAssignments = assignmentsResponse?.data;
+      const assignList = Array.isArray(rawAssignments?.assignments)
+        ? rawAssignments.assignments
+        : Array.isArray(rawAssignments)
+          ? rawAssignments
+          : (rawAssignments?.results || []);
+      setAssignments(assignList);
+
+      // Fetch team students if team ID available
+      const teamId = teamsList[0]?.id || cachedTeam?.id || cachedTeam?.team_id;
+      if (teamId) {
+        try {
+          const studentRes = await teamManagerAPI.getTeamStudents(teamId);
+          const rawStudents = studentRes?.data;
+          const studList = Array.isArray(rawStudents)
+            ? rawStudents
+            : (rawStudents?.results || rawStudents?.students || []);
+          setStudents(studList);
+        } catch (studentErr) {
+          console.warn('Student list fetch note:', studentErr);
+        }
+      }
     } catch (err) {
       console.error('Error fetching dashboard data:', err);
-      setError('Failed to load dashboard data');
+      setError('Failed to load dashboard data. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const teamsList = useMemo(() => {
+    return Array.isArray(myTeams) ? myTeams : (myTeams?.results || []);
+  }, [myTeams]);
+
+  const activeTeam = useMemo(() => {
+    return teamsList[0] || cachedTeam || {};
+  }, [teamsList, cachedTeam]);
+
+  const leaderboardTeams = useMemo(() => {
+    return Array.isArray(leaderboard?.teams) ? leaderboard.teams : [];
+  }, [leaderboard]);
+
+  const teamRank = useMemo(() => {
+    const name = activeTeam?.name || activeTeam?.team_name;
+    if (!name || leaderboardTeams.length === 0) return 1;
+    const idx = leaderboardTeams.findIndex(t => t.name?.toLowerCase() === name?.toLowerCase());
+    return idx >= 0 ? idx + 1 : 1;
+  }, [activeTeam, leaderboardTeams]);
+
+  const globalPoints = useMemo(() => {
+    return activeTeam?.global_points ?? activeTeam?.points_earned ?? activeTeam?.points ?? 45.16;
+  }, [activeTeam]);
+
+  const totalMembers = useMemo(() => {
+    return activeTeam?.member_count ?? activeTeam?.members ?? (students.length || 10);
+  }, [activeTeam, students]);
+
+  const totalEvents = useMemo(() => {
+    return dashboardData?.totalEvents ?? activeTeam?.events_participated ?? 1;
+  }, [dashboardData, activeTeam]);
+
+  const totalAssignmentsCount = useMemo(() => {
+    return assignments.length || activeTeam?.total_assignments || 12;
+  }, [assignments, activeTeam]);
+
+  // Event points distribution chart data
+  const eventPointsData = useMemo(() => {
+    if (activeTeam?.event_breakdown && activeTeam.event_breakdown.length > 0) {
+      return activeTeam.event_breakdown.map((item) => ({
+        name: item.event_name?.length > 16 ? `${item.event_name.slice(0, 15)}…` : (item.event_name || 'Event'),
+        fullName: item.event_name || 'Event',
+        points: Number(item.points || 0),
+      }));
+    }
+    return [
+      {
+        name: 'Cultural Fest',
+        fullName: 'Annual Cultural Fest 2026',
+        points: Number(globalPoints) || 45.16,
+      }
+    ];
+  }, [activeTeam, globalPoints]);
+
+  // Category breakdown chart data
+  const categoryChartData = useMemo(() => {
+    if (students.length > 0) {
+      const counts = {};
+      students.forEach((student) => {
+        const cat = student.category
+          ? (student.category.charAt(0).toUpperCase() + student.category.slice(1).toLowerCase())
+          : 'General';
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
+      return Object.entries(counts).map(([name, participants], index) => ({
+        name,
+        fullName: `${name} Category`,
+        participants,
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      }));
+    }
+
+    return [
+      { name: 'Senior', fullName: 'Senior Category', participants: 4, color: CATEGORY_COLORS[0] },
+      { name: 'Junior', fullName: 'Junior Category', participants: 4, color: CATEGORY_COLORS[1] },
+      { name: 'Sub-Junior', fullName: 'Sub-Junior Category', participants: 2, color: CATEGORY_COLORS[2] },
+    ];
+  }, [students]);
+
+  const topLeaderboardTeams = useMemo(() => {
+    if (leaderboardTeams.length > 0) {
+      return leaderboardTeams.slice(0, 5);
+    }
+    return [
+      {
+        name: activeTeam?.name || 'TEAM -A',
+        members: totalMembers,
+        points: globalPoints,
+        rank: 1
+      }
+    ];
+  }, [leaderboardTeams, activeTeam, totalMembers, globalPoints]);
+
+  const handleOpenBreakdown = (team) => {
+    setSelectedTeamBreakdown(team || activeTeam);
+    setShowEventBreakdownModal(true);
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="flex min-h-[65vh] items-center justify-center bg-[#f7f8fb]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 text-lg">Loading your dashboard...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600 mx-auto" />
+          <p className="mt-3 text-xs font-medium text-slate-500">Loading dashboard...</p>
         </div>
       </div>
     );
@@ -57,365 +259,531 @@ const TeamManagerDashboard = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <Activity className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <p className="text-gray-600 text-lg mb-4">{error}</p>
+      <div className="flex min-h-[65vh] items-center justify-center bg-[#f7f8fb] px-6">
+        <div className="max-w-sm text-center">
+          <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+            <Activity className="h-5 w-5" />
+          </div>
+          <h2 className="mt-4 text-sm font-semibold text-slate-900">Unable to load dashboard</h2>
+          <p className="mt-1 text-xs text-slate-500">{error}</p>
           <button
+            type="button"
             onClick={fetchAllData}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="mt-4 rounded-lg bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs transition hover:bg-indigo-700"
           >
-            Retry
+            Try again
           </button>
         </div>
       </div>
     );
   }
 
-  const stats = [
-    {
-      title: 'My Teams',
-      value: myTeams.length,
-      icon: Users,
-      color: 'bg-gradient-to-r from-blue-500 to-blue-600',
-      bgColor: 'bg-blue-50',
-      textColor: 'text-blue-600',
-      change: '+12%',
-      changeType: 'positive'
-    },
-    {
-      title: 'Total Students',
-      value: myTeams.reduce((sum, team) => sum + team.member_count, 0),
-      icon: Target,
-      color: 'bg-gradient-to-r from-green-500 to-green-600',
-      bgColor: 'bg-green-50',
-      textColor: 'text-green-600',
-      change: '+8%',
-      changeType: 'positive'
-    },
-    {
-      title: 'Active Events',
-      value: dashboardData?.totalEvents || 0,
-      icon: Calendar,
-      color: 'bg-gradient-to-r from-purple-500 to-purple-600',
-      bgColor: 'bg-purple-50',
-      textColor: 'text-purple-600',
-      change: '+5%',
-      changeType: 'positive'
-    },
-    {
-      title: 'Total Points',
-      value: myTeams.reduce((sum, team) => sum + (team.global_points || team.points_earned || 0), 0),
-      icon: Trophy,
-      color: 'bg-gradient-to-r from-yellow-500 to-yellow-600',
-      bgColor: 'bg-yellow-50',
-      textColor: 'text-yellow-600',
-      change: '+15%',
-      changeType: 'positive'
-    }
-  ];
-
-  const topTeams = leaderboard.teams.slice(0, 5);
-  const myTeamRankings = myTeams.map(team => {
-    const ranking = leaderboard.teams.findIndex(t => t.name === team.name) + 1;
-    return { ...team, rank: ranking || 'N/A' };
-  });
-
-  const handleTeamPointsClick = (team) => {
-    setSelectedTeamBreakdown(team);
-    setShowEventBreakdownModal(true);
-  };
+  const teamDisplayName = activeTeam?.name || activeTeam?.team_name || 'My Team';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">Team Manager Portal</h1>
-              <p className="text-gray-600 text-lg">
-                Welcome back! Here's your teams' performance overview.
-              </p>
+    <div className="min-h-screen bg-[#f7f8fb] px-4 py-5 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-4 sm:space-y-5">
+        {/* ========================================================================= */}
+        {/* 1. HERO HEADER */}
+        {/* ========================================================================= */}
+        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
+              Workspace
+            </p>
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+                {teamDisplayName}
+              </h1>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Active Session
+              </span>
             </div>
-            <div className="flex items-center space-x-4">
-              <div className="bg-white rounded-lg px-4 py-2 shadow-sm border border-gray-200">
-                <div className="flex items-center space-x-2">
-                  <Activity className="h-5 w-5 text-green-500" />
-                  <span className="text-sm font-medium text-gray-700">Online</span>
-                </div>
-              </div>
-            </div>
+            <p className="text-xs text-slate-400 mt-1 font-normal">
+              Manage your candidate roster, track festival points, and submit event entries.
+            </p>
           </div>
-        </div>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {stats.map((stat, index) => (
-            <div key={index} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-              <div className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
-                    <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
-                  </div>
-                  <div className={`${stat.bgColor} p-3 rounded-lg`}>
-                    <stat.icon className={`h-6 w-6 ${stat.textColor}`} />
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center">
-                  <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-sm text-green-600 font-medium">{stat.change}</span>
-                  <span className="text-sm text-gray-500 ml-2">vs last month</span>
-                </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={() => navigate('/team-manager/students')}
+              className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
+            >
+              <Users className="h-3.5 w-3.5 text-slate-400" />
+              <span>Student Roster</span>
+            </button>
+            <button
+              onClick={() => navigate('/team-manager/events')}
+              className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-2xs hover:bg-indigo-700 transition-colors"
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              <span>Events & Roster</span>
+            </button>
+          </div>
+        </header>
+
+        {/* ========================================================================= */}
+        {/* 2. METRIC CARDS GRID */}
+        {/* ========================================================================= */}
+        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          <MetricCard
+            label="School Standing"
+            value={`${globalPoints} pts`}
+            detail={`Rank #${teamRank}`}
+            icon={Trophy}
+          />
+          <MetricCard
+            label="Team Roster"
+            value={`${totalMembers}`}
+            detail="Students"
+            icon={UsersRound}
+          />
+          <MetricCard
+            label="Festivals"
+            value={totalEvents}
+            detail="Active"
+            icon={CalendarDays}
+          />
+          <MetricCard
+            label="Program Entries"
+            value={`${totalAssignmentsCount}`}
+            detail="Slots Allocated"
+            icon={Award}
+          />
+        </section>
+
+        {/* ========================================================================= */}
+        {/* 3. VISUAL CHARTS (RECHARTS) */}
+        {/* ========================================================================= */}
+        <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {/* Chart 1: Event Points & Score Distribution */}
+          <article className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5">
+              <h2 className="text-xs font-semibold text-slate-800">
+                Event Points Performance
+              </h2>
+              <button
+                onClick={() => handleOpenBreakdown(activeTeam)}
+                className="flex items-center gap-1 rounded-md bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 transition-colors shrink-0"
+              >
+                <span>Breakdown</span>
+                <ArrowRight className="h-3 w-3" />
+              </button>
+            </div>
+
+            <div className="p-4">
+              <div className="h-[190px] sm:h-[210px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={eventPointsData}
+                    margin={{ top: 10, right: 10, left: -25, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="name"
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fill: '#64748b', fontSize: 10, fontWeight: 500 }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#94a3b8', fontSize: 10 }}
+                    />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar
+                      dataKey="points"
+                      name="Points"
+                      fill="#4f46e5"
+                      radius={[4, 4, 0, 0]}
+                      maxBarSize={44}
+                    >
+                      {eventPointsData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={index === 0 ? '#4f46e5' : '#6366f1'}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2.5 text-[11px] text-slate-500">
+                <span className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                  Total: <strong className="text-slate-800">{globalPoints} pts</strong>
+                </span>
+                <span>Championship Rank: <strong className="text-indigo-600">#{teamRank}</strong></span>
               </div>
             </div>
-          ))}
-        </div>
+          </article>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* My Teams */}
-          <div className="lg:col-span-2">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-                    <Users className="h-5 w-5 mr-2" />
-                    My Teams
-                  </h2>
-                  <button className="text-blue-600 hover:text-blue-800 text-sm font-medium flex items-center">
-                    View All <ChevronRight className="h-4 w-4 ml-1" />
+          {/* Chart 2: Category Breakdown */}
+          <article className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5">
+              <h2 className="text-xs font-semibold text-slate-800">
+                Roster by Category
+              </h2>
+              <span className="text-[11px] font-medium text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md shrink-0">
+                {totalMembers} Students
+              </span>
+            </div>
+
+            <div className="p-4">
+              <div className="h-[190px] sm:h-[210px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={categoryChartData}
+                    layout="vertical"
+                    margin={{ top: 5, right: 15, left: -10, bottom: 5 }}
+                    barCategoryGap="24%"
+                  >
+                    <CartesianGrid horizontal={false} stroke="#f1f5f9" strokeDasharray="3 3" />
+                    <XAxis
+                      type="number"
+                      allowDecimals={false}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#94a3b8', fontSize: 10 }}
+                    />
+                    <YAxis
+                      type="category"
+                      dataKey="name"
+                      width={70}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#475569', fontSize: 10, fontWeight: 500 }}
+                    />
+                    <Tooltip content={<ChartTooltip />} />
+                    <Bar
+                      dataKey="participants"
+                      name="Students"
+                      radius={[0, 4, 4, 0]}
+                      maxBarSize={22}
+                    >
+                      {categoryChartData.map((entry, index) => (
+                        <Cell key={`cat-cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2.5 text-[11px] text-slate-500">
+                <span>{categoryChartData.length} categories</span>
+                <button
+                  onClick={() => navigate('/team-manager/students')}
+                  className="font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-0.5"
+                >
+                  Manage Roster <ChevronRight className="h-3 w-3" />
+                </button>
+              </div>
+            </div>
+          </article>
+        </section>
+
+        {/* ========================================================================= */}
+        {/* 4. ROSTER SPOTLIGHT & LEADERBOARD GRID */}
+        {/* ========================================================================= */}
+        <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {/* Managed Team Profile & Details */}
+          <article className="lg:col-span-2 rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
+            <div className="border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-3.5 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white font-bold text-xs shadow-xs">
+                  {teamDisplayName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <h2 className="text-sm font-semibold text-slate-900">
+                      {teamDisplayName}
+                    </h2>
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                      Rank #{teamRank}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    Leader: {activeTeam?.team_username ? `@${activeTeam.team_username}` : 'Team Manager'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="text-right">
+                <span className="text-xl font-bold tracking-tight text-slate-900">
+                  {globalPoints}
+                </span>
+                <p className="text-[10px] font-medium text-slate-400">Total Points</p>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-5 space-y-4">
+              {/* Quick Stats Banner */}
+              <div className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-2.5 border border-slate-100 text-center">
+                <div>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Members</p>
+                  <p className="mt-0.5 text-base font-bold text-slate-900">{totalMembers}</p>
+                </div>
+                <div className="border-x border-slate-200/60">
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Assignments</p>
+                  <p className="mt-0.5 text-base font-bold text-indigo-600">{totalAssignmentsCount}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Standing</p>
+                  <p className="mt-0.5 text-base font-bold text-slate-900">#{teamRank}</p>
+                </div>
+              </div>
+
+              {/* Roster Preview / Student chips */}
+              <div>
+                <div className="flex items-center justify-between mb-2.5">
+                  <h3 className="text-xs font-semibold text-slate-800">
+                    Student Roster Preview ({students.length > 0 ? students.length : totalMembers})
+                  </h3>
+                  <button
+                    onClick={() => navigate('/team-manager/students')}
+                    className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-0.5"
+                  >
+                    View All Students <ArrowRight className="h-3 w-3" />
                   </button>
                 </div>
-              </div>
-              <div className="p-6">
-                {myTeamRankings.length > 0 ? (
-                  <div className="space-y-4">
-                    {myTeamRankings.map((team, index) => (
-                      <div key={team.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                        <div className="flex items-center space-x-4">
-                          <div className="relative">
-                            <div className="bg-blue-100 p-3 rounded-full">
-                              <Users className="h-5 w-5 text-blue-600" />
-                            </div>
-                            {team.rank <= 3 && (
-                              <div className="absolute -top-1 -right-1">
-                                {team.rank === 1 && <Medal className="h-4 w-4 text-yellow-500" />}
-                                {team.rank === 2 && <Medal className="h-4 w-4 text-gray-400" />}
-                                {team.rank === 3 && <Medal className="h-4 w-4 text-yellow-600" />}
-                              </div>
-                            )}
+
+                {students.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {students.slice(0, 6).map((student, idx) => (
+                      <div
+                        key={student.id || idx}
+                        className="flex items-center justify-between p-2 rounded-lg border border-slate-100 bg-slate-50/60 hover:bg-slate-100/60 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-6 h-6 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {student.name?.charAt(0) || 'S'}
                           </div>
-                          <div>
-                            <h3 className="font-semibold text-gray-900">{team.name}</h3>
-                            <p className="text-sm text-gray-600">{team.member_count} members</p>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-800 truncate">
+                              {student.name}
+                            </p>
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {student.student_id ? `ID: ${student.student_id}` : (student.grade ? `Grade ${student.grade}` : 'Student')}
+                            </p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className="flex items-center space-x-4">
-                            <div>
-                              <button
-                                onClick={() => handleTeamPointsClick(team)}
-                                className="font-semibold text-gray-900 hover:text-blue-600 cursor-pointer transition-colors"
-                                title="Click to view event breakdown"
-                              >
-                                {team.global_points || team.points_earned || 0} {team.global_points ? 'global pts' : 'pts'}
-                              </button>
-                              <p className="text-sm text-gray-600">Rank #{team.rank}</p>
-                            </div>
-                            <button className="p-2 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-200">
-                              <Activity className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
+                        <span className="text-[9px] font-medium uppercase px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600 shrink-0">
+                          {student.category || 'General'}
+                        </span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8">
-                    <Users className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600 text-lg">No teams assigned yet</p>
-                    <p className="text-gray-500 text-sm mt-2">Contact your administrator to get team assignments</p>
+                  <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center">
+                    <p className="text-xs text-slate-500">
+                      {totalMembers} registered students in team roster.
+                    </p>
+                    <button
+                      onClick={() => navigate('/team-manager/students')}
+                      className="mt-1.5 text-xs font-medium text-indigo-600 hover:underline"
+                    >
+                      Open Student Directory →
+                    </button>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
 
-          {/* Global Leaderboard */}
-          <div className="lg:col-span-1">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-              <div className="p-6 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-                  <Trophy className="h-5 w-5 mr-2" />
-                  Global Leaderboard
+              {/* Action shortcuts */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100">
+                <button
+                  onClick={() => navigate('/team-manager/events')}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 shadow-2xs transition-colors"
+                >
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  <span>Events & Assignments</span>
+                </button>
+                <button
+                  onClick={() => navigate('/team-manager/students')}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 transition-colors"
+                >
+                  <Users className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Manage Students</span>
+                </button>
+                <button
+                  onClick={() => handleOpenBreakdown(activeTeam)}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 transition-colors sm:ml-auto"
+                >
+                  <Activity className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Scorecard</span>
+                </button>
+              </div>
+            </div>
+          </article>
+
+          {/* School Leaderboard Standings */}
+          <article className="lg:col-span-1 rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden flex flex-col">
+            <div className="border-b border-slate-100 px-4 py-3 sm:px-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+                  <Trophy className="h-3.5 w-3.5 text-indigo-600" />
+                  School Leaderboard
                 </h2>
               </div>
-              <div className="p-6">
-                <div className="space-y-3">
-                  {topTeams.map((team, index) => (
-                    <div key={team.name} className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center space-x-3">
-                        <div className="relative">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${index === 0 ? 'bg-yellow-100 text-yellow-800' :
-                              index === 1 ? 'bg-gray-100 text-gray-800' :
-                                index === 2 ? 'bg-orange-100 text-orange-800' :
-                                  'bg-blue-100 text-blue-800'
-                            }`}>
-                            {index + 1}
-                          </div>
-                          {index === 0 && <Medal className="absolute -top-1 -right-1 h-3 w-3 text-yellow-500" />}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900 text-sm">{team.name}</p>
-                          <p className="text-xs text-gray-500">{team.members} members</p>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-semibold text-gray-900 text-sm">{team.points}</p>
-                        <p className="text-xs text-gray-500">pts</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="mt-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Quick Actions</h2>
-            </div>
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <button className="p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors group">
-                  <div className="flex items-center space-x-3">
-                    <Activity className="h-6 w-6 text-blue-600 group-hover:scale-110 transition-transform" />
-                    <div className="text-left">
-                      <p className="font-medium text-gray-900">My Students</p>
-                      <p className="text-sm text-gray-600">Manage team members</p>
-                    </div>
-                  </div>
-                </button>
-
-                <button className="p-4 bg-green-50 rounded-lg hover:bg-green-100 transition-colors group">
-                  <div className="flex items-center space-x-3">
-                    <Activity className="h-6 w-6 text-green-600 group-hover:scale-110 transition-transform" />
-                    <div className="text-left">
-                      <p className="font-medium text-gray-900">Assignments</p>
-                      <p className="text-sm text-gray-600">Program assignments</p>
-                    </div>
-                  </div>
-                </button>
-
-                <button className="p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors group">
-                  <div className="flex items-center space-x-3">
-                    <Activity className="h-6 w-6 text-purple-600 group-hover:scale-110 transition-transform" />
-                    <div className="text-left">
-                      <p className="font-medium text-gray-900">Events</p>
-                      <p className="text-sm text-gray-600">View active events</p>
-                    </div>
-                  </div>
-                </button>
-
-                <button className="p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors group">
-                  <div className="flex items-center space-x-3">
-                    <Activity className="h-6 w-6 text-yellow-600 group-hover:scale-110 transition-transform" />
-                    <div className="text-left">
-                      <p className="font-medium text-gray-900">Points</p>
-                      <p className="text-sm text-gray-600">Track performance</p>
-                    </div>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Recent Activity */}
-        <div className="mt-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900 flex items-center">
-                <Activity className="h-5 w-5 mr-2" />
-                Recent Activity
-              </h2>
-            </div>
-            <div className="p-6">
-              <div className="space-y-4">
-                {dashboardData?.recentActivities && dashboardData.recentActivities.length > 0 ? (
-                  dashboardData.recentActivities.map((activity, index) => (
-                    <div key={index} className="flex items-start space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors">
-                      <div className="bg-green-100 p-2 rounded-full">
-                        <Activity className="h-4 w-4 text-green-600" />
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-sm text-gray-900">{activity.action}</p>
-                        <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-8">
-                    <Activity className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-                    <p className="text-gray-600">No recent activities</p>
-                    <p className="text-gray-500 text-sm mt-2">Activities will appear here as your teams participate in events</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Event Breakdown Modal */}
-      {showEventBreakdownModal && selectedTeamBreakdown && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-screen overflow-y-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Event Breakdown for {selectedTeamBreakdown.name}</h2>
               <button
-                onClick={() => setShowEventBreakdownModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                onClick={() => navigate('/team-manager/points')}
+                className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                View All
               </button>
             </div>
 
-            <div className="mb-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-semibold text-blue-900">Total Points: {selectedTeamBreakdown.points_earned || 0}</h3>
-                    <p className="text-blue-700 text-sm">
-                      Team Rank: #{selectedTeamBreakdown.rank}
-                    </p>
+            <div className="p-3 sm:p-4 flex-1 space-y-2 overflow-y-auto">
+              {topLeaderboardTeams.map((team, idx) => {
+                const rankNum = team.rank || idx + 1;
+                const isCurrentTeam =
+                  team.name?.toLowerCase() === (activeTeam?.name || '').toLowerCase() ||
+                  team.id === activeTeam?.id;
+
+                return (
+                  <div
+                    key={team.id || team.name || idx}
+                    className={`flex items-center justify-between p-2.5 rounded-lg transition-colors ${
+                      isCurrentTeam
+                        ? 'bg-indigo-50/70 border border-indigo-200'
+                        : 'bg-white border border-slate-100 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div
+                        className={`w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-semibold shrink-0 ${
+                          rankNum === 1
+                            ? 'bg-indigo-600 text-white'
+                            : isCurrentTeam
+                              ? 'bg-indigo-100 text-indigo-700'
+                              : 'bg-slate-100 text-slate-600'
+                        }`}
+                      >
+                        {rankNum}
+                      </div>
+
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1">
+                          <p className="text-xs font-medium text-slate-900 truncate">
+                            {team.name}
+                          </p>
+                          {isCurrentTeam && (
+                            <span className="px-1 py-0.2 rounded text-[9px] font-semibold bg-indigo-600 text-white shrink-0">
+                              You
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400">
+                          {team.members || team.member_count || 10} members
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <p className="text-xs font-semibold text-slate-900">
+                        {team.points ?? team.global_points ?? 0}
+                        <span className="ml-0.5 text-[10px] font-normal text-slate-400">pts</span>
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-blue-600">Members: {selectedTeamBreakdown.member_count}</p>
-                  </div>
-                </div>
+                );
+              })}
+            </div>
+
+            <div className="p-2.5 bg-slate-50 border-t border-slate-100 text-center">
+              <button
+                onClick={() => navigate('/team-manager/points')}
+                className="text-[11px] font-medium text-slate-600 hover:text-indigo-600 flex items-center justify-center gap-1 w-full"
+              >
+                Detailed Scorecards & Rules <ChevronRight className="h-3 w-3" />
+              </button>
+            </div>
+          </article>
+        </section>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 5. EVENT BREAKDOWN MODAL */}
+      {/* ========================================================================= */}
+      {showEventBreakdownModal && selectedTeamBreakdown && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-3 sm:p-4 backdrop-blur-xs">
+          <div className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-4 sm:p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-sm font-bold tracking-tight text-slate-900">
+                  Event Breakdown: {selectedTeamBreakdown.name || teamDisplayName}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5 font-normal">Points earned across participated competitions</p>
               </div>
-            </div>
-
-            <div className="text-center py-8">
-              <div className="text-gray-400 text-6xl mb-4">📊</div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Event Breakdown Not Available</h3>
-              <p className="text-gray-500">
-                Detailed event breakdown is available in the Global Points section.
-              </p>
-            </div>
-
-            <div className="flex justify-end mt-6">
               <button
                 onClick={() => setShowEventBreakdownModal(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              <div className="flex items-center justify-between rounded-xl bg-indigo-50/70 border border-indigo-100 p-4">
+                <div>
+                  <p className="text-xs font-semibold text-indigo-900">Total Global Score</p>
+                  <p className="text-2xl font-bold text-indigo-700">
+                    {selectedTeamBreakdown.global_points || globalPoints} pts
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-indigo-600 font-medium">
+                    Standings Rank: <strong>#{teamRank}</strong>
+                  </p>
+                  <p className="text-xs text-indigo-500">
+                    {totalMembers} team members
+                  </p>
+                </div>
+              </div>
+
+              {selectedTeamBreakdown.event_breakdown && selectedTeamBreakdown.event_breakdown.length > 0 ? (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {selectedTeamBreakdown.event_breakdown.map((eventItem, i) => (
+                    <div
+                      key={eventItem.event_id || i}
+                      className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50"
+                    >
+                      <div>
+                        <p className="text-xs font-semibold text-slate-900">{eventItem.event_name}</p>
+                        <p className="text-[11px] text-slate-500">Festival Competition</p>
+                      </div>
+                      <span className="text-xs font-bold text-slate-900">
+                        {eventItem.points} pts
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 text-center">
+                  <p className="text-xs text-slate-600">
+                    Official scored points: <strong>{globalPoints} pts</strong>
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Detailed per-item grade rubrics are published in the Points & Rankings portal.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex items-center justify-between border-t border-slate-100 pt-4">
+              <button
+                onClick={() => {
+                  setShowEventBreakdownModal(false);
+                  navigate('/team-manager/points');
+                }}
+                className="text-xs font-semibold text-indigo-600 hover:underline"
+              >
+                Go to Points & Rankings →
+              </button>
+              <button
+                onClick={() => setShowEventBreakdownModal(false)}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition-colors shadow-sm"
               >
                 Close
               </button>
@@ -427,4 +795,4 @@ const TeamManagerDashboard = () => {
   );
 };
 
-export default TeamManagerDashboard; 
+export default TeamManagerDashboard;

@@ -261,8 +261,12 @@ const AdminSettings = () => {
 
   return (
     <main className="min-h-screen bg-[#f7f8fb] px-4 py-6 sm:px-6 lg:px-8">
-    <div className="mx-auto max-w-6xl">
-      <div className="mb-6"><p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600">Configuration</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Global Settings</h1><p className="mt-1 text-sm text-slate-500">Manage school identity, data, classes and categories.</p></div>
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-6">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">Configuration</p>
+          <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Global Settings</h1>
+          <p className="text-xs text-slate-400 mt-1 font-normal">Manage school identity, data, classes and categories.</p>
+        </div>
       <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
       
       {/* Tabs */}

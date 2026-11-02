@@ -129,24 +129,8 @@ class EventCreateUpdateSerializer(serializers.ModelSerializer):
             if data['start_time'] >= data['end_time']:
                 raise serializers.ValidationError("Start time must be before end time for same day events")
 
-        start_date = data.get('start_date', getattr(self.instance, 'start_date', None))
-        start_time = data.get('start_time', getattr(self.instance, 'start_time', None))
-        deadline = data.get(
-            'registration_deadline', getattr(self.instance, 'registration_deadline', None)
-        )
-        deadline_fields_changed = any(
-            field in data for field in ('registration_deadline', 'start_date', 'start_time')
-        )
-        if deadline and start_date and deadline_fields_changed:
-            local_deadline = timezone.localtime(deadline) if timezone.is_aware(deadline) else deadline
-            if local_deadline.date() > start_date:
-                raise serializers.ValidationError({
-                    'registration_deadline': 'Registration must close on or before the event starts.'
-                })
-            if local_deadline.date() == start_date and start_time and local_deadline.time() > start_time:
-                raise serializers.ValidationError({
-                    'registration_deadline': 'Registration must close before the event start time.'
-                })
+        # Registration deadline can be set or adjusted freely by the event admin
+        # to control registration cutoffs for upcoming, multi-day, or ongoing events.
         
         # Set default values for team-based events
         if data.get('is_team_based'):
@@ -216,9 +200,10 @@ class TeamSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'name', 'description', 
             'members', 'member_count', 'points_earned', 'position', 'team_number',
+            'team_username',
             'created_at', 'updated_at', 'members_details', 'team_credentials'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'member_count', 'team_number']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'member_count', 'team_number', 'team_username']
     
     def get_members_details(self, obj):
         """Get detailed information about team members"""
@@ -257,16 +242,53 @@ class TeamSerializer(serializers.ModelSerializer):
         return None
 
 class TeamCreateSerializer(serializers.ModelSerializer):
-    """Simple serializer for creating teams without automatic member addition"""
+    """Serializer for creating teams with optional custom leader credentials"""
+    team_username = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    team_password = serializers.CharField(max_length=128, required=False, allow_blank=True, write_only=True)
     
     class Meta:
         model = Team
         fields = [
-            'name', 'description'
+            'name', 'description', 'team_username', 'team_password'
         ]
 
+    def validate(self, attrs):
+        request = self.context.get('request')
+        school = getattr(request.user, 'school', None) if request and hasattr(request, 'user') else None
+        username = attrs.get('team_username')
+        password = attrs.get('team_password')
+
+        if username:
+            username = username.strip()
+            if len(username) < 3:
+                raise serializers.ValidationError({'team_username': 'Username must be at least 3 characters long.'})
+            if school and Team.objects.filter(school=school, team_username=username).exists():
+                raise serializers.ValidationError({'team_username': f'The username "{username}" is already taken in this school.'})
+            attrs['team_username'] = username
+
+        if password:
+            if len(password.strip()) < 6:
+                raise serializers.ValidationError({'team_password': 'Password must be at least 6 characters long.'})
+
+        return attrs
+
+    def create(self, validated_data):
+        username = validated_data.pop('team_username', None)
+        password = validated_data.pop('team_password', None)
+        team = Team(**validated_data)
+        if username:
+            team.team_username = username
+        if password:
+            from django.contrib.auth.hashers import make_password
+            team.team_password = make_password(password.strip())
+            team._plain_team_password = password.strip()
+        team.save()
+        return team
+
 class TeamCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for creating/updating teams"""
+    """Serializer for creating/updating teams with leader credentials"""
+    team_username = serializers.CharField(max_length=100, required=False, allow_blank=True)
+    team_password = serializers.CharField(max_length=128, required=False, allow_blank=True, write_only=True)
     member_emails = serializers.ListField(
         child=serializers.EmailField(),
         write_only=True,
@@ -277,14 +299,48 @@ class TeamCreateUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Team
         fields = [
-            'name', 'description', 'member_emails'
+            'name', 'description', 'member_emails', 'team_username', 'team_password'
         ]
-    
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        school = getattr(request.user, 'school', None) if request and hasattr(request, 'user') else None
+        username = attrs.get('team_username')
+        password = attrs.get('team_password')
+
+        if username:
+            username = username.strip()
+            if len(username) < 3:
+                raise serializers.ValidationError({'team_username': 'Username must be at least 3 characters long.'})
+            existing = Team.objects.filter(team_username=username)
+            if school:
+                existing = existing.filter(school=school)
+            if self.instance:
+                existing = existing.exclude(pk=self.instance.pk)
+            if existing.exists():
+                raise serializers.ValidationError({'team_username': f'The username "{username}" is already taken in this school.'})
+            attrs['team_username'] = username
+
+        if password:
+            if len(password.strip()) < 6:
+                raise serializers.ValidationError({'team_password': 'Password must be at least 6 characters long.'})
+
+        return attrs
+
     def create(self, validated_data):
         member_emails = validated_data.pop('member_emails', [])
-        team = super().create(validated_data)
-        
-        # Add members by email
+        username = validated_data.pop('team_username', None)
+        password = validated_data.pop('team_password', None)
+
+        team = Team(**validated_data)
+        if username:
+            team.team_username = username
+        if password:
+            from django.contrib.auth.hashers import make_password
+            team.team_password = make_password(password.strip())
+            team._plain_team_password = password.strip()
+        team.save()
+
         if member_emails:
             from django.contrib.auth import get_user_model
             User = get_user_model()
@@ -292,23 +348,35 @@ class TeamCreateUpdateSerializer(serializers.ModelSerializer):
                 email__in=member_emails, role='student', school=team.school
             )
             team.members.set(members)
-        
+
         return team
-    
+
     def update(self, instance, validated_data):
         member_emails = validated_data.pop('member_emails', None)
-        team = super().update(instance, validated_data)
-        
-        # Update members if provided
+        username = validated_data.pop('team_username', None)
+        password = validated_data.pop('team_password', None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        if username:
+            instance.team_username = username
+        if password:
+            from django.contrib.auth.hashers import make_password
+            instance.team_password = make_password(password.strip())
+            instance._plain_team_password = password.strip()
+
+        instance.save()
+
         if member_emails is not None:
             from django.contrib.auth import get_user_model
             User = get_user_model()
             members = User.objects.filter(
-                email__in=member_emails, role='student', school=team.school
+                email__in=member_emails, role='student', school=instance.school
             )
-            team.members.set(members)
-        
-        return team
+            instance.members.set(members)
+
+        return instance
 
 class IndividualParticipationSerializer(serializers.ModelSerializer):
     """Serializer for individual participation"""
@@ -450,6 +518,7 @@ class ProgramSerializer(serializers.ModelSerializer):
     schedule_entry_count = serializers.IntegerField(read_only=True)
     scheduled_duration_minutes = serializers.IntegerField(read_only=True)
     schedule_entry_type = serializers.SerializerMethodField()
+    effective_num_judges = serializers.IntegerField(read_only=True)
     
     class Meta:
         model = Program
@@ -461,12 +530,24 @@ class ProgramSerializer(serializers.ModelSerializer):
             'schedule_entry_count', 'schedule_entry_type', 'scheduled_duration_minutes',
             'is_active', 'is_finished', 'is_published', 'status', 'result_status',
             'participants_count', 'assigned_students', 'assignments_per_team', 'created_at', 'updated_at',
-            'program_type', 'grading_points', 'total_max_participants', 'limit_description', 'total_teams'
+            'program_type', 'grading_points', 'total_max_participants', 'limit_description', 'total_teams',
+            'num_judges', 'effective_num_judges',
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at', 'status', 'is_published',
-            'result_status', 'schedule_end_is_manual',
+            'result_status', 'schedule_end_is_manual', 'effective_num_judges',
         ]
+
+    def to_internal_value(self, data):
+        if hasattr(data, 'copy'):
+            data = data.copy()
+        elif isinstance(data, dict):
+            data = dict(data)
+        if 'end_time' in data and data['end_time'] == '':
+            data['end_time'] = None
+        if 'start_time' in data and data['start_time'] == '':
+            data['start_time'] = None
+        return super().to_internal_value(data)
 
     def get_schedule_entry_type(self, obj):
         return 'groups' if obj.is_team_based else 'participants'
@@ -478,15 +559,6 @@ class ProgramSerializer(serializers.ModelSerializer):
             entry_status='submitted', average_marks__isnull=False
         )
         if submitted_results.exists():
-            if obj.is_team_based:
-                total_assignments = obj.assignments.values(
-                    'team_id', 'sub_team_number'
-                ).distinct().count()
-            else:
-                total_assignments = obj.assignments.values('student_id').distinct().count()
-            results_count = submitted_results.count()
-            if total_assignments > 0 and results_count < total_assignments:
-                return 'in_progress'
             return 'submitted'
         if obj.results.filter(average_marks__isnull=False).exists():
             return 'in_progress'
@@ -678,7 +750,8 @@ class ProgramSerializer(serializers.ModelSerializer):
             data['team_size'] = None
 
         start_time = data.get('start_time', getattr(self.instance, 'start_time', None))
-        explicit_end_time = data.get('end_time') if 'end_time' in data else None
+        raw_end_time = data.get('end_time') if 'end_time' in data else None
+        explicit_end_time = raw_end_time if (raw_end_time is not None and str(raw_end_time).strip() != '') else None
         duration = data.get(
             'duration_minutes_per_entry',
             getattr(self.instance, 'duration_minutes_per_entry', 5),
@@ -701,7 +774,7 @@ class ProgramSerializer(serializers.ModelSerializer):
                         f'Schedule date must be between {event.start_date} and {event.end_date}.'
                     )
                 })
-            entry_count = self.instance.schedule_entry_count if self.instance else 0
+            entry_count = self.instance.schedule_entry_count if self.instance else (data.get('max_participants') or 1)
             calculated_end = start_time + timedelta(minutes=max(1, entry_count) * duration)
             end_time = explicit_end_time or calculated_end
             if end_time <= start_time:

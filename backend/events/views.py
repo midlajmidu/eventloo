@@ -740,17 +740,23 @@ class EventViewSet(viewsets.ModelViewSet):
                                 }, status=status.HTTP_400_BAD_REQUEST)
                         else:
                             raise openpyxl_error
-                elif file.name.endswith('.xls'):
-                    # For .xls files, try openpyxl first, then xlrd
+                elif file.name.lower().endswith('.xls'):
                     try:
                         df = pd.read_excel(file, engine='openpyxl')
                     except Exception:
+                        file.seek(0)
                         df = pd.read_excel(file, engine='xlrd')
+                elif file.name.lower().endswith('.csv'):
+                    try:
+                        df = pd.read_csv(file, encoding='utf-8')
+                    except UnicodeDecodeError:
+                        file.seek(0)
+                        df = pd.read_csv(file, encoding='latin-1')
                 else:
-                    return Response({'error': 'Please upload an Excel file (.xlsx or .xls)'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'error': 'Please upload a spreadsheet file (.xlsx, .xls, or .csv)'}, status=status.HTTP_400_BAD_REQUEST)
             except Exception:
                 logger.exception('Program spreadsheet parsing failed')
-                return Response({'error': 'The Excel file could not be read.'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'The spreadsheet could not be read.'}, status=status.HTTP_400_BAD_REQUEST)
             
             try:
                 validate_excel_shape(df)
@@ -882,6 +888,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 numeric_fields = (
                     'max_participants', 'team_size', 'max_teams_per_school',
                     'max_participants_per_team', 'duration_minutes_per_entry',
+                    'num_judges',
                 )
                 invalid_number = False
                 for field in numeric_fields:
@@ -899,6 +906,9 @@ class EventViewSet(viewsets.ModelViewSet):
                         )
                         invalid_number = True
                 if invalid_number:
+                    continue
+                if 'num_judges' in program_data and (program_data['num_judges'] < 1 or program_data['num_judges'] > 4):
+                    results['errors'].append(f'Row {index + 2}: Number of judges must be between 1 and 4.')
                     continue
                 # Validate program_type
                 if 'program_type' not in program_data or program_data['program_type'] not in ['stage', 'off_stage']:
@@ -940,7 +950,8 @@ class EventViewSet(viewsets.ModelViewSet):
             'duration_minutes_per_entry': [
                 r'duration.*minute', r'minutes.*entry', r'time.*entry', r'^duration$',
             ],
-            'program_type': [r'program.*type', r'type', r'program.*stage', r'stage']
+            'program_type': [r'program.*type', r'type', r'program.*stage', r'stage'],
+            'num_judges': [r'num.*judge', r'judge.*count', r'^judges$', r'no.*of.*judges']
         }
         
         for field, field_patterns in patterns.items():
@@ -969,10 +980,11 @@ class EventViewSet(viewsets.ModelViewSet):
             ws.append([
                 "Name", "Category", "Type", "Mode", "Max Participants",
                 "Team Size", "Max Sub-Teams", "Team Capacity", "Duration Minutes",
+                "Judges (Optional)"
             ])
             # Add example row
-            ws.append(["English Elocution", "hs", "stage", "Individual", 2, "", "", "", 5])
-            ws.append(["Quiz", "general", "off_stage", "Group", "", 4, 2, 8, 10])
+            ws.append(["English Elocution", "hs", "stage", "Individual", 2, "", "", "", 5, ""])
+            ws.append(["Quiz", "general", "off_stage", "Group", "", 4, 2, 8, 10, 3])
             
             # Set column widths
             for col in ws.columns:
@@ -1435,7 +1447,7 @@ class EventViewSet(viewsets.ModelViewSet):
                 from .services import program_results_complete
                 if not program_results_complete(program):
                     return Response({
-                        'error': f'Cannot publish results for "{program.name}": Mark entry has not been completed for all assigned participants.'
+                        'error': f'Cannot publish results for "{program.name}": Mark entry has not been submitted.'
                     }, status=status.HTTP_400_BAD_REQUEST)
             program.is_published = target_state
             program.save()
@@ -1667,12 +1679,63 @@ class TeamViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
     
-    @action(detail=True, methods=['get'], permission_classes=[IsSchoolAdmin])
+    @action(detail=True, methods=['get', 'post', 'put'], permission_classes=[IsSchoolAdmin])
     def credentials(self, request, pk=None):
-        """Get team login credentials (admin only)"""
+        """Get or set team leader login credentials (admin only)"""
         team = self.get_object()
         
-        # Generate credentials if not exist
+        if request.method in ['POST', 'PUT']:
+            username = request.data.get('username') or request.data.get('team_username')
+            password = request.data.get('password') or request.data.get('team_password')
+            
+            if not username and not password:
+                return Response(
+                    {'error': 'Provide a username or password to update credentials.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if username:
+                username = username.strip()
+                if len(username) < 3:
+                    return Response(
+                        {'error': 'Username must be at least 3 characters long.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                if Team.objects.filter(
+                    school_id=team.school_id, team_username=username
+                ).exclude(pk=team.pk).exists():
+                    return Response(
+                        {'error': f'The username "{username}" is already in use by another team in this school.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                team.team_username = username
+            
+            if password:
+                password = password.strip()
+                if len(password) < 6:
+                    return Response(
+                        {'error': 'Password must be at least 6 characters long.'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                from django.contrib.auth.hashers import make_password
+                team.team_password = make_password(password)
+                team._plain_team_password = password
+            
+            team.save()
+            audit_security_event(
+                request, 'team_credentials_update', 'success',
+                school_id=team.school_id, target=team.id,
+            )
+            return Response({
+                'team_id': team.team_number,
+                'team_name': team.name,
+                'username': team.team_username,
+                'password': password if password else None,
+                'message': 'Team leader credentials updated successfully.',
+                'created_at': team.created_at
+            })
+        
+        # GET request
         if not team.team_username or not team.team_password:
             team.generate_team_credentials()
             team.save()
@@ -1681,8 +1744,8 @@ class TeamViewSet(viewsets.ModelViewSet):
             'team_id': team.team_number,
             'team_name': team.name,
             'username': team.team_username,
-            'password': None,
-            'message': 'Passwords are stored securely. Regenerate credentials to receive a new password.',
+            'password': getattr(team, '_plain_team_password', None),
+            'message': 'Team leader login credentials retrieved.',
             'created_at': team.created_at
         })
     
@@ -2644,12 +2707,20 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
                 id=program_pk, event__school_id=request.user.school_id
             )
             
-            # Read Excel file
+            # Read Excel / CSV file
             try:
-                df = pd.read_excel(file, engine='openpyxl' if file.name.endswith('.xlsx') else 'xlrd')
+                fname = file.name.lower()
+                if fname.endswith('.csv'):
+                    try:
+                        df = pd.read_csv(file, encoding='utf-8')
+                    except UnicodeDecodeError:
+                        file.seek(0)
+                        df = pd.read_csv(file, encoding='latin-1')
+                else:
+                    df = pd.read_excel(file, engine='openpyxl' if fname.endswith('.xlsx') else 'xlrd')
             except Exception:
                 logger.exception('Assignment spreadsheet parsing failed')
-                return Response({'error': 'The Excel file could not be read.'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'The spreadsheet could not be read.'}, status=status.HTTP_400_BAD_REQUEST)
             
             try:
                 validate_excel_shape(df)
@@ -3355,12 +3426,30 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_409_CONFLICT)
         if not isinstance(marks_data, list) or not marks_data:
             return Response({'error': 'At least one mark row is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        active_judge_count = program.effective_num_judges
+        active_judge_keys = [f'judge{i}_marks' for i in range(1, active_judge_count + 1)]
+
+        def row_has_marks(row_dict):
+            return any(
+                row_dict.get(k) is not None and str(row_dict.get(k, '')).strip() != ''
+                for k in active_judge_keys
+            )
+
+        attending_rows = [row for row in marks_data if row_has_marks(row)]
+
         if entry_status == 'submitted':
-            code_letters = [str(row.get('code_letter', '')).strip().upper() for row in marks_data]
+            if not attending_rows:
+                return Response({
+                    'error': 'At least one participant must have marks entered before submitting.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            code_letters = [str(row.get('code_letter', '')).strip().upper() for row in attending_rows]
             if any(not code for code in code_letters):
-                return Response({'error': 'A code letter is required for every submitted mark row.'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'A code letter is required for every attending participant with submitted marks.'}, status=status.HTTP_400_BAD_REQUEST)
             if len(set(code_letters)) != len(code_letters):
-                return Response({'error': 'Code letters must be unique within the program.'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response({'error': 'Code letters must be unique among attending participants.'}, status=status.HTTP_400_BAD_REQUEST)
+
         updated_results = []
         from django.core.exceptions import ValidationError as DjangoValidationError
         from django.db import transaction
@@ -3369,7 +3458,7 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
         try:
             with transaction.atomic():
                 for mark_data in marks_data:
-                # Look up result by ID first, or fallback to team_id & sub_team_number
+                    # Look up result by ID first, or fallback to team_id & sub_team_number
                     if 'id' in mark_data and mark_data['id']:
                         result = ProgramResult.objects.select_for_update().get(
                             id=mark_data['id'],
@@ -3384,13 +3473,28 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
                     else:
                         raise DjangoValidationError('Every mark row must identify a valid result.')
 
+                    is_attending = row_has_marks(mark_data)
+                    row_entry_status = 'submitted' if (entry_status == 'submitted' and is_attending) else 'draft'
+
                     for field in ('code_letter', 'judge1_marks', 'judge2_marks', 'judge3_marks', 'judge4_marks', 'comments'):
                         if field in mark_data:
                             value = mark_data[field]
                             if field == 'code_letter':
-                                value = str(value or '').strip().upper()
+                                value = str(value or '').strip().upper() if is_attending else ''
+                            if not is_attending and field.startswith('judge'):
+                                value = None
                             setattr(result, field, value)
-                    result.entry_status = entry_status
+
+                    if not is_attending:
+                        result.raw_total_marks = None
+                        result.total_marks = None
+                        result.average_marks = None
+                        result.position = None
+                        result.points_earned = 0
+                        result.grade = ''
+                        result.grade_extra_points = 0
+
+                    result.entry_status = row_entry_status
                     result.save()
                     updated_results.append(result)
 
@@ -3727,7 +3831,7 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
 def generate_calling_sheet(request, program_id):
     """Generate calling sheet PDF for a program"""
     try:
-        program = Program.objects.get(id=program_id)
+        program = Program.objects.get(id=program_id, event__school_id=request.user.school_id)
         assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
         
         # Here you would implement PDF generation
@@ -3769,7 +3873,7 @@ def generate_formatted_calling_sheet(request, program_id):
         from datetime import datetime
         import traceback
         
-        program = Program.objects.get(id=program_id)
+        program = Program.objects.get(id=program_id, event__school_id=request.user.school_id)
         assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team').order_by('chest_number', 'student__first_name')
         
         school_settings = SchoolSettings.get_settings(program.event.school)
@@ -3973,7 +4077,7 @@ def generate_formatted_calling_sheet(request, program_id):
 def get_program_participants(request, program_id):
     """Get participants for calling sheet"""
     try:
-        program = Program.objects.get(id=program_id)
+        program = Program.objects.get(id=program_id, event__school_id=request.user.school_id)
         assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
         
         # Build dynamic category lookup map
@@ -3981,24 +4085,104 @@ def get_program_participants(request, program_id):
         cat_map = {c.code: c.name for c in StudentCategory.objects.filter(school=program.event.school)}
         
         participants = []
-        for assignment in assignments:
-            # Get category display name dynamically
-            category_display = cat_map.get(assignment.student.category, assignment.student.category or 'Unknown')
-            
-            participants.append({
-                'id': assignment.id,
-                'name': assignment.student.get_full_name(),
-                'identifier': assignment.student.student_id,
-                'gender': assignment.student.gender,
-                'team_name': assignment.team.name if assignment.team else None,
-                'category_display': category_display,
-                'chest_number': assignment.chest_number,
-                'team_id': assignment.team_id,
-                'sub_team_number': assignment.sub_team_number or 1,
-                'is_leader': assignment.is_leader,
-            })
+        if program.is_team_based:
+            # Group by (team_id, sub_team_number)
+            grouped = {}
+            for assignment in assignments:
+                sub_num = getattr(assignment, 'sub_team_number', 1) or 1
+                team_id = assignment.team_id
+                key = (team_id, sub_num)
+                if key not in grouped:
+                    grouped[key] = []
+                grouped[key].append(assignment)
+
+            for (team_id, sub_num), a_list in grouped.items():
+                leader = next((a for a in a_list if a.is_leader), a_list[0] if a_list else None)
+                ordered = sorted(
+                    a_list,
+                    key=lambda a: (
+                        not bool(getattr(a, 'is_leader', False)),
+                        (a.student.get_full_name() if a.student else '').lower()
+                    )
+                )
+                chest_numbers = [str(a.chest_number) for a in ordered if a.chest_number]
+                member_names_with_chests = [
+                    f"{a.student.get_full_name()} ({a.chest_number})" if a.chest_number else a.student.get_full_name()
+                    for a in ordered if a.student
+                ]
+                
+                # Check if this team has multiple sub-teams
+                team_obj = leader.team if leader else None
+                total_sub_teams = len({a.sub_team_number or 1 for a in assignments if a.team_id == team_id})
+                team_display = team_obj.name if team_obj else 'Unassigned'
+                if total_sub_teams > 1 or sub_num > 1:
+                    team_display = f"{team_display} (Sub-Team {sub_num})"
+
+                leader_cat = leader.student.category if leader and leader.student else program.category
+                cat_display = cat_map.get(leader_cat, leader_cat or program.category or 'Unknown')
+
+                distinct_genders = list(dict.fromkeys(a.student.get_gender_display() for a in ordered if a.student and a.student.gender))
+
+                participants.append({
+                    'id': f"group_{team_id}_{sub_num}",
+                    'name': ", ".join(member_names_with_chests),
+                    'identifier': f"Sub-Team {sub_num} ({len(ordered)} members)",
+                    'gender': ", ".join(distinct_genders) if distinct_genders else 'Mixed',
+                    'team_name': team_display,
+                    'category_display': cat_display,
+                    'chest_number': ", ".join(chest_numbers) if chest_numbers else None,
+                    'team_id': team_id,
+                    'sub_team_number': sub_num,
+                    'is_leader': True,
+                    'is_group': True,
+                    'team_member_count': len(ordered),
+                    'members': [
+                        {
+                            'id': a.id,
+                            'name': a.student.get_full_name() if a.student else 'Unknown',
+                            'chest_number': a.chest_number,
+                            'is_leader': a.is_leader,
+                            'identifier': a.student.student_id if a.student else '',
+                            'gender': a.student.gender if a.student else '',
+                        }
+                        for a in ordered
+                    ]
+                })
+        else:
+            for assignment in assignments:
+                # Get category display name dynamically
+                category_display = cat_map.get(assignment.student.category, assignment.student.category or 'Unknown')
+                
+                participants.append({
+                    'id': assignment.id,
+                    'name': assignment.student.get_full_name(),
+                    'identifier': assignment.student.student_id,
+                    'gender': assignment.student.gender,
+                    'team_name': assignment.team.name if assignment.team else None,
+                    'category_display': category_display,
+                    'chest_number': assignment.chest_number,
+                    'team_id': assignment.team_id,
+                    'sub_team_number': assignment.sub_team_number or 1,
+                    'is_leader': assignment.is_leader,
+                    'is_group': False,
+                    'team_member_count': 1,
+                    'members': [
+                        {
+                            'id': assignment.id,
+                            'name': assignment.student.get_full_name(),
+                            'chest_number': assignment.chest_number,
+                            'is_leader': False,
+                            'identifier': assignment.student.student_id,
+                            'gender': assignment.student.gender,
+                        }
+                    ]
+                })
         
-        return Response({'results': participants})
+        return Response({
+            'results': participants,
+            'is_team_based': program.is_team_based,
+            'total_count': len(participants),
+        })
         
     except Program.DoesNotExist:
         return Response({'error': 'Program not found'}, status=404)
@@ -4021,7 +4205,7 @@ def generate_formatted_evaluation_sheet(request, program_id):
         from datetime import datetime
         import traceback
         
-        program = Program.objects.get(id=program_id)
+        program = Program.objects.get(id=program_id, event__school_id=request.user.school_id)
         assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team').order_by('chest_number', 'student__first_name')
         school_settings = SchoolSettings.get_settings(program.event.school)
         template = build_custom_pdf_template(school_settings)
@@ -4247,9 +4431,14 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                         'name': student.get_full_name(),
                         'student_id': student.student_id,
                         'email': student.email,
+                        'gender': student.gender or '—',
                         'category': student.category,
                         'grade': student.grade,
-                        'section': student.section
+                        'section': student.section,
+                        'chest_code': student.chest_code,
+                        'total_points': student.total_points,
+                        'phone_number': student.phone_number,
+                        'address': student.address,
                     })
                 
                 return self.get_paginated_response(student_data)
@@ -4262,9 +4451,14 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                     'name': student.get_full_name(),
                     'student_id': student.student_id,
                     'email': student.email,
+                    'gender': student.gender or '—',
                     'category': student.category,
                     'grade': student.grade,
-                    'section': student.section
+                    'section': student.section,
+                    'chest_code': student.chest_code,
+                    'total_points': student.total_points,
+                    'phone_number': student.phone_number,
+                    'address': student.address,
                 })
             
             return Response({'students': student_data})
@@ -4374,13 +4568,38 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                     'is_finished': program.is_finished,
                 })
 
+            from .services import program_is_general_or_mixed
+            team_students = team.members.filter(role='student')
+            assignments = ProgramAssignment.objects.filter(
+                program__event=event,
+                student__in=team_students
+            ).select_related('program')
+
+            assignments_by_student = {}
+            for a in assignments:
+                s_id = a.student_id
+                if s_id not in assignments_by_student:
+                    assignments_by_student[s_id] = {'total_count': 0, 'single_count': 0, 'group_count': 0}
+                assignments_by_student[s_id]['total_count'] += 1
+                if not program_is_general_or_mixed(a.program):
+                    if a.program.is_team_based:
+                        assignments_by_student[s_id]['group_count'] += 1
+                    else:
+                        assignments_by_student[s_id]['single_count'] += 1
+
+
             member_data = [{
                 'id': member.id,
                 'name': member.get_full_name(),
                 'student_id': member.student_id,
                 'category': member.category or 'general',
                 'grade': member.grade,
-            } for member in team.members.filter(role='student').order_by('first_name', 'last_name')]
+                'section': member.section,
+                'gender': member.gender,
+                'single_count': assignments_by_student.get(member.id, {}).get('single_count', 0),
+                'group_count': assignments_by_student.get(member.id, {}).get('group_count', 0),
+                'total_count': assignments_by_student.get(member.id, {}).get('total_count', 0),
+            } for member in team_students.order_by('first_name', 'last_name')]
 
             return Response({
                 'event': {
@@ -4394,6 +4613,9 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                     'end_time': event.end_time,
                     'venue': event.venue,
                     'registration_deadline': event.registration_deadline,
+                    'max_programs_per_student': event.max_programs_per_student,
+                    'max_single_programs_per_student': event.max_single_programs_per_student,
+                    'max_group_programs_per_student': event.max_group_programs_per_student,
                     'registration_open': (
                         event.status in ('published', 'ongoing')
                         and (
@@ -4744,28 +4966,98 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['get'])
     def leaderboard(self, request):
-        """Get global points leaderboard for team manager's teams"""
+        """Get global points and event-wise leaderboard for team manager portal"""
         if request.user.role != 'team_manager':
             return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
         
         managed_ids = set(self._managed_teams().values_list('id', flat=True))
         from .services import calculate_global_points_for_school
         scores = calculate_global_points_for_school(request.user.school)
-        teams_with_global_points = [{
-            'id': item['id'],
-            'name': item['name'],
-            'points': item['global_points'],
-            'members': item['members'],
-            'events_participated': item['events_participated'],
-            'event_breakdown': item['event_breakdown'],
-        } for item in scores['teams'] if item['id'] in managed_ids]
-        
-        # Sort by global points (descending)
-        teams_with_global_points.sort(key=lambda x: x['points'], reverse=True)
-        
+
+        # Ranked teams across school
+        teams_with_global_points = []
+        for item in sorted(scores['teams'], key=lambda x: x['global_points'], reverse=True):
+            raw_pts = sum(eb.get('event_points', 0) for eb in item.get('event_breakdown', []))
+            teams_with_global_points.append({
+                'id': item['id'],
+                'name': item['name'],
+                'points': item['global_points'],
+                'global_points': item['global_points'],
+                'total_raw_points': raw_pts,
+                'members': item['members'],
+                'events_participated': item['events_participated'],
+                'event_breakdown': item['event_breakdown'],
+                'is_managed': item['id'] in managed_ids,
+            })
+        for idx, t in enumerate(teams_with_global_points, 1):
+            t['rank'] = idx
+
+        # Ranked students across school
+        students_with_global_points = []
+        for item in sorted(scores['students'], key=lambda x: x['global_points'], reverse=True):
+            raw_pts = sum(eb.get('event_points', 0) for eb in item.get('event_breakdown', []))
+            students_with_global_points.append({
+                'id': item['id'],
+                'name': item['name'],
+                'student_id': item['student_id'],
+                'points': item['global_points'],
+                'global_points': item['global_points'],
+                'total_raw_points': raw_pts,
+                'category': item['category'],
+                'events_participated': item['events_participated'],
+                'event_breakdown': item['event_breakdown'],
+            })
+        for idx, s in enumerate(students_with_global_points, 1):
+            s['rank'] = idx
+
+        # Event-wise compilation
+        events_dict = {}
+        for team in scores['teams']:
+            for eb in team.get('event_breakdown', []):
+                eid = eb['event_id']
+                if eid not in events_dict:
+                    events_dict[eid] = {
+                        'id': eid,
+                        'name': eb['event_name'],
+                        'total_points': eb['total_event_points'],
+                        'teams': [],
+                        'students': [],
+                    }
+                events_dict[eid]['teams'].append({
+                    'id': team['id'],
+                    'name': team['name'],
+                    'event_points': eb['event_points'],
+                    'percentage': eb['percentage'],
+                    'is_managed': team['id'] in managed_ids,
+                })
+
+        for student in scores['students']:
+            for eb in student.get('event_breakdown', []):
+                eid = eb['event_id']
+                if eid in events_dict:
+                    events_dict[eid]['students'].append({
+                        'id': student['id'],
+                        'name': student['name'],
+                        'student_id': student['student_id'],
+                        'category': student['category'],
+                        'event_points': eb['event_points'],
+                        'percentage': eb['percentage'],
+                    })
+
+        events_list = []
+        for eid, edata in events_dict.items():
+            edata['teams'].sort(key=lambda x: x['event_points'], reverse=True)
+            for r, t in enumerate(edata['teams'], 1):
+                t['rank'] = r
+            edata['students'].sort(key=lambda x: x['event_points'], reverse=True)
+            for r, s in enumerate(edata['students'], 1):
+                s['rank'] = r
+            events_list.append(edata)
+
         return Response({
             'teams': teams_with_global_points,
-            'students': []  # Empty for now, can be extended later
+            'students': students_with_global_points,
+            'events': events_list,
         })
 
 @api_view(['GET'])
@@ -6624,7 +6916,7 @@ def generate_green_room_sign_sheet(request, event_id):
 def generate_valuation_sheet(request, event_id):
     """
     Generate Valuation Sheet PDF matching the exact user specification:
-    - Top Left: Event Title (e.g. Chathamangalam Sector Sahityotsav)
+    - Top Left: Event Title (e.g. Chathamangalam Sahityotsav)
     - Top Right: Date & Time (e.g. 25/08/2026 10:48 AM)
     - Title: Valuation Sheet (with divider line)
     - Subheader Right: Stage No:
@@ -6810,7 +7102,7 @@ def generate_valuation_sheet(request, event_id):
                 elements.append(Spacer(1, 4))
 
                 max_mark_val = event.max_mark_per_judge
-                judge_count = event.num_judges
+                judge_count = program.effective_num_judges
 
                 # Main Valuation Table
                 table_data = [[
@@ -7306,15 +7598,16 @@ def _certificate_template_payload(request, certificate_type, template, default_f
     background_url = ''
     if template and template.background_image:
         background_url = request.build_absolute_uri(template.background_image.url)
+    default_aspect = 0.75 if certificate_type == 'badge' else 4 / 3
     return {
         'id': template.id if template else None,
         'certificateType': certificate_type,
         'bgImage': background_url,
         'status': 'Custom' if background_url else 'Missing',
-        'aspectRatio': template.aspect_ratio if template else 4 / 3,
+        'aspectRatio': template.aspect_ratio if template else default_aspect,
         'naturalWidth': template.natural_width if template else None,
         'naturalHeight': template.natural_height if template else None,
-        'fields': template.fields if template else default_fields,
+        'fields': {**default_fields, **(template.fields or {})} if template else default_fields,
         'updatedAt': template.updated_at.isoformat() if template else None,
     }
 
@@ -7346,8 +7639,8 @@ def _validate_certificate_background(upload):
 
     if image_format not in allowed_formats:
         raise DjangoValidationError('Use a PNG, JPEG or WebP certificate image.')
-    if width < 800 or height < 500:
-        raise DjangoValidationError('Certificate images must be at least 800 x 500 pixels.')
+    if width < 150 or height < 150:
+        raise DjangoValidationError('Template images must be at least 150 x 150 pixels.')
     if width > 12000 or height > 12000 or width * height > 50_000_000:
         raise DjangoValidationError('Certificate image dimensions are too large.')
     ratio = width / height
@@ -7466,18 +7759,18 @@ def generate_certificates(request, event_id):
         if quality not in ('screen', 'standard', 'print'):
             return Response({'error': 'Unsupported certificate quality.'}, status=400)
 
-        programs = Program.objects.filter(event=event).order_by('category', 'name', 'id')
-        category = request.GET.get('category', 'all')
-        if category and category != 'all':
-            programs = programs.filter(category__iexact=category)
-        program_id = request.GET.get('program_id', 'all')
-        if program_id and program_id != 'all':
+        is_badge_only = cert_types == ['badge']
+
+        team_id_raw = request.GET.get('team_id') or request.GET.get('team')
+        team_id = None
+        if team_id_raw and team_id_raw != 'all':
             try:
-                programs = programs.filter(id=int(program_id))
+                team_id = int(team_id_raw)
             except (TypeError, ValueError):
-                return Response({'error': 'Invalid program filter.'}, status=400)
-        if not programs.exists():
-            return Response({'error': 'No programs match the selected filters.'}, status=400)
+                return Response({'error': 'Invalid team filter.'}, status=400)
+
+        category = request.GET.get('category', 'all')
+        program_id = request.GET.get('program_id', 'all')
 
         templates = {
             template.certificate_type: template
@@ -7496,9 +7789,61 @@ def generate_certificates(request, event_id):
             }, status=400)
 
         recipients = []
-        for certificate_type in cert_types:
-            for program in programs:
-                recipients.extend(certificate_recipients(program, certificate_type))
+        if is_badge_only:
+            from .certificate_service import CertificateRecipient
+            badge_assignments = ProgramAssignment.objects.filter(
+                program__event=event
+            ).select_related('student', 'team', 'program')
+
+            if team_id:
+                badge_assignments = badge_assignments.filter(
+                    Q(team_id=team_id) | Q(student__team_memberships=team_id)
+                )
+
+            if category and category != 'all':
+                badge_assignments = badge_assignments.filter(
+                    Q(student__category__iexact=category) |
+                    (Q(student__category__isnull=True) & Q(program__category__iexact=category))
+                )
+
+            badge_assignments = badge_assignments.order_by(
+                'team__name', 'chest_number', 'student__first_name', 'student_id'
+            )
+
+            seen_students = set()
+            for ba in badge_assignments:
+                if ba.student_id not in seen_students:
+                    seen_students.add(ba.student_id)
+                    recipients.append(CertificateRecipient('badge', ba))
+        else:
+            programs = Program.objects.filter(event=event).order_by('category', 'name', 'id')
+            if category and category != 'all':
+                programs = programs.filter(category__iexact=category)
+            if program_id and program_id != 'all':
+                try:
+                    programs = programs.filter(id=int(program_id))
+                except (TypeError, ValueError):
+                    return Response({'error': 'Invalid program filter.'}, status=400)
+            if not programs.exists():
+                return Response({'error': 'No programs match the selected filters.'}, status=400)
+
+            for certificate_type in cert_types:
+                seen_students_for_badge = set()
+                for program in programs:
+                    prog_recipients = certificate_recipients(program, certificate_type)
+                    if team_id:
+                        prog_recipients = [
+                            r for r in prog_recipients
+                            if (r.assignment.team_id == team_id or (r.student and r.student.team_memberships.filter(id=team_id).exists()))
+                        ]
+                    if certificate_type == 'badge':
+                        for r in prog_recipients:
+                            if r.student.id not in seen_students_for_badge:
+                                seen_students_for_badge.add(r.student.id)
+                                recipients.append(r)
+                    else:
+                        recipients.extend(prog_recipients)
+
         if not recipients:
             return Response({
                 'error': 'No eligible recipients match the selected certificate types and filters.'
@@ -7506,10 +7851,19 @@ def generate_certificates(request, event_id):
         if len(recipients) > 5000:
             return Response({'error': 'This export exceeds the 5,000-certificate safety limit.'}, status=400)
 
+        team_suffix = ''
+        if team_id:
+            from .models import Team
+            team_obj = Team.objects.filter(id=team_id, school_id=event.school_id).first()
+            if team_obj:
+                team_suffix = f'_{slugify(team_obj.name)}'
+
+        category_suffix = f'_{slugify(category)}' if (category and category != 'all') else ''
+        filename_prefix = 'Badges' if is_badge_only else 'Certificates'
         pdf_buffer = render_certificates_pdf(event, templates, recipients, quality)
         response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
         response['Content-Disposition'] = (
-            f'attachment; filename="Certificates_{slugify(event.title) or event.id}.pdf"'
+            f'attachment; filename="{filename_prefix}_{slugify(event.title) or event.id}{team_suffix}{category_suffix}.pdf"'
         )
         response['X-Certificate-Count'] = str(len(recipients))
         audit_security_event(

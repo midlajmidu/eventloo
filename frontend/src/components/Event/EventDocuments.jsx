@@ -193,6 +193,20 @@ const ExportSummaryCell = ({ item, programs = [], teams = [] }) => {
   } else if (item.type === 'certificate') {
     detailsList.push(`Quality: ${(item.exportQuality || 'screen').toUpperCase()}`);
     detailsList.push(`Types: ${(item.certTypes || []).length} selected`);
+  } else if (item.type === 'badge') {
+    detailsList.push(`Quality: ${(item.exportQuality || 'screen').toUpperCase()}`);
+    detailsList.push('Participant Badges (9 per A4 sheet)');
+    if (item.selectedTeamId && item.selectedTeamId !== 'all') {
+      const tm = teams.find(t => t.id === parseInt(item.selectedTeamId, 10));
+      detailsList.push(`Team: ${tm ? tm.name : 'Selected Team'}`);
+    } else {
+      detailsList.push('Team: All teams');
+    }
+    if (item.category && item.category !== 'all') {
+      detailsList.push(`Category: ${item.category.toUpperCase()}`);
+    } else {
+      detailsList.push('Category: All categories');
+    }
   }
 
   // Extract visible pills from item.pills (excluding hardcoded '+4' or '+8' strings)
@@ -281,11 +295,6 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
-  useEffect(() => {
-    if (selectedExportType === 'badge') {
-      setSelectedExportType('certificate');
-    }
-  }, [selectedExportType]);
 
   const fetchData = async () => {
     try {
@@ -1022,16 +1031,22 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
           team_id: exportItem.selectedTeamId || 'all'
         });
         success = await triggerBlobDownload(res.data, `${exportItem.typeName || 'Call_List'}.pdf`, 'application/pdf');
-      } else if (exportItem.type === 'certificate') {
+      } else if (exportItem.type === 'certificate' || exportItem.type === 'badge') {
+        const certTypesParam = exportItem.type === 'badge'
+          ? 'badge'
+          : (exportItem.certTypes || ['participation']).join(',');
         const res = await eventCertificatesAPI.generateCertificates(targetEventId, {
-          cert_types: (exportItem.certTypes || ['participation']).join(','),
+          cert_types: certTypesParam,
           category: exportItem.category || 'all',
-          program_id: exportItem.programId || 'all',
+          program_id: exportItem.type === 'badge' ? 'all' : (exportItem.programId || 'all'),
+          team_id: exportItem.selectedTeamId || 'all',
           quality: exportItem.exportQuality || 'standard'
         });
+        const isBadgeOnly = exportItem.type === 'badge' || (exportItem.certTypes?.length === 1 && exportItem.certTypes[0] === 'badge');
+        const docName = isBadgeOnly ? 'Badges' : 'Certificates';
         success = await triggerBlobDownload(
           res.data,
-          `Certificates_${event?.title || 'Event'}.pdf`,
+          `${docName}_${event?.title || 'Event'}.pdf`,
           'application/pdf'
         );
       }
@@ -1043,7 +1058,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
     if (!success) {
       if (exportItem.type === 'results') {
         await generateClientPdfFallback(exportItem);
-      } else if (exportItem.type === 'certificate') {
+      } else if (exportItem.type === 'certificate' || exportItem.type === 'badge') {
         let serverMessage = failure?.response?.data?.error;
         if (failure?.response?.data instanceof Blob) {
           try {
@@ -1053,7 +1068,10 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
             console.error('Unable to read certificate error response:', parseError);
           }
         }
-        throw new Error(serverMessage || 'Unable to generate certificates. Check that the selected templates are uploaded and that eligible published results exist.');
+        const fallbackMsg = exportItem.type === 'badge'
+          ? 'Unable to generate badges. Check that the badge template is uploaded in Templates.'
+          : 'Unable to generate certificates. Check that the selected templates are uploaded and that eligible published results exist.';
+        throw new Error(serverMessage || fallbackMsg);
       } else {
         throw new Error(`Unable to generate ${exportItem.typeName || 'document'} because participant data could not be loaded.`);
       }
@@ -1095,6 +1113,16 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
       pills.push(`Quality: ${exportQuality.toUpperCase()}`);
       pills.push(`Types: ${selectedCertTypes.length}`);
     }
+    if (selectedExportType === 'badge') {
+      pills.push(`Quality: ${exportQuality.toUpperCase()}`);
+      pills.push('9 Badges / A4 Sheet');
+      if (selectedTeamId && selectedTeamId !== 'all') {
+        const tm = teams.find(t => t.id === parseInt(selectedTeamId, 10));
+        pills.push(`Team: ${tm ? tm.name : 'Selected Team'}`);
+      } else {
+        pills.push('Team: All teams');
+      }
+    }
     if (selectedExportType === 'results') {
       pills.push('Published results only');
     }
@@ -1126,7 +1154,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
       copiesCount: copiesCount,
       judgeMaxMarks: judgeMaxMarks,
       exportQuality: exportQuality,
-      certTypes: selectedCertTypes,
+      certTypes: selectedExportType === 'badge' ? ['badge'] : selectedCertTypes,
       createdAt: new Date(startMs).toISOString()
     };
 
@@ -1194,7 +1222,6 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
       description: 'Participant ID cards with chest numbers, team and category.',
       icon: BadgeCheck,
       iconBg: 'bg-indigo-50 text-indigo-600',
-      comingSoon: true,
     }
   ];
 
@@ -1222,6 +1249,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
     { id: 'second_place', label: '2nd Place' },
     { id: 'third_place', label: '3rd Place' },
     { id: 'participation', label: 'Participation' },
+    { id: 'badge', label: 'Badge' },
     { id: 'common_prize', label: 'Common Prize', comingSoon: true },
     { id: 'grade_certificate', label: 'Grade', comingSoon: true }
   ];
@@ -1465,8 +1493,8 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                   </div>
                 </div>
 
-                {/* CERTIFICATE FILTER SECTION (Matching Screenshot) */}
-                {selectedExportType === 'certificate' && (
+                {/* CERTIFICATE & BADGE FILTER SECTION */}
+                {(selectedExportType === 'certificate' || selectedExportType === 'badge') && (
                   <>
                     {/* Export Quality Cards */}
                     <div>
@@ -1539,34 +1567,44 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                       </div>
                     </div>
 
-                    {/* Certificate Types Selectable Pills (Matching Screenshot) */}
-                    <div>
-                      <label className="block text-xs font-bold text-gray-900 mb-2">Certificate Types</label>
-                      <div className="flex flex-wrap gap-2">
-                        {certTypePills.map((pill) => {
-                          const isSelected = selectedCertTypes.includes(pill.id);
-                          return (
-                            <button
-                              key={pill.id}
-                              type="button"
-                              disabled={pill.comingSoon}
-                              onClick={() => !pill.comingSoon && toggleCertType(pill.id)}
-                              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${
-                                pill.comingSoon
-                                  ? 'cursor-not-allowed bg-gray-100 border border-gray-200 text-gray-500 opacity-75'
-                                  : isSelected
-                                  ? 'bg-indigo-600 text-white shadow-2xs'
-                                  : 'cursor-pointer bg-white border border-gray-200 text-gray-800 hover:bg-gray-50'
-                              }`}
-                            >
-                              {!pill.comingSoon && isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                              <span>{pill.label}</span>
-                              {pill.comingSoon && <span className="text-[9px] uppercase tracking-wide">Coming Soon</span>}
-                            </button>
-                          );
-                        })}
+                    {/* Badge Info Banner */}
+                    {selectedExportType === 'badge' && (
+                      <div className="p-3.5 bg-indigo-50/80 border border-indigo-100 rounded-xl text-xs text-indigo-900 flex items-center space-x-2.5">
+                        <BadgeCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <span>Exports 1 participant badge per registered attendee (chest number, name, category, team).</span>
                       </div>
-                    </div>
+                    )}
+
+                    {/* Certificate Types Selectable Pills (Certificate only) */}
+                    {selectedExportType === 'certificate' && (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-900 mb-2">Certificate Types</label>
+                        <div className="flex flex-wrap gap-2">
+                          {certTypePills.map((pill) => {
+                            const isSelected = selectedCertTypes.includes(pill.id);
+                            return (
+                              <button
+                                key={pill.id}
+                                type="button"
+                                disabled={pill.comingSoon}
+                                onClick={() => !pill.comingSoon && toggleCertType(pill.id)}
+                                className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 ${
+                                  pill.comingSoon
+                                    ? 'cursor-not-allowed bg-gray-100 border border-gray-200 text-gray-500 opacity-75'
+                                    : isSelected
+                                    ? 'bg-indigo-600 text-white shadow-2xs'
+                                    : 'cursor-pointer bg-white border border-gray-200 text-gray-800 hover:bg-gray-50'
+                                }`}
+                              >
+                                {!pill.comingSoon && isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                <span>{pill.label}</span>
+                                {pill.comingSoon && <span className="text-[9px] uppercase tracking-wide">Coming Soon</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -1626,11 +1664,11 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                   </div>
                 )}
 
-                {/* Select Team Dropdown (Only when Call List & Team Wise is selected) */}
-                {selectedExportType === 'call_list' && callListMode === 'team' && (
+                {/* Select Team Dropdown (When Call List Team Wise OR Badge is selected) */}
+                {((selectedExportType === 'call_list' && callListMode === 'team') || selectedExportType === 'badge') && (
                   <div>
                     <label className="block text-xs font-bold text-gray-900 mb-1">
-                      Select Team
+                      {selectedExportType === 'badge' ? 'Team' : 'Select Team'}
                     </label>
                     <select
                       value={selectedTeamId}
@@ -1642,7 +1680,11 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                         <option key={t.id} value={t.id}>{t.name}</option>
                       ))}
                     </select>
-                    <p className="text-[11px] text-gray-400 mt-1">Generate team-wise list for selected team or all teams</p>
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      {selectedExportType === 'badge'
+                        ? 'Download badges for a specific team or all teams'
+                        : 'Generate team-wise list for selected team or all teams'}
+                    </p>
                   </div>
                 )}
 
@@ -1662,21 +1704,23 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                   <p className="text-[11px] text-gray-400 mt-1">Leave empty to include all</p>
                 </div>
 
-                {/* Competitions Dropdown */}
-                <div>
-                  <label className="block text-xs font-bold text-gray-900 mb-1">Competitions</label>
-                  <select
-                    value={selectedProgramId}
-                    onChange={(e) => setSelectedProgramId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                  >
-                    <option value="all">All competitions...</option>
-                    {programs.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.category?.toUpperCase()})</option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-gray-400 mt-1">Leave empty to include all</p>
-                </div>
+                {/* Competitions Dropdown (Excluded for Badges as badges are participant-level) */}
+                {selectedExportType !== 'badge' && (
+                  <div>
+                    <label className="block text-xs font-bold text-gray-900 mb-1">Competitions</label>
+                    <select
+                      value={selectedProgramId}
+                      onChange={(e) => setSelectedProgramId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    >
+                      <option value="all">All competitions...</option>
+                      {programs.map(p => (
+                        <option key={p.id} value={p.id}>{p.name} ({p.category?.toUpperCase()})</option>
+                      ))}
+                    </select>
+                    <p className="text-[11px] text-gray-400 mt-1">Leave empty to include all</p>
+                  </div>
+                )}
 
               </div>
 

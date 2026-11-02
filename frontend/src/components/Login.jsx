@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, AlertCircle, Users, User, Building2, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, AlertCircle, Users, User, ShieldCheck, X } from 'lucide-react';
 import { authAPI } from '../services/api';
 import EventlooLogo from './common/EventlooLogo';
 
@@ -11,7 +11,6 @@ const Login = () => {
     password: '',
     team_username: '',
     team_password: '',
-    school_code: '',
     otp: '',
   });
   const [mfaSetup, setMfaSetup] = useState(null);
@@ -19,13 +18,14 @@ const Login = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotNotice, setForgotNotice] = useState(false);
+  const [registerNotice, setRegisterNotice] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const hasNavigated = useRef(false);
 
   // Check if user is already authenticated (only on mount)
   useEffect(() => {
-    // Only run if we haven't navigated yet and we're on the login page
     if (hasNavigated.current || location.pathname !== '/login') {
       return;
     }
@@ -41,12 +41,11 @@ const Login = () => {
       } else if (userRole === 'event_manager') {
         navigate('/user/dashboard', { replace: true });
       } else {
-        // Unknown role - clear storage and stay on login
         localStorage.clear();
         hasNavigated.current = false;
       }
     }
-  }, [navigate, location.pathname]); // Include dependencies
+  }, [navigate, location.pathname]);
 
   const handleChange = (e) => {
     setFormData({
@@ -59,11 +58,9 @@ const Login = () => {
   const schoolCredentials = () => ({
     email: formData.email,
     password: formData.password,
-    school_code: formData.school_code,
   });
 
   const getRedirectPath = () => {
-    // Check if there's a stored redirect path
     const redirectPath = localStorage.getItem('redirectAfterLogin');
     if (redirectPath) {
       localStorage.removeItem('redirectAfterLogin');
@@ -89,21 +86,19 @@ const Login = () => {
           otp: formData.otp,
         });
 
-        // Authentication tokens are stored in secure HttpOnly cookies. Keep only
-        // non-sensitive UI/session metadata in browser storage.
         if (data.user) {
+          localStorage.removeItem('team_data');
+          localStorage.removeItem('team_welcome_message');
           localStorage.setItem('user', JSON.stringify(data.user));
           localStorage.setItem('user_role', data.user.role);
           localStorage.setItem('school_data', JSON.stringify(data.user.school));
 
-          // Check for custom redirect path first
           const redirectPath = getRedirectPath();
           if (redirectPath) {
             navigate(redirectPath, { replace: true });
             return;
           }
 
-          // Role-based navigation
           if (data.user.role === 'admin') {
             navigate('/admin', { replace: true });
           } else if (data.user.role === 'event_manager') {
@@ -117,10 +112,9 @@ const Login = () => {
         const { data } = await authAPI.teamManagerLogin({
           team_username: formData.team_username,
           team_password: formData.team_password,
-          school_code: formData.school_code,
         });
 
-        // Tokens remain in HttpOnly cookies; these values are display/routing data.
+        localStorage.removeItem('user');
         localStorage.setItem('user_role', 'team_manager');
         localStorage.setItem('access_type', data.access_type || 'team_manager');
         localStorage.setItem('team_welcome_message', data.message || '');
@@ -130,7 +124,6 @@ const Login = () => {
         }
         if (data.school) localStorage.setItem('school_data', JSON.stringify(data.school));
 
-        // Check for custom redirect path first
         const redirectPath = getRedirectPath();
         if (redirectPath) {
           navigate(redirectPath, { replace: true });
@@ -157,13 +150,13 @@ const Login = () => {
         setShowOtp(true);
       }
       const validationMessage = responseData && typeof responseData === 'object'
-        ? Object.values(responseData).flat().find(value => typeof value === 'string')
+        ? Object.values(responseData).flat().find((value) => typeof value === 'string')
         : null;
       const errorMessage = responseData?.error ||
                           responseData?.detail ||
                           responseData?.message ||
                           validationMessage ||
-                          'Login failed. Please check your school code and credentials.';
+                          'Login failed. Please check your credentials.';
       setError(errorMessage);
     } finally {
       setLoading(false);
@@ -171,241 +164,403 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        {/* Header */}
-        <div className="text-center flex flex-col items-center">
-          <div className="mb-4 transform hover:scale-105 transition-transform duration-300">
-            <EventlooLogo variant="full" size="xl" showSubtitle />
+    <div className="min-h-screen w-full flex bg-white font-sans antialiased text-slate-900 selection:bg-indigo-100 selection:text-indigo-900">
+      
+      {/* ========================================================================= */}
+      {/* 1. LEFT VISUAL / STORYTELLING PANEL (MATCHING REFERENCE DESIGN) */}
+      {/* ========================================================================= */}
+      <div className="hidden lg:flex lg:w-[54%] xl:w-[58%] relative flex-col justify-between overflow-hidden bg-gradient-to-b from-[#f3f7fd] via-[#ecf3fc] to-[#e4eefb] p-8 xl:p-12 select-none border-r border-slate-100">
+        
+        {/* Soft Organic Right Wave Divider (Smooth transition into white form panel) */}
+        <svg
+          className="absolute top-0 right-0 h-full w-12 xl:w-16 pointer-events-none text-white fill-current translate-x-px"
+          viewBox="0 0 100 1000"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <path d="M0,0 C35,220 85,320 45,550 C10,750 85,870 100,1000 L100,0 Z" />
+        </svg>
+
+        {/* Top Section: Brand & Headline */}
+        <div className="relative z-10 max-w-xl">
+          <EventlooLogo size="md" />
+
+          <div className="mt-8 xl:mt-10">
+            <h1 className="text-3xl sm:text-4xl xl:text-[44px] font-extrabold text-slate-900 tracking-tight leading-[1.14]">
+              Smarter Festivals
+              <span className="block text-indigo-600 mt-1">Unforgettable Moments</span>
+            </h1>
+            <p className="mt-3.5 text-xs sm:text-sm text-slate-500 font-normal leading-relaxed max-w-md">
+              Streamline candidate registrations, track real-time scores, manage team entries, and coordinate school festivals with zero friction.
+            </p>
           </div>
-          <p className="text-gray-600 text-sm mt-1">Sign in to your event management account</p>
         </div>
 
-        {/* Login Type Toggle */}
-        <div className="flex bg-gray-100 rounded-lg p-1">
-          <button
-            type="button"
-            onClick={() => setLoginType('user')}
-            className={`flex-1 flex items-center justify-center py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-              loginType === 'user'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <User className="w-4 h-4 mr-2" />
-            User Login
-          </button>
-          <button
-            type="button"
-            onClick={() => setLoginType('team')}
-            className={`flex-1 flex items-center justify-center py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-              loginType === 'team'
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            <Users className="w-4 h-4 mr-2" />
-            Team Login
-          </button>
+        {/* Center Illustration: Generated Event Check-In Queue Artwork */}
+        <div className="relative z-10 my-4 flex-1 flex items-center justify-center">
+          <div className="w-full max-w-2xl rounded-2xl overflow-hidden shadow-2xl shadow-indigo-950/10 border border-white/80 bg-white/40 backdrop-blur-xs transition-all duration-300 hover:shadow-indigo-900/15">
+            <img
+              src="/event-checkin-illustration.jpg"
+              alt="Students checking into school festival with mobile tickets"
+              className="w-full h-auto object-cover object-center transform transition-transform duration-700 hover:scale-[1.01]"
+              loading="eager"
+            />
+          </div>
         </div>
 
-        {/* Login Form */}
-        <div className="card">
-          <div className="card-body">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-2 fade-in">
-                  <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0" />
-                  <span className="text-red-700 text-sm">{error}</span>
-                </div>
-              )}
+        {/* Bottom Status / Badges */}
+        <div className="relative z-10 flex items-center justify-between text-[11px] text-slate-500 font-medium pt-2">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Live Festival Scoring & Team Roster Management</span>
+          </div>
+          <span>Trusted by Leading Schools</span>
+        </div>
+      </div>
 
-              <div>
-                <label className="form-label">School Code</label>
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <Building2 className="h-5 w-5 text-gray-400" />
+      {/* ========================================================================= */}
+      {/* 2. RIGHT LOGIN CARD / FORM (MINIMAL, CLEAN, PROFESSIONAL) */}
+      {/* ========================================================================= */}
+      <div className="w-full lg:w-[46%] xl:w-[42%] flex flex-col justify-center items-center px-6 sm:px-12 xl:px-16 py-10 bg-white min-h-screen">
+        <div className="w-full max-w-[390px] space-y-6">
+
+          {/* Mobile Logo Only */}
+          <div className="lg:hidden flex flex-col items-center text-center mb-2">
+            <EventlooLogo size="lg" />
+            <p className="text-xs text-slate-500 mt-2">School Event & Festival Management</p>
+          </div>
+
+          {/* Title & Subtitle */}
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900">
+              Welcome Back
+            </h2>
+            <p className="text-xs text-slate-400 mt-1 font-normal">
+              {loginType === 'user'
+                ? 'Sign in to manage your festival, programs and scores.'
+                : 'Sign in to access your team entries and candidate roster.'}
+            </p>
+          </div>
+
+          {/* Role Segmented Pill Switcher */}
+          <div className="flex bg-slate-100/80 p-1 rounded-xl gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setLoginType('user');
+                setError('');
+                setForgotNotice(false);
+              }}
+              className={`flex-1 flex items-center justify-center py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                loginType === 'user'
+                  ? 'bg-white text-indigo-600 shadow-2xs ring-1 ring-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <User className="w-3.5 h-3.5 mr-1.5 text-indigo-500" />
+              Event / Admin
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLoginType('team');
+                setError('');
+                setForgotNotice(false);
+              }}
+              className={`flex-1 flex items-center justify-center py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-200 ${
+                loginType === 'team'
+                  ? 'bg-white text-indigo-600 shadow-2xs ring-1 ring-slate-200/50'
+                  : 'text-slate-500 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5 mr-1.5 text-indigo-500" />
+              Team Leader
+            </button>
+          </div>
+
+          {/* Error Banner */}
+          {error && (
+            <div className="bg-rose-50 border border-rose-200/80 rounded-xl p-3 flex items-start gap-2.5 text-xs text-rose-700 animate-in fade-in duration-200">
+              <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
+              <span className="leading-snug">{error}</span>
+            </div>
+          )}
+
+          {/* Main Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {loginType === 'user' ? (
+              <>
+                {/* Email Address */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Email address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                    <input
+                      type="email"
+                      name="email"
+                      value={formData.email}
+                      onChange={handleChange}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/70 outline-none transition-all shadow-2xs"
+                      placeholder="Enter your email address"
+                      autoComplete="email"
+                      required
+                    />
                   </div>
-                  <input
-                    type="text"
-                    name="school_code"
-                    value={formData.school_code}
-                    onChange={handleChange}
-                    className="form-input pl-10"
-                    placeholder="Enter your school code"
-                    autoCapitalize="none"
-                    required
-                  />
                 </div>
-              </div>
 
-              {loginType === 'user' ? (
-                <>
-                  <div>
-                    <label className="form-label">Email Address</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Mail className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <input
-                        type="email"
-                        name="email"
-                        value={formData.email}
-                        onChange={handleChange}
-                        className="form-input pl-10"
-                        placeholder="Enter your email"
-                        required
-                      />
-                    </div>
+                {/* Password */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-10 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/70 outline-none transition-all shadow-2xs"
+                      placeholder="Enter your password"
+                      autoComplete="current-password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
 
-                  <div>
-                    <label className="form-label">Password</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Lock className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        name="password"
-                        value={formData.password}
-                        onChange={handleChange}
-                        className="form-input pl-10 pr-10"
-                        placeholder="Enter your password"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                        ) : (
-                          <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                  {/* Forgot Password Link (Positioned on the right, matching reference) */}
+                  <div className="flex justify-end mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setForgotNotice((prev) => !prev)}
+                      className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 hover:underline transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                </div>
+
+                {/* MFA / 2FA Block */}
+                {(showOtp || mfaSetup) && (
+                  <div className="space-y-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3.5 text-xs">
+                    <div className="flex items-start gap-2.5">
+                      <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900">Authenticator verification</p>
+                        {mfaSetup && (
+                          <>
+                            <p className="mt-1 text-[11px] text-slate-600">
+                              Add this key into your authenticator app:
+                            </p>
+                            <code className="mt-1.5 block break-all rounded-md bg-white border border-indigo-100 px-2.5 py-1 text-[11px] text-indigo-700 font-mono">
+                              {mfaSetup.secret}
+                            </code>
+                          </>
                         )}
-                      </button>
-                    </div>
-                  </div>
-
-                  {(showOtp || mfaSetup) && (
-                    <div className="space-y-3 rounded-lg border border-indigo-100 bg-indigo-50/60 p-4">
-                      <div className="flex items-start gap-3">
-                        <ShieldCheck className="mt-0.5 h-5 w-5 flex-shrink-0 text-indigo-600" />
-                        <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-900">Authenticator verification</p>
-                          {mfaSetup && (
-                            <>
-                              <p className="mt-1 text-xs text-gray-600">
-                                Add this setup key to your authenticator app. Keep it private.
-                              </p>
-                              <code className="mt-2 block break-all rounded-md bg-white px-3 py-2 text-xs text-indigo-700">
-                                {mfaSetup.secret}
-                              </code>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <label className="form-label">6-digit authenticator code</label>
-                        <input
-                          type="text"
-                          name="otp"
-                          value={formData.otp}
-                          onChange={handleChange}
-                          className="form-input"
-                          placeholder="000000"
-                          inputMode="numeric"
-                          autoComplete="one-time-code"
-                          pattern="[0-9]{6}"
-                          maxLength="6"
-                          required
-                        />
                       </div>
                     </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div>
-                    <label className="form-label">Team Username</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Users className="h-5 w-5 text-gray-400" />
-                      </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                        6-digit verification code
+                      </label>
                       <input
                         type="text"
-                        name="team_username"
-                        value={formData.team_username}
+                        name="otp"
+                        value={formData.otp}
                         onChange={handleChange}
-                        className="form-input pl-10"
-                        placeholder="Enter team username"
+                        className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
+                        placeholder="000000"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        pattern="[0-9]{6}"
+                        maxLength={6}
                         required
                       />
                     </div>
                   </div>
-
-                  <div>
-                    <label className="form-label">Team Password</label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <Lock className="h-5 w-5 text-gray-400" />
-                      </div>
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        name="team_password"
-                        value={formData.team_password}
-                        onChange={handleChange}
-                        className="form-input pl-10 pr-10"
-                        placeholder="Enter team password"
-                        required
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                      >
-                        {showPassword ? (
-                          <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                        ) : (
-                          <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                        )}
-                      </button>
-                    </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Team Leader Username */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Team Leader Username
+                  </label>
+                  <div className="relative">
+                    <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      name="team_username"
+                      value={formData.team_username}
+                      onChange={handleChange}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/70 outline-none transition-all shadow-2xs"
+                      placeholder="Enter team leader username"
+                      autoCapitalize="none"
+                      required
+                    />
                   </div>
-                </>
-              )}
+                </div>
 
+                {/* Team Leader Password */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                    Team Leader Password
+                  </label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      name="team_password"
+                      value={formData.team_password}
+                      onChange={handleChange}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-10 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/70 outline-none transition-all shadow-2xs"
+                      placeholder="Enter password"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+
+                  {/* Forgot Password Link */}
+                  <div className="flex justify-end mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setForgotNotice((prev) => !prev)}
+                      className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 hover:underline transition-colors"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* Inline Forgot Password Notice */}
+            {forgotNotice && (
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50/90 p-3 text-xs text-indigo-900 animate-in fade-in duration-150">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[11px] leading-relaxed">
+                    <strong>Need a password reset?</strong> Please contact your School Administrator or Festival Coordinator to update your credentials.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setForgotNotice(false)}
+                    className="text-indigo-400 hover:text-indigo-700 p-0.5"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Primary Submit Button */}
+            <div className="pt-2">
               <button
                 type="submit"
                 disabled={loading}
-                className="btn btn-primary w-full btn-lg"
+                className="h-11 w-full rounded-xl bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white font-semibold text-xs tracking-wide shadow-sm hover:shadow-md transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
-                  <div className="flex items-center justify-center">
-                    <div className="loading-spinner h-5 w-5 mr-2"></div>
-                    Signing in...
-                  </div>
+                  <>
+                    <div className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                    <span>Signing in...</span>
+                  </>
                 ) : (
-                  loginType === 'user' ? 'Sign In' : 'Team Login'
+                  <span>{loginType === 'user' ? 'Login' : 'Login as Team Leader'}</span>
                 )}
               </button>
-            </form>
-          </div>
-        </div>
+            </div>
+          </form>
 
-        {/* Footer */}
-        <div className="text-center">
-          <p className="text-sm text-gray-500">
-            Eventloo - School Event Management System
-          </p>
-          <p className="text-xs text-gray-400 mt-1">
-            © 2025 Eventloo. All rights reserved.
-          </p>
+          {/* Registration & Cross-Role Switcher (Matching Reference Design) */}
+          <div className="space-y-4 pt-1 text-center">
+            <p className="text-xs text-slate-500">
+              Don't have an account?{' '}
+              <button
+                type="button"
+                onClick={() => setRegisterNotice((prev) => !prev)}
+                className="font-semibold text-indigo-600 hover:text-indigo-700 hover:underline"
+              >
+                Register
+              </button>
+            </p>
+
+            {registerNotice && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3 text-[11px] text-slate-600 text-left animate-in fade-in duration-150">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="leading-relaxed">
+                    School & team accounts are provisioned by your festival administrator. Contact your coordinator for onboarding.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setRegisterNotice(false)}
+                    className="text-slate-400 hover:text-slate-600 p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Cross-role link with arrow */}
+            <div className="pt-3 border-t border-slate-100">
+              {loginType === 'user' ? (
+                <p className="text-xs text-slate-500">
+                  Are you a Team Leader?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginType('team');
+                      setError('');
+                      setForgotNotice(false);
+                      setRegisterNotice(false);
+                    }}
+                    className="font-semibold text-indigo-600 hover:text-indigo-700 hover:underline inline-flex items-center gap-0.5"
+                  >
+                    Login here →
+                  </button>
+                </p>
+              ) : (
+                <p className="text-xs text-slate-500">
+                  Are you an Event Admin?{' '}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLoginType('user');
+                      setError('');
+                      setForgotNotice(false);
+                      setRegisterNotice(false);
+                    }}
+                    className="font-semibold text-indigo-600 hover:text-indigo-700 hover:underline inline-flex items-center gap-0.5"
+                  >
+                    Login here →
+                  </button>
+                </p>
+              )}
+            </div>
+          </div>
+
         </div>
       </div>
+
     </div>
   );
 };
 
-export default Login; 
+export default Login;

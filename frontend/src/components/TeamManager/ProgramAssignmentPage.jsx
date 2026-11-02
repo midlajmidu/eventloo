@@ -324,12 +324,7 @@ const ProgramAssignmentPage = () => {
     return assignedStudents.length < limit;
   };
 
-  const getCategoryBadgeClass = (category) => {
-    const cat = category?.toLowerCase();
-    if (cat === 'hs') return 'bg-blue-50 text-blue-700 border-blue-200';
-    if (cat === 'hss') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    if (cat === 'up') return 'bg-purple-50 text-purple-700 border-purple-200';
-    if (cat === 'lp' || cat === 'primary') return 'bg-amber-50 text-amber-700 border-amber-200';
+  const getCategoryBadgeClass = (_category) => {
     return 'bg-slate-100 text-slate-700 border-slate-200';
   };
 
@@ -346,8 +341,8 @@ const ProgramAssignmentPage = () => {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600 mx-auto mb-3"></div>
-          <p className="text-gray-500 text-sm">Loading program assignment...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3"></div>
+          <p className="text-slate-500 text-xs">Loading program assignment...</p>
         </div>
       </div>
     );
@@ -356,12 +351,12 @@ const ProgramAssignmentPage = () => {
   if (!program) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center bg-white p-8 rounded-xl shadow-sm border border-gray-200">
-          <BookOpen className="h-12 w-12 text-red-500 mx-auto mb-3" />
-          <p className="text-gray-800 font-semibold mb-3">Program not found</p>
+        <div className="text-center bg-white p-8 rounded-xl shadow-xs border border-slate-200">
+          <BookOpen className="h-10 w-10 text-rose-500 mx-auto mb-3" />
+          <p className="text-slate-800 font-semibold mb-3 text-sm">Program not found</p>
           <button
             onClick={() => navigate(-1)}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+            className="px-3.5 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-semibold"
           >
             Go Back
           </button>
@@ -386,11 +381,11 @@ const ProgramAssignmentPage = () => {
   const teamSize = program.is_team_based ? (program.team_size || 1) : 1;
 
   return (
-    <div className="min-h-screen bg-slate-50 py-6 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-6xl mx-auto space-y-5">
+    <div className="min-h-screen bg-[#f7f8fb] py-6 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-6xl mx-auto space-y-4">
 
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
           <div className="flex items-center space-x-3">
             <button
               onClick={() => {
@@ -401,30 +396,29 @@ const ProgramAssignmentPage = () => {
                   navigate(`/team-manager/events/${eventId}`);
                 }
               }}
-              className="p-2 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors border border-gray-200 cursor-pointer"
+              className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors border border-slate-200 cursor-pointer"
               title="Back to Programs"
             >
               <ArrowLeft className="h-4 w-4" />
             </button>
             <div>
-              <div className="flex items-center space-x-2">
-                <h1 className="text-xl font-bold text-gray-900">{program.name}</h1>
-                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full border ${getCategoryBadgeClass(program.category)}`}>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <h1 className="text-lg font-bold text-slate-900 tracking-tight">{program.name}</h1>
+                <span className={`px-2 py-0.5 text-[11px] font-medium rounded-md border ${getCategoryBadgeClass(program.category)}`}>
                   {program.category?.toUpperCase()}
                 </span>
-                <span className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full border border-gray-200">
-                  {program.is_team_based ? `Team (${totalSubTeams} Sub-Teams × ${teamSize} members)` : 'Individual'}
+                <span className="px-2 py-0.5 text-[11px] font-medium bg-slate-100 text-slate-600 rounded-md border border-slate-200/80">
+                  {program.is_team_based ? `Team (${totalSubTeams} Sub-Teams × ${teamSize})` : 'Individual'}
                 </span>
               </div>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Total Allowed: <span className="font-medium text-gray-700">{maxLimit}</span> • Assigned: <span className="font-medium text-blue-600">{assignedStudents.length}</span> / {maxLimit}
+              <p className="text-xs text-slate-500 mt-0.5">
+                Total Allowed: <span className="font-medium text-slate-700">{maxLimit}</span> • Assigned: <span className="font-semibold text-indigo-600">{assignedStudents.length}</span> / {maxLimit}
               </p>
             </div>
           </div>
 
           <div className="flex items-center space-x-3">
-            <div className={`px-3 py-1.5 rounded-lg text-xs font-medium border flex items-center space-x-1.5 ${canAssignMore() ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-              }`}>
+            <div className={`px-2.5 py-1 rounded-lg text-xs font-medium border flex items-center space-x-1.5 ${canAssignMore() ? 'bg-indigo-50 text-indigo-700 border-indigo-200/80' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
               <Users className="h-3.5 w-3.5" />
               <span>{assignedStudents.length} / {maxLimit} Slots Filled</span>
             </div>
@@ -433,31 +427,31 @@ const ProgramAssignmentPage = () => {
 
         {/* Notifications */}
         {message && (
-          <div className={`p-3 rounded-lg text-sm flex items-center space-x-2 ${messageType === 'success'
+          <div className={`p-3 rounded-lg text-xs flex items-center space-x-2 ${messageType === 'success'
               ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-              : 'bg-red-50 border border-red-200 text-red-800'
+              : 'bg-rose-50 border border-rose-200 text-rose-800'
             }`}>
-            {messageType === 'success' ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-red-600" />}
+            {messageType === 'success' ? <CheckCircle className="h-4 w-4 text-emerald-600" /> : <XCircle className="h-4 w-4 text-rose-600" />}
             <span>{message}</span>
           </div>
         )}
 
         {/* 1. Sub-Team Group Cards Section (For Team-Based Programs) */}
         {program.is_team_based && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-sm font-bold text-gray-900 uppercase tracking-wider flex items-center space-x-1.5">
-                  <Users className="w-4 h-4 text-blue-600" />
-                  <span>Team / Sub-Team Group Assignments ({totalSubTeams} Teams allowed)</span>
+                <h2 className="text-xs font-semibold text-slate-900 uppercase tracking-wider flex items-center space-x-1.5">
+                  <Users className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Team Group Assignments ({totalSubTeams} Teams allowed)</span>
                 </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Each sub-team requires exactly <strong className="text-gray-700">{teamSize} members</strong>. Select a team to assign or manage leaders.
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Each sub-team requires exactly <strong className="text-slate-700">{teamSize} members</strong>. Select a team to assign or manage leaders.
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {Array.from({ length: totalSubTeams }).map((_, idx) => {
                 const subTeamNum = idx + 1;
                 const members = assignedStudents.filter(s => (s.sub_team_number || 1) === subTeamNum);
@@ -468,18 +462,18 @@ const ProgramAssignmentPage = () => {
                 return (
                   <div
                     key={subTeamNum}
-                    className={`bg-white rounded-2xl border transition-all ${isActive ? 'border-blue-500 shadow-md ring-2 ring-blue-100' : 'border-gray-200 shadow-2xs'
+                    className={`bg-white rounded-xl border transition-all ${isActive ? 'border-indigo-600 shadow-2xs ring-1 ring-indigo-600/30' : 'border-slate-200/80 shadow-2xs'
                       }`}
                   >
                     {/* Sub-Team Card Header */}
-                    <div className="p-4 border-b border-gray-100 flex items-center justify-between bg-gray-50/50 rounded-t-2xl">
+                    <div className="p-3 sm:p-3.5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2 bg-slate-50/60 rounded-t-xl">
                       <div className="flex items-center space-x-2">
-                        <span className={`px-2.5 py-1 text-xs font-bold rounded-lg border ${isActive ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-100 text-gray-800 border-gray-200'
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-md border ${isActive ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-100 text-slate-700 border-slate-200/80'
                           }`}>
                           Sub-Team {subTeamNum}
                         </span>
                         {hasLeader && (
-                          <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 rounded-full flex items-center space-x-1">
+                          <span className="px-2 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200 rounded-md flex items-center space-x-1">
                             <Crown className="w-3 h-3 text-amber-600" />
                             <span>Leader Set</span>
                           </span>
@@ -487,9 +481,9 @@ const ProgramAssignmentPage = () => {
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full border ${isFull ? 'bg-emerald-100 text-emerald-800 border-emerald-200' : 'bg-blue-50 text-blue-800 border-blue-200'
+                        <span className={`px-2 py-0.5 text-[11px] font-medium rounded-md border ${isFull ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200/80'
                           }`}>
-                          {members.length} / {teamSize} Members
+                          {members.length} / {teamSize}
                         </span>
 
                         <button
@@ -498,62 +492,61 @@ const ProgramAssignmentPage = () => {
                             setSelectedSubTeam(subTeamNum);
                             setSelectedStudentIds([]);
                           }}
-                          className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${isActive ? 'bg-blue-50 text-blue-700 border-blue-200 font-bold' : 'bg-white text-gray-600 hover:bg-gray-100 border-gray-200'
+                          className={`px-2 py-0.5 text-xs font-medium rounded-md border transition-colors cursor-pointer ${isActive ? 'bg-indigo-50 text-indigo-700 border-indigo-200 font-semibold' : 'bg-white text-slate-600 hover:bg-slate-50 border-slate-200'
                             }`}
                         >
-                          {isActive ? 'Active Target' : 'Select Target'}
+                          {isActive ? 'Active Target' : 'Select'}
                         </button>
                       </div>
                     </div>
 
                     {/* Sub-Team Member List */}
-                    <div className="p-4 space-y-3">
+                    <div className="p-3 space-y-2">
                       {members.length === 0 ? (
-                        <div className="py-6 text-center text-xs text-gray-400 border border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                        <div className="py-5 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-lg bg-slate-50/40">
                           No members assigned to Sub-Team {subTeamNum} yet.
                         </div>
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-1.5">
                           {members.map(member => (
                             <div
                               key={member.id}
-                              className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${member.is_leader ? 'bg-amber-50/50 border-amber-200' : 'bg-gray-50/70 border-gray-200'
+                              className={`p-2.5 rounded-lg border flex items-center justify-between gap-2 ${member.is_leader ? 'bg-amber-50/40 border-amber-200/80' : 'bg-slate-50/70 border-slate-200/80'
                                 }`}
                             >
-                              <div className="flex items-center space-x-3">
-                                <div>
-                                  <div className="font-bold text-xs text-gray-900 flex items-center space-x-1.5">
-                                    <span>{member.name}</span>
-                                    {member.is_leader && (
-                                      <span className="px-1.5 py-0.5 text-[9px] font-extrabold bg-amber-500 text-white rounded flex items-center space-x-0.5">
-                                        <Crown className="w-2.5 h-2.5" />
-                                        <span>LEADER</span>
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="text-[11px] text-gray-500 flex items-center space-x-2 mt-0.5">
-                                    <span>ID: {member.student_id}</span>
-                                    {member.chest_number && (
-                                      <span className="text-blue-600 font-semibold">Chest #: {member.chest_number}</span>
-                                    )}
-                                  </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="font-medium text-xs text-slate-900 flex flex-wrap items-center gap-1.5">
+                                  <span className="truncate">{member.name}</span>
+                                  {member.is_leader && (
+                                    <span className="px-1.5 py-0.2 text-[9px] font-semibold bg-amber-500 text-white rounded flex items-center space-x-0.5 shrink-0">
+                                      <Crown className="w-2.5 h-2.5" />
+                                      <span>LEADER</span>
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                                  <span>ID: {member.student_id}</span>
+                                  {member.chest_number && (
+                                    <span className="text-indigo-600 font-medium">Chest #: {member.chest_number}</span>
+                                  )}
                                 </div>
                               </div>
 
-                              <div className="flex items-center space-x-2">
+                              <div className="flex items-center space-x-1.5 shrink-0">
                                 {/* Leader Designation Button */}
                                 {!member.is_leader ? (
                                   <button
                                     type="button"
                                     onClick={() => handleSetLeader(member.id, subTeamNum)}
-                                    className="px-2 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors flex items-center space-x-1 cursor-pointer"
+                                    className="px-2 py-0.5 text-[11px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-md transition-colors flex items-center space-x-1 cursor-pointer"
                                     title="Set as Group Leader"
                                   >
                                     <Crown className="w-3 h-3 text-amber-600" />
-                                    <span>Make Leader</span>
+                                    <span className="hidden sm:inline">Make Leader</span>
+                                    <span className="sm:hidden">Leader</span>
                                   </button>
                                 ) : (
-                                  <span className="px-2 py-1 text-[11px] font-bold text-amber-800 bg-amber-100 border border-amber-300 rounded-lg flex items-center space-x-1">
+                                  <span className="px-2 py-0.5 text-[11px] font-medium text-amber-800 bg-amber-100 border border-amber-300 rounded-md flex items-center space-x-1">
                                     <Crown className="w-3 h-3 text-amber-600 fill-amber-500" />
                                     <span>Leader</span>
                                   </span>
@@ -563,10 +556,10 @@ const ProgramAssignmentPage = () => {
                                   type="button"
                                   onClick={() => removeStudent(member.id)}
                                   disabled={removing}
-                                  className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                  className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
                                   title="Remove Member"
                                 >
-                                  <UserMinus className="w-4 h-4" />
+                                  <UserMinus className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             </div>
@@ -583,38 +576,38 @@ const ProgramAssignmentPage = () => {
 
         {/* 2. Individual Program Assigned List (Only for Single/Individual Programs) */}
         {!program.is_team_based && assignedStudents.length > 0 && !showAssignedOnly && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="px-4 py-3 bg-emerald-50/50 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center">
+          <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden">
+            <div className="px-4 py-2.5 bg-slate-50/60 border-b border-slate-100 flex items-center justify-between">
+              <h2 className="text-xs font-semibold text-slate-800 uppercase tracking-wider flex items-center">
                 <CheckCircle className="h-3.5 w-3.5 text-emerald-600 mr-1.5" />
                 Assigned Students ({assignedStudents.length})
               </h2>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-slate-100">
+                <thead className="bg-slate-50/60">
                   <tr>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Student</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Student ID</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Class</th>
-                    <th className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">Category</th>
-                    <th className="px-4 py-2 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Student</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Student ID</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Class</th>
+                    <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Category</th>
+                    <th className="px-4 py-2 text-right text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
+                <tbody className="divide-y divide-slate-100 bg-white">
                   {assignedStudents.map((student) => (
-                    <tr key={student.id} className="hover:bg-gray-50/80 transition-colors">
+                    <tr key={student.id} className="hover:bg-indigo-50/20 transition-colors">
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <div className="font-semibold text-xs text-gray-900">{student.name}</div>
+                        <div className="font-medium text-xs text-slate-900">{student.name}</div>
                         {student.chest_number && (
-                          <div className="text-[10px] text-blue-600 font-medium">Chest #: {student.chest_number}</div>
+                          <div className="text-[10px] text-indigo-600 font-medium">Chest #: {student.chest_number}</div>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-500">{student.student_id}</td>
-                      <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-600 font-medium">{student.grade || '-'}</td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-xs text-slate-500 font-mono">{student.student_id}</td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-xs text-slate-600 font-medium">{student.grade || '-'}</td>
                       <td className="px-4 py-2.5 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${getCategoryBadgeClass(student.category)}`}>
+                        <span className={`px-2 py-0.5 text-[10px] font-medium rounded-md border ${getCategoryBadgeClass(student.category)}`}>
                           {student.category?.toUpperCase()}
                         </span>
                       </td>
@@ -622,7 +615,7 @@ const ProgramAssignmentPage = () => {
                         <button
                           onClick={() => removeStudent(student.id)}
                           disabled={removing}
-                          className="px-2.5 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded border border-red-200 transition-colors disabled:opacity-50 inline-flex items-center space-x-1 cursor-pointer"
+                          className="px-2 py-0.5 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-md border border-rose-200 transition-colors disabled:opacity-50 inline-flex items-center space-x-1 cursor-pointer"
                         >
                           <UserMinus className="h-3 w-3" />
                           <span>Remove</span>
@@ -637,18 +630,18 @@ const ProgramAssignmentPage = () => {
         )}
 
         {/* 3. Available Students Search & Selection Table */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden space-y-3 p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-gray-100 pb-3">
-            <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center">
-              <Users className="h-3.5 w-3.5 text-gray-500 mr-1.5" />
+        <div className="bg-white rounded-xl border border-slate-200/80 shadow-[0_1px_2px_rgba(0,0,0,0.02)] overflow-hidden space-y-3 p-3.5 sm:p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-100 pb-3">
+            <h2 className="text-xs font-semibold text-slate-800 uppercase tracking-wider flex items-center">
+              <Users className="h-3.5 w-3.5 text-slate-400 mr-1.5" />
               {showAssignedOnly ? 'Assigned Students' : 'Available Students'} ({filteredStudents.length})
             </h2>
 
             {program.is_team_based && !showAssignedOnly && (
-              <div className="flex items-center space-x-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
                 {/* Active Sub-Team Selector Pills */}
-                <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-xl border border-gray-200">
-                  <span className="text-[11px] font-bold text-gray-500 px-2">Assign Target:</span>
+                <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-lg border border-slate-200/80 overflow-x-auto max-w-full pb-0.5 scrollbar-none">
+                  <span className="text-[10px] font-semibold text-slate-500 px-1.5 shrink-0 uppercase tracking-wider">Target:</span>
                   {Array.from({ length: totalSubTeams }).map((_, idx) => {
                     const subNum = idx + 1;
                     const subCount = assignedStudents.filter(s => (s.sub_team_number || 1) === subNum).length;
@@ -662,9 +655,9 @@ const ProgramAssignmentPage = () => {
                           setSelectedSubTeam(subNum);
                           setSelectedStudentIds([]);
                         }}
-                        className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all border cursor-pointer ${isSelected
-                            ? 'bg-blue-600 text-white border-blue-600 shadow-2xs'
-                            : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                        className={`px-2 py-0.5 text-xs font-medium rounded-md transition-all border cursor-pointer shrink-0 ${isSelected
+                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                           }`}
                       >
                         Sub-Team {subNum} ({subCount}/{teamSize})
@@ -676,7 +669,7 @@ const ProgramAssignmentPage = () => {
                 <button
                   onClick={assignStudentsToSubTeam}
                   disabled={assigning || selectedStudentIds.length !== teamSize}
-                  className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-xs flex items-center space-x-1 cursor-pointer"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs flex items-center justify-center space-x-1 cursor-pointer w-full sm:w-auto"
                 >
                   <UserPlus className="h-3.5 w-3.5" />
                   <span>Assign to Sub-Team {selectedSubTeam}</span>
@@ -686,22 +679,22 @@ const ProgramAssignmentPage = () => {
           </div>
 
           {/* Filters Bar */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search student by name or ID..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-9 pr-3 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-100 focus:border-indigo-300"
               />
             </div>
 
             <select
               value={classFilter}
               onChange={(e) => setClassFilter(e.target.value)}
-              className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-2.5 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-100 focus:border-indigo-300"
             >
               <option value="all">All Classes</option>
               {availableClasses.map(cls => (
@@ -713,7 +706,7 @@ const ProgramAssignmentPage = () => {
               <select
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
-                className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="px-2.5 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-100 focus:border-indigo-300"
               >
                 <option value="all">All Categories</option>
                 {categories.map(cat => (
@@ -725,7 +718,7 @@ const ProgramAssignmentPage = () => {
             <select
               value={showAssignedOnly ? 'assigned' : 'available'}
               onChange={(e) => setShowAssignedOnly(e.target.value === 'assigned')}
-              className="px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-2.5 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 focus:bg-white focus:outline-none focus:ring-1 focus:ring-indigo-100 focus:border-indigo-300"
             >
               <option value="available">Available Students</option>
               <option value="assigned">Assigned Students</option>
@@ -734,85 +727,224 @@ const ProgramAssignmentPage = () => {
 
           {filteredStudents.length === 0 ? (
             <div className="text-center py-10">
-              <Users className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-xs text-gray-500">No students match your filters</p>
+              <Users className="h-7 w-7 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs text-slate-400">No students match your filters</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    {program.is_team_based && !showAssignedOnly && (
-                      <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase w-10">Select</th>
-                    )}
-                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Student Name</th>
-                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Student ID</th>
-                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Gender</th>
-                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Class</th>
-                    <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase">Category</th>
-                    <th className="px-4 py-2.5 text-center text-xs font-semibold text-gray-500 uppercase">Status</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 bg-white">
-                  {filteredStudents.map((student) => {
-                    const assigned = isStudentAssigned(student.id);
-                    const isSelected = selectedStudentIds.includes(student.id);
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-100">
+                  <thead className="bg-slate-50/60">
+                    <tr>
+                      {program.is_team_based && !showAssignedOnly && (
+                        <th className="px-4 py-2 text-center text-[10px] font-semibold text-slate-400 uppercase tracking-wider w-10">Select</th>
+                      )}
+                      <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Student Name</th>
+                      <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Student ID</th>
+                      <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Gender</th>
+                      <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Class</th>
+                      <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Category</th>
+                      <th className="px-4 py-2 text-center text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Status</th>
+                      <th className="px-4 py-2 text-right text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 bg-white">
+                    {filteredStudents.map((student) => {
+                      const assigned = isStudentAssigned(student.id);
+                      const isSelected = selectedStudentIds.includes(student.id);
+                      const groupLimit = event?.max_group_programs_per_student;
+                      const isGeneral = isGeneralCategory(program?.category);
+                      const isLimitReached = !isGeneral && program.is_team_based && groupLimit > 0 && (student.group_count || 0) >= groupLimit;
 
-                    const toggleSelect = () => {
-                      if (isSelected) {
-                        setSelectedStudentIds(selectedStudentIds.filter(id => id !== student.id));
-                      } else {
-                        if (selectedStudentIds.length >= teamSize) {
-                          alert(`You can only select exactly ${teamSize} students for Sub-Team ${selectedSubTeam}.`);
-                          return;
+                      const toggleSelect = () => {
+                        if (isSelected) {
+                          setSelectedStudentIds(selectedStudentIds.filter(id => id !== student.id));
+                        } else {
+                          if (isLimitReached) {
+                            alert(`${student.name} has reached the event limit of ${groupLimit} group programs.`);
+                            return;
+                          }
+                          if (selectedStudentIds.length >= teamSize) {
+                            alert(`You can only select exactly ${teamSize} students for Sub-Team ${selectedSubTeam}.`);
+                            return;
+                          }
+                          setSelectedStudentIds([...selectedStudentIds, student.id]);
                         }
-                        setSelectedStudentIds([...selectedStudentIds, student.id]);
-                      }
-                    };
+                      };
 
-                    return (
-                      <tr key={student.id} className={`hover:bg-gray-50/80 transition-colors ${isSelected ? 'bg-blue-50/50' : ''}`}>
-                        {program.is_team_based && !showAssignedOnly && (
-                          <td className="px-4 py-2.5 text-center">
+                      return (
+                        <tr key={student.id} className={`hover:bg-indigo-50/20 transition-colors ${isSelected ? 'bg-indigo-50/40' : ''} ${isLimitReached && !assigned ? 'opacity-60 bg-slate-50/50' : ''}`}>
+                          {program.is_team_based && !showAssignedOnly && (
+                            <td className="px-4 py-2.5 text-center">
+                              <input
+                                type="checkbox"
+                                disabled={assigned || isLimitReached}
+                                checked={isSelected}
+                                onChange={toggleSelect}
+                                className={`h-3.5 w-3.5 rounded border-slate-300 focus:ring-indigo-500 ${
+                                  isLimitReached ? 'cursor-not-allowed text-slate-300' : 'text-indigo-600 cursor-pointer'
+                                }`}
+                              />
+                            </td>
+                          )}
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            <div className="font-medium text-xs text-slate-900">{student.name}</div>
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap text-xs text-slate-500 font-mono">{student.student_id}</td>
+                          <td className="px-4 py-2.5 whitespace-nowrap text-xs capitalize text-slate-500">{student.gender || '-'}</td>
+                          <td className="px-4 py-2.5 whitespace-nowrap text-xs text-slate-600 font-medium">{student.grade || '-'}</td>
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            <span className={`px-2 py-0.5 text-[10px] font-medium rounded-md border ${getCategoryBadgeClass(student.category)}`}>
+                              {student.category?.toUpperCase()}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap text-center">
+                            {assigned ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Assigned
+                              </span>
+                            ) : isLimitReached ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                                Limit Reached ({student.group_count || 0}/{groupLimit})
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
+                                Available
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap text-right">
+                            {assigned ? (
+                              <button
+                                onClick={() => removeStudent(student.id)}
+                                disabled={removing}
+                                className="px-2 py-0.5 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-md border border-rose-200 transition-colors disabled:opacity-50 inline-flex items-center space-x-1 cursor-pointer"
+                              >
+                                <UserMinus className="h-3 w-3" />
+                                <span>Remove</span>
+                              </button>
+                            ) : (
+                              program.is_team_based ? (
+                                <button
+                                  onClick={toggleSelect}
+                                  className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-200'
+                                    }`}
+                                >
+                                  {isSelected ? 'Selected' : 'Select'}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => assignStudent(student.id)}
+                                  disabled={assigning || !canAssignMore()}
+                                  className="px-2.5 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-md border border-indigo-200 transition-colors disabled:opacity-50 inline-flex items-center space-x-1 cursor-pointer"
+                                >
+                                  <UserPlus className="h-3 w-3" />
+                                  <span>Assign</span>
+                                </button>
+                              )
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards View */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {filteredStudents.map((student) => {
+                  const assigned = isStudentAssigned(student.id);
+                  const isSelected = selectedStudentIds.includes(student.id);
+                  const groupLimit = event?.max_group_programs_per_student;
+                  const isGeneral = isGeneralCategory(program?.category);
+                  const isLimitReached = !isGeneral && program.is_team_based && groupLimit > 0 && (student.group_count || 0) >= groupLimit;
+
+                  const toggleSelect = () => {
+                    if (isSelected) {
+                      setSelectedStudentIds(selectedStudentIds.filter(id => id !== student.id));
+                    } else {
+                      if (isLimitReached) {
+                        alert(`${student.name} has reached the event limit of ${groupLimit} group programs.`);
+                        return;
+                      }
+                      if (selectedStudentIds.length >= teamSize) {
+                        alert(`You can only select exactly ${teamSize} students for Sub-Team ${selectedSubTeam}.`);
+                        return;
+                      }
+                      setSelectedStudentIds([...selectedStudentIds, student.id]);
+                    }
+                  };
+
+                  return (
+                    <div
+                      key={student.id}
+                      onClick={program.is_team_based && !showAssignedOnly && !assigned && !isLimitReached ? toggleSelect : undefined}
+                      className={`p-3 space-y-2 transition-colors ${
+                        isLimitReached && !assigned
+                          ? 'opacity-60 bg-slate-50/70 cursor-not-allowed'
+                          : isSelected
+                            ? 'bg-indigo-50/60'
+                            : 'hover:bg-slate-50/70 cursor-pointer'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          {program.is_team_based && !showAssignedOnly && (
                             <input
                               type="checkbox"
-                              disabled={assigned}
+                              disabled={assigned || isLimitReached}
                               checked={isSelected}
                               onChange={toggleSelect}
-                              className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 cursor-pointer"
+                              onClick={(e) => e.stopPropagation()}
+                              className={`h-3.5 w-3.5 rounded border-slate-300 focus:ring-indigo-500 mt-0.5 shrink-0 ${
+                                isLimitReached ? 'cursor-not-allowed text-slate-300' : 'text-indigo-600 cursor-pointer'
+                              }`}
                             />
-                          </td>
+                          )}
+                          <div className="min-w-0">
+                            <p className="font-medium text-xs text-slate-900 truncate">
+                              {student.name}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-mono">
+                              #{student.student_id}
+                            </p>
+                          </div>
+                        </div>
+
+                        {assigned ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Assigned
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 shrink-0">
+                            Available
+                          </span>
                         )}
-                        <td className="px-4 py-2.5 whitespace-nowrap">
-                          <div className="font-semibold text-xs text-gray-900">{student.name}</div>
-                        </td>
-                        <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-500">{student.student_id}</td>
-                        <td className="px-4 py-2.5 whitespace-nowrap text-xs capitalize text-gray-500">{student.gender || '-'}</td>
-                        <td className="px-4 py-2.5 whitespace-nowrap text-xs text-gray-600 font-medium">{student.grade || '-'}</td>
-                        <td className="px-4 py-2.5 whitespace-nowrap">
-                          <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border ${getCategoryBadgeClass(student.category)}`}>
+                      </div>
+
+                      <div className="flex items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 text-[10px] font-medium rounded-md border ${getCategoryBadgeClass(student.category)}`}>
                             {student.category?.toUpperCase()}
                           </span>
-                        </td>
-                        <td className="px-4 py-2.5 whitespace-nowrap text-center">
-                          {assigned ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <CheckCircle className="h-3 w-3 mr-1" />
-                              Assigned
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600">
-                              Available
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5 whitespace-nowrap text-right">
+                          <span className="text-[11px] text-slate-500">
+                            {student.grade ? `Class ${student.grade}` : '—'}
+                          </span>
+                        </div>
+
+                        <div>
                           {assigned ? (
                             <button
-                              onClick={() => removeStudent(student.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeStudent(student.id);
+                              }}
                               disabled={removing}
-                              className="px-2.5 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded border border-red-200 transition-colors disabled:opacity-50 inline-flex items-center space-x-1 cursor-pointer"
+                              className="px-2 py-0.5 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-md border border-rose-200 transition-colors disabled:opacity-50 inline-flex items-center space-x-1 cursor-pointer"
                             >
                               <UserMinus className="h-3 w-3" />
                               <span>Remove</span>
@@ -820,32 +952,60 @@ const ProgramAssignmentPage = () => {
                           ) : (
                             program.is_team_based ? (
                               <button
-                                onClick={toggleSelect}
-                                className={`px-2.5 py-1 text-xs font-medium rounded border transition-colors cursor-pointer ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'text-blue-600 hover:bg-blue-50 border-blue-200'
-                                  }`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSelect();
+                                }}
+                                className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
+                                  isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-200'
+                                }`}
                               >
                                 {isSelected ? 'Selected' : 'Select'}
                               </button>
                             ) : (
                               <button
-                                onClick={() => assignStudent(student.id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  assignStudent(student.id);
+                                }}
                                 disabled={assigning || !canAssignMore()}
-                                className="px-2.5 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded border border-blue-200 transition-colors disabled:opacity-50 inline-flex items-center space-x-1 cursor-pointer"
+                                className="px-2.5 py-1 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-2xs transition-colors disabled:opacity-50 inline-flex items-center space-x-1 cursor-pointer"
                               >
                                 <UserPlus className="h-3 w-3" />
                                 <span>Assign</span>
                               </button>
                             )
                           )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
+
+        {/* Sticky Mobile Floating Action Bar for Team Programs */}
+        {program.is_team_based && selectedStudentIds.length > 0 && !showAssignedOnly && (
+          <div className="fixed bottom-4 left-4 right-4 z-40 bg-slate-900/95 text-white shadow-xl rounded-xl p-3 sm:hidden backdrop-blur-md border border-slate-700 animate-in slide-in-from-bottom duration-200 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-white truncate">
+                {selectedStudentIds.length} / {teamSize} Selected
+              </p>
+              <p className="text-[11px] text-slate-300 truncate">
+                Target: Sub-Team {selectedSubTeam}
+              </p>
+            </div>
+            <button
+              onClick={assignStudentsToSubTeam}
+              disabled={assigning || selectedStudentIds.length !== teamSize}
+              className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg shadow-2xs transition-all shrink-0 cursor-pointer"
+            >
+              {assigning ? 'Assigning...' : `Assign (${selectedSubTeam})`}
+            </button>
+          </div>
+        )}
 
       </div>
     </div>

@@ -18,6 +18,28 @@ class SchoolJWTAuthentication(JWTAuthentication):
         return self.get_user(validated_token), validated_token
 
     def get_user(self, validated_token):
+        if validated_token.get('access_type') == 'team_manager':
+            from events.permissions import TeamScopedPrincipal
+            from events.models import Team
+            import hashlib
+
+            team_id = validated_token.get('team_id')
+            if not team_id:
+                raise AuthenticationFailed('Team token is missing its team scope.')
+            try:
+                team = Team.objects.select_related('school').get(
+                    id=team_id, school__status='active'
+                )
+            except Team.DoesNotExist as exc:
+                raise AuthenticationFailed('The team for this token no longer exists.') from exc
+
+            expected = hashlib.sha256(team.team_password.encode()).hexdigest()
+            presented = str(validated_token.get('credential_hash', ''))
+            if not presented or not compare_digest(presented, expected):
+                raise AuthenticationFailed('This team session has been revoked.')
+
+            return TeamScopedPrincipal(team)
+
         from django.conf import settings
 
         user = super().get_user(validated_token)

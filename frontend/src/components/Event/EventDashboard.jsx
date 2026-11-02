@@ -13,19 +13,20 @@ import EventSettings from './EventSettings';
 import EventTopScorers from './EventTopScorers';
 import EventStages from './EventStages';
 import EventSchedule from './EventSchedule';
-import { 
-  BookOpen, 
-  Users, 
+import {
+  BookOpen,
+  Users,
   UserCheck,
-  Edit3, 
-  Trophy, 
-  FileText, 
-  Award, 
-  Sparkles, 
+  Edit3,
+  Trophy,
+  FileText,
+  Award,
+  Sparkles,
   Settings,
   Medal,
   MapPinned,
   CalendarClock,
+  ArrowLeft,
 } from 'lucide-react';
 
 const EventDashboard = () => {
@@ -39,7 +40,7 @@ const EventDashboard = () => {
   useEffect(() => {
     fetchEvent();
     fetchCategories();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId]);
 
   const fetchCategories = async () => {
@@ -57,17 +58,17 @@ const EventDashboard = () => {
       setLoading(true);
       const response = await eventsAPI.getEvent(eventId);
       console.log('Event API response:', response);
-      
+
       // Extract data from axios response
       const eventData = response.data;
       console.log('Event data:', eventData);
-      
+
       // Ensure status is a string
       if (eventData && typeof eventData.status !== 'string') {
         console.warn('Event status is not a string:', eventData.status);
         eventData.status = 'draft'; // Default fallback
       }
-      
+
       setEvent(eventData);
     } catch (error) {
       console.error('Error fetching event:', error);
@@ -88,14 +89,14 @@ const EventDashboard = () => {
     { id: 'top-scorers', name: 'Top Scorers', icon: Medal, description: 'View event top performers and points' },
     { id: 'documents', name: 'Documents', icon: FileText, description: 'Generate calling sheets & valuation forms' },
     { id: 'points', name: 'Points', icon: Award, description: 'Team points overview' },
-    { id: 'certificates', name: 'Certificates', icon: Sparkles, description: 'Generate certificates' },
+    { id: 'certificates', name: 'Templates', icon: Sparkles, description: 'Design certificates & badge templates' },
     { id: 'settings', name: 'Settings', icon: Settings, description: 'Event judge & mark configuration' },
   ];
 
   const renderActiveComponent = () => {
     console.log('EventDashboard eventId:', eventId, 'Type:', typeof eventId);
     const props = { event, eventId, onRefresh: fetchEvent, categories };
-    
+
     switch (activeTab) {
       case 'programs':
         return <EventPrograms {...props} />;
@@ -150,36 +151,45 @@ const EventDashboard = () => {
     );
   }
 
+  const handleBack = () => {
+    const role = localStorage.getItem('user_role');
+    if (role === 'event_manager') {
+      navigate('/user/dashboard');
+    } else {
+      navigate('/admin/events');
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
+    <div className="min-h-screen bg-[#f7f8fb] flex flex-col">
+      {/* Event Header (No TopNavbar with quick add / search / notifications) */}
+      <div className="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
+          <div className="flex justify-between items-center py-3 sm:py-3.5">
             <div className="flex items-center">
               <button
-                onClick={() => navigate('/admin/events')}
-                className="mr-4 p-2 text-gray-400 hover:text-gray-600 rounded-md hover:bg-gray-100"
+                onClick={handleBack}
+                className="mr-3 p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors border border-slate-200/70"
+                title="Back to Events"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                </svg>
+                <ArrowLeft className="w-4 h-4" />
               </button>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{event.title}</h1>
-                <p className="text-sm text-gray-500 mt-1">
-                  {new Date(event.start_date).toLocaleDateString()} - {event.venue}
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">Event Portal</p>
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">{event.title}</h1>
+                <p className="text-xs text-slate-400 mt-0.5 font-normal">
+                  {new Date(event.start_date).toLocaleDateString()} · {event.venue || 'Campus Venue'}
                 </p>
               </div>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                event.status === 'published' ? 'bg-green-100 text-green-800' :
-                event.status === 'ongoing' ? 'bg-indigo-100 text-indigo-800' :
-                event.status === 'completed' ? 'bg-gray-100 text-gray-800' :
-                'bg-yellow-100 text-yellow-800'
+            <div className="flex items-center space-x-3">
+              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider ${
+                event.status === 'published' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                event.status === 'ongoing' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' :
+                event.status === 'completed' ? 'bg-slate-100 text-slate-700 border border-slate-200' :
+                'bg-amber-50 text-amber-700 border border-amber-200'
               }`}>
-                {event.status && typeof event.status === 'string' 
+                {event.status && typeof event.status === 'string'
                   ? event.status.charAt(0).toUpperCase() + event.status.slice(1)
                   : 'Draft'
                 }
@@ -189,10 +199,10 @@ const EventDashboard = () => {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 w-full flex-1">
         {/* Mobile Horizontal Tabs Navigation */}
-        <div className="lg:hidden mb-4 bg-white rounded-xl border border-gray-200 p-2 shadow-xs">
-          <div className="flex items-center overflow-x-auto space-x-2 no-scrollbar scroll-smooth py-1 px-1">
+        <div className="lg:hidden mb-4 bg-white rounded-xl border border-slate-200/80 p-1.5 shadow-2xs">
+          <div className="flex items-center overflow-x-auto space-x-1.5 no-scrollbar scroll-smooth py-0.5 px-0.5">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -200,13 +210,12 @@ const EventDashboard = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${
-                    isActive
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${isActive
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                    }`}
                 >
-                  <Icon className={`h-4 w-4 shrink-0 ${isActive ? 'text-white' : 'text-gray-400'}`} />
+                  <Icon className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                   <span>{tab.name}</span>
                 </button>
               );
@@ -214,28 +223,27 @@ const EventDashboard = () => {
           </div>
         </div>
 
-        <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex flex-col lg:flex-row gap-5">
           {/* Desktop Sidebar Navigation */}
-          <div className="sticky top-6 hidden max-h-[calc(100vh-3rem)] w-64 shrink-0 self-start overflow-y-auto lg:block">
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-xs">
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4 px-2">Event Management</h3>
-              <nav className="space-y-1">
+          <div className="sticky top-6 hidden max-h-[calc(100vh-5rem)] w-60 shrink-0 self-start overflow-y-auto lg:block">
+            <div className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-2xs">
+              <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5 px-2">Event Navigation</h3>
+              <nav className="space-y-0.5">
                 {tabs.map((tab) => {
                   const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
                   return (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`w-full flex items-center px-4 py-3 rounded-lg transition-colors ${
-                        activeTab === tab.id
-                          ? 'bg-indigo-50 text-indigo-700 border-l-4 border-indigo-600 rounded-l-none'
-                          : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                      }`}
+                      className={`w-full flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-colors ${isActive
+                          ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        }`}
                     >
-                      <Icon className={`h-5 w-5 mr-3 flex-shrink-0 transition-colors duration-200 ${
-                        activeTab === tab.id ? 'text-indigo-600' : 'text-gray-400'
-                      }`} />
-                      <span className="font-semibold text-sm">{tab.name}</span>
+                      <Icon className={`h-4 w-4 mr-2.5 flex-shrink-0 transition-colors ${isActive ? 'text-indigo-600' : 'text-slate-400'
+                        }`} />
+                      <span>{tab.name}</span>
                     </button>
                   );
                 })}
@@ -243,20 +251,20 @@ const EventDashboard = () => {
             </div>
 
             {/* Quick Stats */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 mt-6 shadow-xs">
-              <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-3 px-1">Quick Stats</h4>
-              <div className="space-y-3 px-1">
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500 font-medium">Participants</span>
-                  <span className="text-sm font-bold text-gray-900">{event.current_participants || 0}</span>
+            <div className="bg-white rounded-xl border border-slate-200/80 p-3 mt-4 shadow-2xs">
+              <h4 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5 px-1">Quick Overview</h4>
+              <div className="space-y-2 px-1 text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Participants</span>
+                  <span className="font-bold text-slate-900">{event.current_participants || 0}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500 font-medium">Teams</span>
-                  <span className="text-sm font-bold text-gray-900">{event.current_teams || 0}</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Teams</span>
+                  <span className="font-bold text-slate-900">{event.current_teams || 0}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-gray-500 font-medium">Max Participants</span>
-                  <span className="text-sm font-bold text-gray-900">{event.max_participants}</span>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Max Capacity</span>
+                  <span className="font-bold text-slate-900">{event.max_participants || 'Unlimited'}</span>
                 </div>
               </div>
             </div>
@@ -264,7 +272,7 @@ const EventDashboard = () => {
 
           {/* Main Content */}
           <div className="flex-1 min-w-0">
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
               {renderActiveComponent()}
             </div>
           </div>

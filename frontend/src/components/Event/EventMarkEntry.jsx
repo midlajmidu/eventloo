@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search,
   CheckCircle,
   Medal,
   X,
   ChevronRight,
-  ArrowUpDown
+  ArrowUpDown,
+  AlertCircle
 } from 'lucide-react';
 import { eventProgramsAPI, markEntryAPI } from '../../services/api';
 
@@ -18,6 +19,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState('');
+  const [drawerError, setDrawerError] = useState('');
 
   // Filtering on Main Screen
   const [searchQuery, setSearchQuery] = useState('');
@@ -29,8 +31,12 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' | 'desc'
   const [completedPrograms, setCompletedPrograms] = useState(new Set());
 
-  // Judging Rules from Event Settings
-  const numJudges = event?.num_judges ? parseInt(event.num_judges, 10) : 3;
+  // Judging Rules from Program Override or Event Fallback Settings
+  const numJudges = selectedProgram?.effective_num_judges
+    ? parseInt(selectedProgram.effective_num_judges, 10)
+    : (selectedProgram?.num_judges
+      ? parseInt(selectedProgram.num_judges, 10)
+      : (event?.num_judges ? parseInt(event.num_judges, 10) : 3));
   const maxMarkPerJudge = event?.max_mark_per_judge ? parseFloat(event.max_mark_per_judge) : 100;
   const convertedTotalMark = event?.converted_total_mark ? parseFloat(event.converted_total_mark) : 100;
 
@@ -69,9 +75,33 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     }
   };
 
+  // Helper to determine if a participant row has marks entered (attended)
+  const hasAnyJudgeMark = (p) => {
+    for (let i = 1; i <= numJudges; i++) {
+      const val = p[`judge${i}_marks`];
+      if (val !== null && val !== undefined && val !== '' && !isNaN(val)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Track duplicate code letters among participants with codes
+  const duplicateCodeLetters = useMemo(() => {
+    const counts = {};
+    participants.forEach((p) => {
+      const code = (p.code_letter || '').trim().toUpperCase();
+      if (code && (hasAnyJudgeMark(p) || code !== '')) {
+        counts[code] = (counts[code] || 0) + 1;
+      }
+    });
+    return new Set(Object.keys(counts).filter((c) => counts[c] > 1));
+  }, [participants, numJudges]);
+
   const openMarkEntryDrawer = async (program) => {
     setSelectedProgram(program);
     setDrawerOpen(true);
+    setDrawerError('');
     setLoadingParticipants(true);
     setSortField('chest');
     setSortOrder('asc');
@@ -82,7 +112,9 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
       setParticipants(partsData);
     } catch (error) {
       console.error('Error fetching participants for mark entry:', error);
-      setMessage('Failed to load participants');
+      const err = 'Failed to load participants';
+      setDrawerError(err);
+      setMessage(err);
     } finally {
       setLoadingParticipants(false);
     }
@@ -92,9 +124,11 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     setDrawerOpen(false);
     setSelectedProgram(null);
     setParticipants([]);
+    setDrawerError('');
   };
 
   const handleMarkChange = (participantId, field, value) => {
+    if (drawerError) setDrawerError('');
     const numValue = value === '' ? null : parseFloat(value);
     
     setParticipants(prev => prev.map(p => {
@@ -129,6 +163,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
   };
 
   const handleCodeLetterChange = (participantId, value) => {
+    if (drawerError) setDrawerError('');
     setParticipants(prev => prev.map(p => {
       if (p.id === participantId) {
         return { ...p, code_letter: value.toUpperCase() };
@@ -139,6 +174,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
 
   const handleBulkSubmit = async (isDraft = false) => {
     if (!selectedProgram) return;
+    setDrawerError('');
 
     let confirmPublishedEdit = false;
     if (selectedProgram.is_published) {
@@ -149,26 +185,48 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     }
 
     if (!isDraft) {
-      const normalizedCodes = participants.map(participant => (participant.code_letter || '').trim().toUpperCase());
-      if (normalizedCodes.some(code => !code)) {
-        setMessage('Enter a code letter for every participant before submitting marks.');
+      // Attending participants have marks entered or a code letter provided
+      const attending = participants.filter(p => hasAnyJudgeMark(p) || (p.code_letter || '').trim() !== '');
+
+      if (attending.length === 0) {
+        const err = 'Enter marks for at least one attending participant before submitting.';
+        setDrawerError(err);
+        setMessage(err);
         return;
       }
-      if (new Set(normalizedCodes).size !== normalizedCodes.length) {
-        setMessage('Each participant must have a unique code letter within this program.');
+
+      // Check that every attending participant with marks has a code letter
+      const attendingWithMarks = participants.filter(hasAnyJudgeMark);
+      const missingCode = attendingWithMarks.find(p => !(p.code_letter || '').trim());
+      if (missingCode) {
+        const err = `Enter a secret code letter for Chest #${missingCode.chest_number || ''} before submitting.`;
+        setDrawerError(err);
+        setMessage(err);
         return;
       }
-      const invalidRow = participants.find((participant) => {
+
+      const attendingCodes = attendingWithMarks.map(p => (p.code_letter || '').trim().toUpperCase());
+      if (new Set(attendingCodes).size !== attendingCodes.length) {
+        const err = 'Each attending participant must have a unique code letter within this program.';
+        setDrawerError(err);
+        setMessage(err);
+        return;
+      }
+
+      // Check all configured judge marks for attending participants
+      const invalidRow = attendingWithMarks.find((participant) => {
         for (let i = 1; i <= numJudges; i += 1) {
           const value = participant[`judge${i}_marks`];
-          if (value === null || value === undefined || value === '' || Number(value) < 0 || Number(value) > maxMarkPerJudge) {
+          if (value === null || value === undefined || value === '' || isNaN(value) || Number(value) < 0 || Number(value) > maxMarkPerJudge) {
             return true;
           }
         }
         return false;
       });
       if (invalidRow) {
-        setMessage(`Enter all ${numJudges} judge marks between 0 and ${maxMarkPerJudge} before submitting.`);
+        const err = `Enter all ${numJudges} judge marks between 0 and ${maxMarkPerJudge} for Chest #${invalidRow.chest_number || ''}.`;
+        setDrawerError(err);
+        setMessage(err);
         return;
       }
     }
@@ -176,11 +234,14 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     setSubmitting(true);
     try {
       const marksPayload = participants.map(p => {
+        const isAttending = hasAnyJudgeMark(p);
         const judgeValues = [];
-        for (let i = 1; i <= numJudges; i++) {
-          const val = p[`judge${i}_marks`];
-          if (val !== null && val !== undefined && val !== '' && !isNaN(val)) {
-            judgeValues.push(parseFloat(val));
+        if (isAttending) {
+          for (let i = 1; i <= numJudges; i++) {
+            const val = p[`judge${i}_marks`];
+            if (val !== null && val !== undefined && val !== '' && !isNaN(val)) {
+              judgeValues.push(parseFloat(val));
+            }
           }
         }
         
@@ -197,16 +258,17 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
         
         const payloadItem = {
           id: p.id,
-          code_letter: p.code_letter || '',
-          judge1_marks: numJudges >= 1 ? (p.judge1_marks ?? null) : null,
-          judge2_marks: numJudges >= 2 ? (p.judge2_marks ?? null) : null,
-          judge3_marks: numJudges >= 3 ? (p.judge3_marks ?? null) : null,
-          judge4_marks: numJudges >= 4 ? (p.judge4_marks ?? null) : null,
+          code_letter: isAttending ? (p.code_letter || '') : '',
+          judge1_marks: isAttending && numJudges >= 1 ? (p.judge1_marks ?? null) : null,
+          judge2_marks: isAttending && numJudges >= 2 ? (p.judge2_marks ?? null) : null,
+          judge3_marks: isAttending && numJudges >= 3 ? (p.judge3_marks ?? null) : null,
+          judge4_marks: isAttending && numJudges >= 4 ? (p.judge4_marks ?? null) : null,
           raw_total_marks: rawTotalMarks,
           total_marks: totalMarks,
           average_marks: averageMarks,
           marks_out_of_100: totalMarks,
-          comments: p.comments || ''
+          comments: p.comments || '',
+          entry_status: (!isDraft && isAttending) ? 'submitted' : 'draft',
         };
         
         if (p.is_team_based && p.team) {
@@ -231,7 +293,11 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
 
       if (!isDraft) {
         setCompletedPrograms(prev => new Set([...prev, selectedProgram.id]));
-        setMessage(`Marks submitted successfully for ${selectedProgram.name}!`);
+        const attendingCount = participants.filter(hasAnyJudgeMark).length;
+        const absentCount = participants.length - attendingCount;
+        setMessage(
+          `Marks submitted successfully for ${selectedProgram.name}! (${attendingCount} evaluated${absentCount > 0 ? `, ${absentCount} absent` : ''})`
+        );
         window.dispatchEvent(new CustomEvent('pointsUpdated', { detail: { eventId: parseInt(eventId) } }));
         closeDrawer();
       } else {
@@ -244,7 +310,9 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
       const readableDetail = typeof detail === 'object'
         ? Object.entries(detail).map(([field, value]) => `${field}: ${Array.isArray(value) ? value.join(', ') : value}`).join(' ')
         : detail;
-      setMessage(readableDetail || 'Failed to save marks. Please try again.');
+      const errMsg = readableDetail || 'Failed to save marks. Please try again.';
+      setDrawerError(errMsg);
+      setMessage(errMsg);
     } finally {
       setSubmitting(false);
     }
@@ -447,7 +515,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                   {selectedProgram?.name} - <span className="capitalize">{selectedProgram?.category_display || selectedProgram?.category}</span>
                 </h2>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Anonymous evaluation by Chest Number & Secret Code Letter
+                  Anonymous evaluation by Chest Number &amp; Secret Code Letter. Absent participants can be left blank.
                 </p>
               </div>
               <button
@@ -469,6 +537,26 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
               </div>
             </div>
 
+            {/* Drawer Error Banner at Top */}
+            {drawerError && (
+              <div className="mx-6 mt-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start justify-between gap-3 animate-in fade-in duration-200 shadow-2xs shrink-0">
+                <div className="flex items-start gap-2.5 min-w-0">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="text-xs font-semibold leading-relaxed">
+                    {drawerError}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDrawerError('')}
+                  className="text-rose-400 hover:text-rose-600 p-0.5 rounded transition-colors shrink-0"
+                  aria-label="Dismiss error"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Main Drawer Table Area */}
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {loadingParticipants ? (
@@ -482,7 +570,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                     <table className="w-full text-left border-collapse">
                       <thead className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600">
                         <tr>
-                          <th className="px-4 py-3 text-center border-r border-gray-200 w-24">Chest #</th>
+                          <th className="px-4 py-3 text-center border-r border-gray-200 min-w-[140px]">Chest #</th>
                           <th className="px-4 py-3 text-center border-r border-gray-200 w-32">Code Letter</th>
                           {Array.from({ length: numJudges }).map((_, idx) => (
                             <th key={idx} className="px-3 py-3 text-center border-r border-gray-200">
@@ -496,9 +584,23 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                         {sortedParticipants.length > 0 ? (
                           sortedParticipants.map((participant) => (
                             <tr key={participant.id} className="hover:bg-indigo-50/30 transition-colors">
-                              {/* Chest Number ONLY - Anonymous Grading */}
+                              {/* Chest Number with Group / Sub-Team Indicator */}
                               <td className="px-4 py-3 text-center font-bold text-gray-900 border-r border-gray-200 bg-gray-50/30">
-                                {participant.chest_number || '#'}
+                                <div className="text-sm font-bold text-gray-900 font-mono tracking-tight">
+                                  {participant.chest_number || '#'}
+                                </div>
+                                {(participant.is_team_based || selectedProgram?.is_team_based || (participant.team_member_count && participant.team_member_count > 1)) && (
+                                  <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                      Group ({participant.team_member_count || selectedProgram?.team_size || 'Team'} members)
+                                    </span>
+                                    {participant.sub_team_number && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                        Sub-Team {participant.sub_team_number}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </td>
 
                               {/* Code Letter Input */}
@@ -509,7 +611,12 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                                   value={participant.code_letter || ''}
                                   onChange={(e) => handleCodeLetterChange(participant.id, e.target.value)}
                                   placeholder="Code"
-                                  className="w-20 px-2 py-1 text-center font-bold text-xs uppercase border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white shadow-2xs"
+                                  className={`w-20 px-2 py-1 text-center font-bold text-xs uppercase border rounded-md focus:ring-2 focus:outline-none bg-white shadow-2xs transition-colors ${
+                                    duplicateCodeLetters.has((participant.code_letter || '').trim().toUpperCase()) ||
+                                    (hasAnyJudgeMark(participant) && !(participant.code_letter || '').trim() && drawerError)
+                                      ? 'border-rose-400 text-rose-900 bg-rose-50/40 focus:ring-rose-400 ring-1 ring-rose-300'
+                                      : 'border-gray-300 focus:ring-indigo-500'
+                                  }`}
                                 />
                               </td>
 
@@ -517,6 +624,10 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                               {Array.from({ length: numJudges }).map((_, idx) => {
                                 const judgeNum = idx + 1;
                                 const fieldName = `judge${judgeNum}_marks`;
+                                const val = participant[fieldName];
+                                const isInvalidMark = val !== null && val !== undefined && val !== '' && (isNaN(val) || Number(val) < 0 || Number(val) > maxMarkPerJudge);
+                                const isMissingMark = hasAnyJudgeMark(participant) && (val === null || val === undefined || val === '' || isNaN(val)) && drawerError;
+
                                 return (
                                   <td key={judgeNum} className="px-3 py-3 text-center border-r border-gray-200">
                                     <input
@@ -527,7 +638,11 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                                       value={participant[fieldName] ?? ''}
                                       onChange={(e) => handleMarkChange(participant.id, fieldName, e.target.value)}
                                       placeholder={`0-${maxMarkPerJudge}`}
-                                      className="w-16 px-2 py-1 text-center font-semibold text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white shadow-2xs"
+                                      className={`w-16 px-2 py-1 text-center font-semibold text-xs border rounded-md focus:ring-2 focus:outline-none bg-white shadow-2xs transition-colors ${
+                                        isInvalidMark || isMissingMark
+                                          ? 'border-rose-400 text-rose-900 bg-rose-50/40 focus:ring-rose-400 ring-1 ring-rose-300'
+                                          : 'border-gray-300 focus:ring-indigo-500'
+                                      }`}
                                     />
                                   </td>
                                 );
@@ -540,7 +655,9 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                                     {safeFormatNumber(participant.total_marks)}
                                   </span>
                                 ) : (
-                                  <span className="text-gray-400 font-medium text-xs">-</span>
+                                  <span className="text-[11px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                                    Absent / Unmarked
+                                  </span>
                                 )}
                               </td>
                             </tr>
@@ -608,34 +725,59 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
             </div>
 
             {/* Bottom Sticky Action Bar */}
-            <div className="p-6 border-t border-gray-200 bg-white flex items-center justify-end space-x-3 sticky bottom-0 z-10">
-              <button
-                type="button"
-                onClick={closeDrawer}
-                className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              
-              {!selectedProgram?.is_published && (
-                <button
-                  type="button"
-                  onClick={() => handleBulkSubmit(true)}
-                  disabled={submitting}
-                  className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : 'Save as Draft'}
-                </button>
+            <div className="border-t border-gray-200 bg-white sticky bottom-0 z-10 shadow-lg">
+              {drawerError && (
+                <div className="px-6 py-2.5 bg-rose-50 border-b border-rose-200 flex items-center justify-between gap-2 text-xs text-rose-800 font-semibold animate-in fade-in">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span className="truncate">{drawerError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDrawerError('')}
+                    className="text-rose-400 hover:text-rose-600 p-0.5 shrink-0"
+                    aria-label="Dismiss error"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => handleBulkSubmit(false)}
-                disabled={submitting}
-                className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs disabled:opacity-50"
-              >
-                {submitting ? 'Submitting...' : 'Submit Marks'}
-              </button>
+              <div className="p-4 sm:p-5 flex items-center justify-between gap-3">
+                <div className="text-[11px] text-gray-500 hidden sm:block">
+                  {participants.filter(p => hasAnyJudgeMark(p)).length} evaluated · {participants.length - participants.filter(p => hasAnyJudgeMark(p)).length} absent
+                </div>
+
+                <div className="flex items-center justify-end space-x-3 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={closeDrawer}
+                    className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  
+                  {!selectedProgram?.is_published && (
+                    <button
+                      type="button"
+                      onClick={() => handleBulkSubmit(true)}
+                      disabled={submitting}
+                      className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                    >
+                      {submitting ? 'Saving...' : 'Save as Draft'}
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleBulkSubmit(false)}
+                    disabled={submitting}
+                    className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs disabled:opacity-50"
+                  >
+                    {submitting ? 'Submitting...' : 'Submit Marks'}
+                  </button>
+                </div>
+              </div>
             </div>
 
           </div>

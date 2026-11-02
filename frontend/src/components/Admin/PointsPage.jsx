@@ -81,9 +81,9 @@ const PointsPage = () => {
     <main className="min-h-screen bg-[#f7f8fb] px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <header>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600">Performance</p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Global Points</h1>
-          <p className="mt-1 text-sm text-slate-500">Percentage performance across every published event.</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">Performance</p>
+          <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Global Points</h1>
+          <p className="text-xs text-slate-400 mt-1 font-normal">Percentage performance across every published event.</p>
         </header>
 
         <section className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">

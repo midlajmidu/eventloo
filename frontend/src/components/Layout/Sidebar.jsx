@@ -1,10 +1,10 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { 
-  Home, 
-  Calendar, 
-  Users, 
-  GraduationCap, 
+import {
+  Home,
+  Calendar,
+  Users,
+  GraduationCap,
   Trophy,
   Settings,
   BarChart3,
@@ -32,16 +32,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
     <>
       {/* Mobile sidebar overlay */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-25 transition-opacity lg:hidden z-20 backdrop-blur-sm"
           onClick={() => setIsOpen(false)}
         />
       )}
 
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-30 w-72 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${
-        isOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      <div className={`fixed inset-y-0 left-0 z-30 w-72 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center h-20 px-6 border-b border-gray-200">
@@ -49,7 +48,10 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 px-4 py-8 space-y-1">
+          <nav className="flex-1 px-3 py-5 space-y-0.5">
+            <div className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              Admin Workspace
+            </div>
             {navigation.map((item) => {
               const isActive = location.pathname === item.href;
               const Icon = item.icon;
@@ -57,17 +59,15 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
                 <NavLink
                   key={item.name}
                   to={item.href}
-                  className={`flex items-center px-4 py-3 font-medium transition-all duration-200 rounded-lg ${
-                    isActive 
-                      ? 'bg-blue-50 text-blue-600 border-l-4 border-blue-600 rounded-l-none' 
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
+                  className={`flex items-center px-3 py-2 text-xs font-medium transition-all duration-150 rounded-lg ${isActive
+                      ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
                   onClick={() => setIsOpen(false)}
                 >
-                  <Icon className={`h-5 w-5 mr-3 transition-colors duration-200 ${
-                    isActive ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-900'
-                  }`} />
-                  <span className="font-semibold text-sm">{item.name}</span>
+                  <Icon className={`h-4 w-4 mr-2.5 transition-colors duration-200 ${isActive ? 'text-indigo-600' : 'text-slate-400'
+                    }`} />
+                  <span>{item.name}</span>
                 </NavLink>
               );
             })}

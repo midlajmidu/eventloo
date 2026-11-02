@@ -17,6 +17,7 @@ import pandas as pd
 import re
 import random
 import string
+import secrets
 from django.contrib.auth import authenticate
 from django.contrib.auth.hashers import make_password
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -123,7 +124,9 @@ def _authenticate_school_staff_credentials(request):
     user = authenticate(request, email=email, password=request.data.get('password', ''))
     if not user or user.role not in ('admin', 'event_manager') or not user.is_active:
         return None
-    if not user.school_id or user.school.status != 'active' or user.school.code != school_code:
+    if not user.school_id or user.school.status != 'active':
+        return None
+    if school_code and user.school.code != school_code:
         return None
     return user
 
@@ -685,16 +688,18 @@ def team_manager_dashboard(request):
     
     recent_activities = []
     for record in recent_points:
+        team_name = record.team.name if record.team else 'Team'
+        time_str = record.awarded_at.strftime('%H:%M') if record.awarded_at else ''
         recent_activities.append({
             'id': record.id,
-            'action': f"{record.team.name} earned {record.points} points for {record.reason}",
-            'time': record.awarded_at.strftime('%H:%M'),
+            'action': f"{team_name} earned {record.points} points for {record.reason or 'participation'}",
+            'time': time_str,
             'type': 'points'
         })
     
     from events.services import calculate_global_points_for_school
     global_scores = calculate_global_points_for_school(request.user.school)
-    global_by_team = {item['id']: item for item in global_scores['teams']}
+    global_by_team = {item['id']: item for item in (global_scores.get('teams', []) if isinstance(global_scores, dict) else [])}
 
     # Calculate global points for each managed team
     teams_with_global_points = []
@@ -722,6 +727,7 @@ def team_manager_dashboard(request):
     return Response(dashboard_data)
 
 @api_view(['POST'])
+@authentication_classes([])
 @permission_classes([])
 @throttle_classes([LoginRateThrottle])
 def team_manager_login(request):
@@ -747,7 +753,7 @@ def team_manager_login(request):
         refresh['credential_hash'] = hashlib.sha256(team.team_password.encode()).hexdigest()
         refresh.outstand()
         
-        # Ensure access token has the user_id and custom claims as well
+        # Ensure access token has custom claims
         access = refresh.access_token
         access['team_id'] = team.id
         access['school_id'] = team.school_id
@@ -1380,16 +1386,13 @@ class StudentViewSet(viewsets.ModelViewSet):
             sequence += 1
             student_id = f"STU{current_year}{grade_code}{sequence:03d}"
         
-        # Create username from student_id
-        username = student_id.lower()
-        
-        # Ensure username is unique
-        counter = 1
-        original_username = username
+        # Internal unique token for database compatibility only; never exposed or used
+        username = secrets.token_hex(16)
         while User.objects.filter(username=username).exists():
-            username = f"{original_username}_{counter}"
-            counter += 1
+            username = secrets.token_hex(16)
         
+        team_id = serializer.validated_data.pop('team_id', None)
+
         user = serializer.save(
             role='student',
             username=username,
@@ -1401,6 +1404,14 @@ class StudentViewSet(viewsets.ModelViewSet):
         user.set_unusable_password()
         
         user.save()
+
+        if team_id:
+            try:
+                from events.models import Team
+                team_obj = Team.objects.get(id=team_id, school=self.request.user.school)
+                team_obj.members.add(user)
+            except Exception:
+                pass
         
     
     @action(detail=True, methods=['post'])
@@ -1754,20 +1765,21 @@ class StudentViewSet(viewsets.ModelViewSet):
                 }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            # Read Excel file with proper engine selection and version handling
+            # Read file with proper format handling (.xlsx, .xls, .csv)
             try:
-                if file.name.endswith('.xlsx'):
+                fname = file.name.lower()
+                if fname.endswith('.xlsx'):
                     # For .xlsx files, try openpyxl with fallback
                     try:
                         df = pd.read_excel(file, engine='openpyxl')
                     except Exception as openpyxl_error:
                         error_msg = str(openpyxl_error).lower()
                         if 'openpyxl' in error_msg and ('version' in error_msg or '3.1.0' in error_msg):
-                            # Try with a different approach - read as binary first
                             try:
                                 import io
+                                file.seek(0)
                                 file_content = file.read()
-                                file.seek(0)  # Reset file pointer
+                                file.seek(0)
                                 df = pd.read_excel(io.BytesIO(file_content), engine='openpyxl')
                             except Exception as fallback_error:
                                 return Response({
@@ -1785,18 +1797,28 @@ class StudentViewSet(viewsets.ModelViewSet):
                                 }, status=status.HTTP_400_BAD_REQUEST)
                         else:
                             raise openpyxl_error
-                elif file.name.endswith('.xls'):
-                    # For .xls files, try openpyxl first, then xlrd
+                elif fname.endswith('.xls'):
                     try:
                         df = pd.read_excel(file, engine='openpyxl')
                     except Exception:
+                        file.seek(0)
                         df = pd.read_excel(file, engine='xlrd')
+                elif fname.endswith('.csv'):
+                    try:
+                        df = pd.read_csv(file, encoding='utf-8')
+                    except UnicodeDecodeError:
+                        file.seek(0)
+                        try:
+                            df = pd.read_csv(file, encoding='utf-8-sig')
+                        except UnicodeDecodeError:
+                            file.seek(0)
+                            df = pd.read_csv(file, encoding='latin-1')
                 else:
-                    return Response({'error': 'Please upload an Excel file (.xlsx or .xls)'}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response({'error': 'Please upload a spreadsheet file (.xlsx, .xls, or .csv)'}, status=status.HTTP_400_BAD_REQUEST)
                 
             except Exception as e:
-                logger.info('Rejected unreadable Excel upload: %s', type(e).__name__)
-                return Response({'error': 'The workbook could not be read. Check that it is valid and not corrupted.'}, status=status.HTTP_400_BAD_REQUEST)
+                logger.info('Rejected unreadable spreadsheet upload: %s', type(e).__name__)
+                return Response({'error': 'The spreadsheet could not be read. Check that it is valid and not corrupted.'}, status=status.HTTP_400_BAD_REQUEST)
             
             try:
                 validate_excel_shape(df)
@@ -1846,20 +1868,26 @@ class StudentViewSet(viewsets.ModelViewSet):
                         sequence += 1
                         student_id = f"STU{current_year}{grade}{sequence:03d}"
 
-                    email_name = re.sub(r'[^a-z0-9]+', '.', student_data['name'].lower()).strip('.') or 'student'
-                    school_code = re.sub(r'[^a-z0-9]+', '', self.request.user.school.code.lower()) or 'school'
-                    email = f"{email_name}.{school_code}@students.local"
-                    counter = 1
-                    while User.objects.filter(email=email).exists():
-                        email = f"{email_name}.{school_code}{counter}@students.local"
-                        counter += 1
+                    # Internal unique token for database compatibility only; never exposed or used
+                    username = secrets.token_hex(16)
+                    while User.objects.filter(username=username).exists():
+                        username = secrets.token_hex(16)
+
+                    # Do not generate fake/dummy emails (e.g. @students.local).
+                    # Only save an email if an actual email was explicitly provided in the file.
+                    raw_email = student_data.get('email')
+                    email = None
+                    if raw_email and str(raw_email).strip() and str(raw_email).strip().lower() not in ('nan', 'none', 'null'):
+                        clean_email = str(raw_email).strip().lower()
+                        if not User.objects.filter(email=clean_email).exists():
+                            email = clean_email
 
                     student = User.objects.create(
                         student_id=student_id,
                         name=student_data['name'],
                         email=email,
                         role='student',
-                        username=f"{school_code}.{student_id.lower()}",
+                        username=username,
                         password=make_password(None),
                         school=self.request.user.school,
                         category=category,
@@ -1873,6 +1901,8 @@ class StudentViewSet(viewsets.ModelViewSet):
                         guardian_phone=student_data.get('guardian_phone', ''),
                         is_active=True
                     )
+                    student.set_unusable_password()
+                    student.save(update_fields=['password'])
 
                     # Chest numbers are event-specific and are generated only
                     # when the student is assigned to a program.
@@ -1918,7 +1948,7 @@ class StudentViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def _process_student_excel_with_ai(self, df):
-        """AI-powered processing of Excel data for student creation (name only, no first/last required)"""
+        """Processing of Excel data for student creation with auto-category resolution and team assignment."""
         results = {
             'valid_students': [],
             'errors': [],
@@ -1929,131 +1959,210 @@ class StudentViewSet(viewsets.ModelViewSet):
         # Clean column names
         df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
         
-        # AI-powered column mapping
+        # Column mapping
         column_mapping = self._detect_student_columns(df.columns.tolist())
         
-        # Validate required columns (simplified)
-        required_fields = ['name', 'gender', 'category', 'class']
+        # Only 'name' and 'class' are strictly required.
+        # Category is derived from class, gender defaults to 'other', team and section are optional.
+        required_fields = ['name', 'class']
         missing_fields = [field for field in required_fields if not column_mapping.get(field)]
         
         if missing_fields:
             results['errors'].append(f'Missing required columns: {", ".join(missing_fields)}')
-            results['suggestions'].append('Please ensure your Excel file has columns for: name, gender, category, class')
+            results['suggestions'].append('Please ensure your Excel file has at least columns for: name and class. Optional columns: section, gender, team_name.')
             return results
         
+        # Pre-fetch school classes and teams for matching
+        school_classes = list(
+            StudentClass.objects.filter(is_active=True, school=self.request.user.school).select_related('category')
+        )
+        if not school_classes:
+            results['errors'].append('No active classes found for your school. Please configure classes in School Settings first.')
+            return results
+
+        school_categories = list(
+            StudentCategory.objects.filter(is_active=True, is_mixing=False, school=self.request.user.school)
+        )
+        school_teams = list(
+            Team.objects.filter(school=self.request.user.school)
+        )
+
+        def class_aliases_getter(cls_item):
+            c_name = cls_item.name
+            c_code = cls_item.code
+            aliases = [c_code, c_name]
+            digits = re.findall(r'\d+', f"{c_name} {c_code}")
+            if digits:
+                d = digits[0]
+                aliases.extend([
+                    d, f"class {d}", f"grade {d}", f"std {d}", f"standard {d}",
+                    f"{d}th", f"{d}st", f"{d}nd", f"{d}rd",
+                    f"{d}th std", f"{d} std", f"{d} standard",
+                    f"class{d}", f"grade{d}", f"std{d}", f"{d}th class", f"{d}th grade"
+                ])
+            return tuple(set(aliases))
+
+        def team_aliases_getter(team_item):
+            t_name = team_item.name
+            aliases = [t_name, f"team {t_name}", f"{t_name} team", f"{t_name} house", f"house {t_name}"]
+            core = re.sub(r'\s*(team|house|group)\s*', '', t_name, flags=re.IGNORECASE).strip()
+            if core and core.lower() != t_name.lower():
+                aliases.extend([core, f"team {core}", f"{core} team", f"{core} house", f"house {core}"])
+            return tuple(set(aliases))
+
+        gender_aliases = {
+            'male': 'male', 'm': 'male', 'boy': 'male',
+            'female': 'female', 'f': 'female', 'girl': 'female',
+            'other': 'other', 'o': 'other',
+        }
+
+        seen_in_workbook = set()
+
         # Process each row
         for index, row in df.iterrows():
             try:
-                # Extract required fields
+                # Extract required name field
                 full_name = str(row[column_mapping['name']]).strip()
-                category = str(row[column_mapping['category']]).strip()
-                class_name = str(row[column_mapping['class']]).strip()
-                raw_gender = str(row[column_mapping['gender']]).strip().casefold()
-                
-                # Skip empty rows
-                if pd.isna(full_name) or full_name == '' or full_name.lower() == 'nan':
+                if pd.isna(row[column_mapping['name']]) or not full_name or full_name.lower() in ('nan', 'none', 'null'):
                     continue
 
-                gender_aliases = {
-                    'male': 'male', 'm': 'male', 'boy': 'male',
-                    'female': 'female', 'f': 'female', 'girl': 'female',
-                    'other': 'other', 'o': 'other',
-                }
-                gender = gender_aliases.get(raw_gender)
-                if not gender:
-                    results['errors'].append(
-                        f'Row {index + 2}: Invalid gender "{raw_gender}". Choose Male, Female, or Other.'
-                    )
+                # Extract class
+                raw_class = str(row[column_mapping['class']]).strip()
+                if pd.isna(row[column_mapping['class']]) or not raw_class or raw_class.lower() in ('nan', 'none', 'null'):
+                    results['errors'].append(f'Row {index + 2}: Class is required.')
                     continue
-                
-                category_obj, corrected_category = self._match_import_option(
-                    category,
-                    StudentCategory.objects.filter(
-                        is_active=True, is_mixing=False, school=self.request.user.school,
-                    ),
-                    lambda item: (item.code, item.name),
-                )
-                if not category_obj:
-                    results['errors'].append(f'Row {index + 2}: Invalid or inactive category "{category}".')
-                    continue
-                if corrected_category:
-                    results['corrections'].append(
-                        f'Row {index + 2}: category "{category}" matched to "{category_obj.name}".'
-                    )
-                
-                # Validate class based on category dynamically
-                class_options = StudentClass.objects.filter(
-                    category=category_obj, is_active=True, school=self.request.user.school,
-                )
+
+                # Optional category provided?
+                category_obj = None
+                if column_mapping.get('category'):
+                    raw_cat = str(row[column_mapping['category']]).strip()
+                    if raw_cat and raw_cat.lower() not in ('nan', 'none', 'null'):
+                        cat_match, corrected_cat = self._match_import_option(
+                            raw_cat,
+                            school_categories,
+                            lambda item: (item.code, item.name),
+                        )
+                        if not cat_match:
+                            results['errors'].append(f'Row {index + 2}: Invalid or inactive category "{raw_cat}".')
+                            continue
+                        if corrected_cat:
+                            results['corrections'].append(
+                                f'Row {index + 2}: category "{raw_cat}" matched to "{cat_match.name}".'
+                            )
+                        category_obj = cat_match
+
+                # Determine candidate classes
+                if category_obj:
+                    candidate_classes = [c for c in school_classes if c.category_id == category_obj.id]
+                else:
+                    candidate_classes = school_classes
+
                 student_class, corrected_class = self._match_import_option(
-                    class_name, class_options, lambda item: (item.code, item.name)
+                    raw_class,
+                    candidate_classes,
+                    class_aliases_getter,
                 )
-                
+
                 if not student_class:
-                    valid_classes_list = class_options.values_list('name', flat=True)
-                    results['errors'].append(f'Row {index + 2}: Invalid class "{class_name}" for category "{category}". Valid classes for {category_obj.name}: {", ".join(valid_classes_list)}')
+                    valid_names = [c.name for c in candidate_classes]
+                    cat_hint = f' for category "{category_obj.name}"' if category_obj else ''
+                    results['errors'].append(
+                        f'Row {index + 2}: Invalid class "{raw_class}"{cat_hint}. Available classes: {", ".join(valid_names)}.'
+                    )
                     continue
+
                 if corrected_class:
                     results['corrections'].append(
-                        f'Row {index + 2}: class "{class_name}" matched to "{student_class.name}".'
+                        f'Row {index + 2}: class "{raw_class}" matched to "{student_class.name}".'
                     )
-                
+
+                # If category was not provided, infer directly from the class
+                if not category_obj:
+                    category_obj = student_class.category
+
+                if not category_obj:
+                    results['errors'].append(
+                        f'Row {index + 2}: Class "{student_class.name}" has no category assigned. Please assign a category in School Settings.'
+                    )
+                    continue
+
+                # Handle gender (defaults to 'other' if omitted or blank)
+                gender = 'other'
+                if column_mapping.get('gender'):
+                    raw_gender = str(row[column_mapping['gender']]).strip().casefold()
+                    if raw_gender and raw_gender not in ('nan', 'none', 'null'):
+                        matched_gender = gender_aliases.get(raw_gender)
+                        if not matched_gender:
+                            results['errors'].append(
+                                f'Row {index + 2}: Invalid gender "{raw_gender}". Choose Male, Female, or Other.'
+                            )
+                            continue
+                        gender = matched_gender
+
                 # Build student data
                 student_data = {
-                    'name': full_name,  # Only use full name
+                    'name': full_name,
                     'gender': gender,
                     'category': category_obj.code,
                     'class': student_class.name,
                     'class_code': student_class.code,
                 }
-                
-                # Add optional team field
+
+                # Handle optional team assignment
                 if column_mapping.get('team_name'):
-                    team_value = str(row[column_mapping['team_name']]).strip()
-                    if team_value and team_value.lower() != 'nan':
-                        team, corrected_team = self._match_import_option(
-                            team_value,
-                            Team.objects.filter(school=self.request.user.school),
-                            lambda item: (item.name,),
+                    raw_team = str(row[column_mapping['team_name']]).strip()
+                    if raw_team and raw_team.lower() not in ('nan', 'none', 'null'):
+                        team_obj, corrected_team = self._match_import_option(
+                            raw_team,
+                            school_teams,
+                            team_aliases_getter,
                         )
-                        if not team:
+                        if not team_obj:
+                            valid_team_names = [t.name for t in school_teams]
                             results['errors'].append(
-                                f'Row {index + 2}: Team "{team_value}" does not exist for this school. Choose a team listed in the template.'
+                                f'Row {index + 2}: Team "{raw_team}" does not exist for this school. Available teams: {", ".join(valid_team_names) if valid_team_names else "None configured"}. (Leave blank if unassigned).'
                             )
                             continue
                         if corrected_team:
                             results['corrections'].append(
-                                f'Row {index + 2}: team "{team_value}" matched to "{team.name}".'
+                                f'Row {index + 2}: team "{raw_team}" matched to "{team_obj.name}".'
                             )
-                        student_data['team_id'] = team.id
-                        student_data['team_name'] = team.name
+                        student_data['team_id'] = team_obj.id
+                        student_data['team_name'] = team_obj.name
 
-                for optional_field in ('section', 'address', 'guardian_name'):
-                    column = column_mapping.get(optional_field)
-                    if column:
-                        value = str(row[column]).strip()
-                        if value and value.lower() != 'nan':
-                            student_data[optional_field] = value
+                # Handle optional section
+                if column_mapping.get('section'):
+                    raw_sec = str(row[column_mapping['section']]).strip()
+                    if raw_sec and raw_sec.lower() not in ('nan', 'none', 'null'):
+                        student_data['section'] = raw_sec
+
+                # Handle other optional fields if present
+                for optional_field in ('address', 'guardian_name', 'email'):
+                    col = column_mapping.get(optional_field)
+                    if col:
+                        val = str(row[col]).strip()
+                        if val and val.lower() not in ('nan', 'none', 'null'):
+                            student_data[optional_field] = val
 
                 invalid_optional = False
                 for phone_field in ('phone_number', 'guardian_phone'):
-                    column = column_mapping.get(phone_field)
-                    if not column or pd.isna(row[column]):
+                    col = column_mapping.get(phone_field)
+                    if not col or pd.isna(row[col]):
                         continue
-                    value = str(row[column]).strip()
-                    if value.endswith('.0') and value[:-2].isdigit():
-                        value = value[:-2]
-                    if len(value) > 15:
+                    val = str(row[col]).strip()
+                    if val.endswith('.0') and val[:-2].isdigit():
+                        val = val[:-2]
+                    if len(val) > 15:
                         results['errors'].append(
                             f'Row {index + 2}: {phone_field} cannot exceed 15 characters.'
                         )
                         invalid_optional = True
-                    elif value:
-                        student_data[phone_field] = value
+                    elif val and val.lower() not in ('nan', 'none', 'null'):
+                        student_data[phone_field] = val
 
-                date_column = column_mapping.get('date_of_birth')
-                if date_column and not pd.isna(row[date_column]):
-                    parsed_date = pd.to_datetime(row[date_column], errors='coerce')
+                date_col = column_mapping.get('date_of_birth')
+                if date_col and not pd.isna(row[date_col]):
+                    parsed_date = pd.to_datetime(row[date_col], errors='coerce')
                     if pd.isna(parsed_date):
                         results['errors'].append(
                             f'Row {index + 2}: Invalid date_of_birth. Use YYYY-MM-DD.'
@@ -2064,13 +2173,40 @@ class StudentViewSet(viewsets.ModelViewSet):
 
                 if invalid_optional:
                     continue
-                
+
+                # Check for duplicate within the same workbook
+                sec_val = (student_data.get('section') or '').strip().casefold()
+                wb_key = (full_name.casefold().strip(), student_class.code.casefold().strip(), sec_val)
+                if wb_key in seen_in_workbook:
+                    results['errors'].append(
+                        f"Row {index + 2}: Duplicate student '{full_name}' in class '{student_class.name}' found within this spreadsheet."
+                    )
+                    continue
+                seen_in_workbook.add(wb_key)
+
+                # Check for duplicate against existing enrolled students in database
+                existing_dup = User.objects.filter(
+                    role='student',
+                    school=self.request.user.school,
+                    name__iexact=full_name.strip(),
+                    grade=student_class.code,
+                )
+                if sec_val:
+                    existing_dup = existing_dup.filter(section__iexact=student_data.get('section', '').strip())
+                if existing_dup.exists():
+                    dup_student = existing_dup.first()
+                    sec_display = f" (Section '{dup_student.section}')" if dup_student.section else ""
+                    results['errors'].append(
+                        f"Row {index + 2}: Student '{dup_student.name}' already exists in class '{student_class.name}'{sec_display} (ID: {dup_student.student_id}). Duplicate enrollment is not allowed."
+                    )
+                    continue
+
                 results['valid_students'].append(student_data)
-                
+
             except Exception:
                 logger.exception('Student spreadsheet row processing failed', extra={'row': index + 2})
                 results['errors'].append(f'Row {index + 2}: This row could not be processed.')
-        
+
         return results
 
     @staticmethod
@@ -2096,29 +2232,28 @@ class StudentViewSet(viewsets.ModelViewSet):
             return None, False
         best_score, best_option = scored[0]
         second_score = scored[1][0] if len(scored) > 1 else 0
-        # Conservative matching prevents a typo from silently selecting the
-        # wrong class/team. Short codes must be especially clear.
-        threshold = 0.75 if len(target) >= 3 else 0.85
-        if best_score < threshold or best_score - second_score < 0.08:
+        # Conservative matching prevents a typo from silently selecting the wrong class/team
+        threshold = 0.72 if len(target) >= 3 else 0.85
+        if best_score < threshold or best_score - second_score < 0.06:
             return None, False
         return best_option, True
     
     def _detect_student_columns(self, columns):
-        """AI-powered column detection for student data"""
+        """Column detection for student data matching essential fields."""
         column_mapping = {}
         
-        # Define patterns for different fields (simplified)
         patterns = {
-            'name': [r'name', r'full.*name', r'student.*name', r'student'],
+            'name': [r'^name$', r'full.*name', r'student.*name', r'^student$'],
+            'class': [r'^class$', r'^grade$', r'^standard$', r'^std$', r'class.*name', r'grade.*name'],
+            'section': [r'^section$', r'^sec$', r'class.*section', r'^division$', r'^div$'],
             'gender': [r'^gender$', r'^sex$'],
-            'category': [r'category', r'type', r'level'],
-            'class': [r'class', r'grade', r'standard', r'level'],
-            'team_name': [r'team.*name', r'^team$', r'group.*name', r'^group$'],
-            'section': [r'^section$', r'class.*section'],
+            'team_name': [r'team.*name', r'^team$', r'house.*name', r'^house$', r'group.*name', r'^group$'],
+            'email': [r'^email$', r'^e_mail$', r'student.*email'],
+            'category': [r'^category$', r'category.*code', r'category.*name', r'^cat$'],
             'address': [r'^address$', r'home.*address'],
-            'phone_number': [r'^phone_number$', r'^phone$', r'student.*phone'],
+            'phone_number': [r'^phone_number$', r'^phone$', r'student.*phone', r'mobile'],
             'date_of_birth': [r'^date_of_birth$', r'^dob$', r'birth.*date'],
-            'guardian_name': [r'^guardian_name$', r'parent.*name'],
+            'guardian_name': [r'^guardian_name$', r'parent.*name', r'father.*name'],
             'guardian_phone': [r'^guardian_phone$', r'parent.*phone'],
         }
         
@@ -2135,7 +2270,7 @@ class StudentViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def download_template(self, request):
-        """Build a tenant-specific student workbook with selectable reference data."""
+        """Build a tenant-specific student workbook with only essential fields: name, class, section, gender, team_name."""
         try:
             import io
             from django.http import HttpResponse
@@ -2146,9 +2281,6 @@ class StudentViewSet(viewsets.ModelViewSet):
             existing_teams = list(Team.objects.filter(
                 school=self.request.user.school
             ).order_by('team_number', 'name'))
-            active_cats = list(StudentCategory.objects.filter(
-                is_active=True, is_mixing=False, school=self.request.user.school
-            ).order_by('name'))
             active_classes = list(StudentClass.objects.filter(
                 is_active=True, category__isnull=False,
                 category__is_active=True, category__is_mixing=False,
@@ -2158,120 +2290,157 @@ class StudentViewSet(viewsets.ModelViewSet):
             workbook = Workbook()
             students_sheet = workbook.active
             students_sheet.title = 'Students'
-            headers = ['name', 'gender', 'category', 'class', 'section', 'team_name', 'address']
+            headers = ['name', 'class', 'section', 'gender', 'team_name']
             students_sheet.append(headers)
             students_sheet.freeze_panes = 'A2'
-            students_sheet.auto_filter.ref = 'A1:G1000'
-            students_sheet.sheet_view.showGridLines = False
+            students_sheet.auto_filter.ref = 'A1:E1000'
+            students_sheet.sheet_view.showGridLines = True
 
             header_fill = PatternFill('solid', fgColor='4F46E5')
             for cell in students_sheet[1]:
                 cell.fill = header_fill
                 cell.font = Font(color='FFFFFF', bold=True)
                 cell.alignment = Alignment(horizontal='center')
-            for column, width in {'A': 28, 'B': 14, 'C': 18, 'D': 24, 'E': 16, 'F': 24, 'G': 38}.items():
+            for column, width in {'A': 28, 'B': 20, 'C': 14, 'D': 16, 'E': 24}.items():
                 students_sheet.column_dimensions[column].width = width
 
             setup_sheet = workbook.create_sheet('Setup')
             setup_sheet.append([
-                'Category Code', 'Category Name', 'Class Name',
-                'Class Code', 'Class Category', 'Team Name'
+                'Class Name', 'Team Name', 'Category'
             ])
-            max_options = max(len(active_cats), len(active_classes), len(existing_teams), 1)
+            max_options = max(len(active_classes), len(existing_teams), 1)
             for index in range(max_options):
-                category = active_cats[index] if index < len(active_cats) else None
                 student_class = active_classes[index] if index < len(active_classes) else None
                 team = existing_teams[index] if index < len(existing_teams) else None
                 setup_sheet.append([
-                    category.code if category else '',
-                    category.name if category else '',
                     student_class.name if student_class else '',
-                    student_class.code if student_class else '',
-                    student_class.category.code if student_class else '',
                     team.name if team else '',
+                    student_class.category.name if (student_class and student_class.category) else '',
                 ])
             setup_sheet.freeze_panes = 'A2'
-            setup_sheet.sheet_view.showGridLines = False
+            setup_sheet.sheet_view.showGridLines = True
             for cell in setup_sheet[1]:
                 cell.fill = header_fill
                 cell.font = Font(color='FFFFFF', bold=True)
-            for column, width in {'A': 18, 'B': 24, 'C': 24, 'D': 16, 'E': 18, 'F': 24}.items():
+            for column, width in {'A': 24, 'B': 24, 'C': 24}.items():
                 setup_sheet.column_dimensions[column].width = width
 
             def add_dropdown(cell_range, formula, prompt):
                 validation = DataValidation(
-                    type='list', formula1=formula, allow_blank=False,
-                    error='Choose a value from the Setup sheet.',
+                    type='list', formula1=formula, allow_blank=True,
+                    error='Choose a value from the dropdown list.',
                     errorTitle='Invalid value', showErrorMessage=True,
                     prompt=prompt, promptTitle='Choose an option', showInputMessage=True,
                 )
                 students_sheet.add_data_validation(validation)
                 validation.add(cell_range)
 
-            if active_cats:
-                add_dropdown('C2:C1001', f"'Setup'!$A$2:$A${len(active_cats) + 1}", 'Select a school category.')
             if active_classes:
-                add_dropdown('D2:D1001', f"'Setup'!$C$2:$C${len(active_classes) + 1}", 'Select a class that belongs to the chosen category.')
+                add_dropdown('B2:B1001', f"'Setup'!$A$2:$A${len(active_classes) + 1}", 'Select student class.')
+            
             gender_validation = DataValidation(
-                type='list', formula1='"Male,Female,Other"', allow_blank=False,
+                type='list', formula1='"Male,Female,Other"', allow_blank=True,
                 error='Choose Male, Female, or Other.', errorTitle='Invalid gender',
                 showErrorMessage=True,
+                prompt='Select gender (Male, Female, or Other).', promptTitle='Gender', showInputMessage=True,
             )
             students_sheet.add_data_validation(gender_validation)
-            gender_validation.add('B2:B1001')
+            gender_validation.add('D2:D1001')
+
             if existing_teams:
                 team_validation = DataValidation(
-                    type='list', formula1=f"'Setup'!$F$2:$F${len(existing_teams) + 1}",
+                    type='list', formula1=f"'Setup'!$B$2:$B${len(existing_teams) + 1}",
                     allow_blank=True, error='Choose an existing school team.',
                     errorTitle='Invalid team', showErrorMessage=True,
                     prompt='Optional: select an existing team.',
                     promptTitle='Choose a team', showInputMessage=True,
                 )
                 students_sheet.add_data_validation(team_validation)
-                team_validation.add('F2:F1001')
+                team_validation.add('E2:E1001')
 
             instructions_sheet = workbook.create_sheet('Instructions')
             instruction_rows = [
                 ('Field', 'Required', 'How to complete it'),
-                ('name', 'Yes', 'Enter the student full name.'),
-                ('gender', 'Yes', 'Select Male, Female, or Other.'),
-                ('category', 'Yes', 'Select an active category code from the dropdown.'),
-                ('class', 'Yes', 'Select a class belonging to that category.'),
-                ('section', 'No', 'Enter only the section, for example A or B.'),
-                ('team_name', 'No', 'Select an existing team. Blank leaves the student unassigned.'),
-                ('address', 'No', 'Enter the student address.'),
-                ('Generated automatically', '—', 'Student ID, login email and disabled password.'),
+                ('name', 'Yes', 'Enter student full name (e.g. Rahul Sharma).'),
+                ('class', 'Yes', 'Select class/grade from dropdown. Category is automatically linked to class.'),
+                ('section', 'No', 'Enter section if applicable (e.g. A, B).'),
+                ('gender', 'No', 'Select Male, Female, or Other (defaults to Other if empty).'),
+                ('team_name', 'No', 'Select existing team from dropdown. If chosen, student is auto-assigned to team.'),
+                ('Generated automatically', '—', 'Student ID is generated automatically. No email or username is created or required.'),
             ]
             for row in instruction_rows:
                 instructions_sheet.append(row)
             for cell in instructions_sheet[1]:
                 cell.fill = header_fill
                 cell.font = Font(color='FFFFFF', bold=True)
-            instructions_sheet.column_dimensions['A'].width = 28
+            instructions_sheet.column_dimensions['A'].width = 24
             instructions_sheet.column_dimensions['B'].width = 14
-            instructions_sheet.column_dimensions['C'].width = 72
+            instructions_sheet.column_dimensions['C'].width = 75
             instructions_sheet.freeze_panes = 'A2'
-            instructions_sheet.sheet_view.showGridLines = False
+            instructions_sheet.sheet_view.showGridLines = True
 
             example_sheet = workbook.create_sheet('Example', 1)
             example_sheet.append(headers)
-            example_class = active_classes[0] if active_classes else None
-            example_team = existing_teams[0] if existing_teams else None
-            example_sheet.append([
-                'Demo Student',
-                'Female',
-                example_class.category.code if example_class else (active_cats[0].code if active_cats else ''),
-                example_class.name if example_class else '',
-                'A',
-                example_team.name if example_team else '',
-                'Example address',
-            ])
+
+            sample_students = [
+                ('Rahul Sharma', 'Male'),
+                ('Ananya Patel', 'Female'),
+                ('Mohammed Zayan', 'Male'),
+                ('Diya Nair', 'Female'),
+                ('Aarav Gupta', 'Male'),
+                ('Fatima Zahra', 'Female'),
+                ('Vihaan Reddy', 'Male'),
+                ('Meera Krishnan', 'Female'),
+                ('Arjun Das', 'Male'),
+                ('Kavya Pillai', 'Female'),
+                ('Aditya Verma', 'Male'),
+                ('Zoya Ali', 'Female'),
+                ('Dev Menon', 'Male'),
+                ('Riya Sen', 'Female'),
+                ('Ishan Joshi', 'Male'),
+                ('Sana Sheikh', 'Female'),
+                ('Rohan Iyer', 'Male'),
+                ('Pooja Hegde', 'Female'),
+                ('Karan Malhotra', 'Male'),
+                ('Tanvi Chawla', 'Female'),
+            ]
+
+            team_idx = 0
+            name_idx = 0
+            classes_to_demo = active_classes if active_classes else [None]
+
+            for cls in classes_to_demo:
+                cls_name = cls.name if cls else 'Grade 10'
+                for sec in ['A', 'B']:
+                    s_name, s_gender = sample_students[name_idx % len(sample_students)]
+                    name_idx += 1
+
+                    team_name = ''
+                    if existing_teams:
+                        team_name = existing_teams[team_idx % len(existing_teams)].name
+                        team_idx += 1
+
+                    example_sheet.append([
+                        s_name,
+                        cls_name,
+                        sec,
+                        s_gender,
+                        team_name,
+                    ])
+
             for cell in example_sheet[1]:
                 cell.fill = header_fill
                 cell.font = Font(color='FFFFFF', bold=True)
-            for column, width in {'A': 28, 'B': 14, 'C': 18, 'D': 24, 'E': 16, 'F': 24, 'G': 38}.items():
+            for column, width in {'A': 28, 'B': 20, 'C': 14, 'D': 16, 'E': 24}.items():
                 example_sheet.column_dimensions[column].width = width
-            example_sheet.sheet_view.showGridLines = False
+            example_sheet.sheet_view.showGridLines = True
+            example_sheet.freeze_panes = 'A2'
+
+            # Tab colors for clear sheet identification
+            students_sheet.sheet_properties.tabColor = '10B981'
+            example_sheet.sheet_properties.tabColor = '4F46E5'
+            setup_sheet.sheet_properties.tabColor = '6366F1'
+            instructions_sheet.sheet_properties.tabColor = 'F59E0B'
 
             output = io.BytesIO()
             workbook.save(output)

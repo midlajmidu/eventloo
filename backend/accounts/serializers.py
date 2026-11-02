@@ -84,7 +84,7 @@ class HardenedTokenRefreshSerializer(TokenRefreshSerializer):
         return super().validate(attrs)
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    school_code = serializers.SlugField(write_only=True)
+    school_code = serializers.SlugField(write_only=True, required=False, allow_blank=True, default='')
 
     @classmethod
     def get_token(cls, user):
@@ -97,16 +97,18 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         return token
 
     def validate(self, attrs):
-        school_code = attrs.pop('school_code', '').lower()
+        school_code = attrs.pop('school_code', '').strip().lower()
         data = super().validate(attrs)
         if self.user.is_superuser or self.user.role == 'super_admin':
             raise serializers.ValidationError('Use the super-admin login page for this account.')
         if self.user.role not in ('admin', 'event_manager'):
-            raise serializers.ValidationError('Invalid school code or credentials.')
-        if not self.user.school_id or self.user.school.code != school_code:
-            raise serializers.ValidationError('Invalid school code or credentials.')
+            raise serializers.ValidationError('Invalid credentials.')
+        if not self.user.school_id:
+            raise serializers.ValidationError('User is not associated with an active school.')
         if self.user.school.status != 'active':
             raise serializers.ValidationError('This school is not active.')
+        if school_code and self.user.school.code != school_code:
+            raise serializers.ValidationError('Invalid school code or credentials.')
         
         # Add custom user data to the response
         data['user'] = {
@@ -127,30 +129,35 @@ class TeamManagerLoginSerializer(serializers.Serializer):
     """Serializer for team manager login using team credentials"""
     team_username = serializers.CharField(max_length=100)
     team_password = serializers.CharField(max_length=128)
-    school_code = serializers.SlugField()
+    school_code = serializers.SlugField(required=False, allow_blank=True, default='')
     
     def validate(self, attrs):
-        team_username = attrs.get('team_username')
-        team_password = attrs.get('team_password')
+        team_username = attrs.get('team_username', '').strip()
+        team_password = attrs.get('team_password', '').strip()
+        school_code = attrs.get('school_code', '').strip().lower()
         
         if not team_username or not team_password:
             raise serializers.ValidationError("Both team username and password are required")
         
-        # Find team by credentials
-        try:
-            team = Team.objects.select_related('school').get(
-                school__code=attrs.get('school_code', '').lower(),
-                school__status='active',
-                team_username=team_username,
-            )
-        except Team.DoesNotExist:
-            raise serializers.ValidationError("Invalid team credentials")
+        teams = Team.objects.select_related('school').filter(
+            school__status='active',
+            team_username=team_username,
+        )
+        if school_code:
+            teams = teams.filter(school__code=school_code)
+        
         from django.contrib.auth.hashers import check_password
-        if not check_password(team_password, team.team_password):
+        matched_team = None
+        for team in teams:
+            if check_password(team_password, team.team_password):
+                matched_team = team
+                break
+        
+        if not matched_team:
             raise serializers.ValidationError("Invalid team credentials")
         
         # Store team in validated data for use in view
-        attrs['team'] = team
+        attrs['team'] = matched_team
         return attrs
 
 class TeamManagerResponseSerializer(serializers.ModelSerializer):
@@ -259,8 +266,12 @@ class StudentSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'name', 'role', 'gender', 'category', 'grade', 'section', 'address', 'date_of_birth', 'student_id', 'display_name', 'total_points', 'chest_code', 'team', 'team_id']
-        read_only_fields = ['id', 'username', 'student_id', 'display_name', 'total_points', 'chest_code', 'team', 'team_id']
+        fields = [
+            'id', 'email', 'name', 'role', 'gender', 'category', 'grade', 'section',
+            'phone_number', 'date_of_birth', 'address', 'guardian_name', 'guardian_phone',
+            'student_id', 'display_name', 'total_points', 'chest_code', 'team', 'team_id'
+        ]
+        read_only_fields = ['id', 'student_id', 'display_name', 'total_points', 'chest_code', 'team', 'team_id']
 
     def get_team(self, obj):
         """Get the team information for this student"""
@@ -291,21 +302,61 @@ class StudentSerializer(serializers.ModelSerializer):
             return None
 
 class StudentCreateUpdateSerializer(serializers.ModelSerializer):
-    """Serializer for creating/updating students"""
+    """Serializer for creating/updating students with all DB model fields"""
     student_id = serializers.CharField(required=False, allow_blank=True)
+    team_id = serializers.IntegerField(required=False, allow_null=True)
+    email = serializers.EmailField(required=False, allow_blank=True, allow_null=True)
+    phone_number = serializers.CharField(required=False, allow_blank=True, max_length=15)
+    guardian_phone = serializers.CharField(required=False, allow_blank=True, max_length=15)
+    date_of_birth = serializers.DateField(required=False, allow_null=True)
     
     class Meta:
         model = User
         fields = [
             'id', 'name', 'gender', 'category', 'grade', 'section',
-            'address', 'guardian_name', 'guardian_phone', 'student_id'
+            'email', 'phone_number', 'date_of_birth', 'address',
+            'guardian_name', 'guardian_phone', 'student_id', 'team_id'
         ]
         read_only_fields = ['id']
     
+    def to_internal_value(self, data):
+        # Normalize empty strings to None for optional fields before deserialization
+        if hasattr(data, '_mutable'):
+            data = data.copy()
+        elif isinstance(data, dict):
+            data = data.copy()
+
+        if 'date_of_birth' in data and not data['date_of_birth']:
+            data['date_of_birth'] = None
+        if 'email' in data and not data['email']:
+            data['email'] = None
+        if 'team_id' in data and (data['team_id'] == '' or data['team_id'] is None):
+            data['team_id'] = None
+
+        return super().to_internal_value(data)
+
     def validate(self, data):
         # Ensure name is provided
         if not data.get('name'):
             raise serializers.ValidationError("Name is required")
+
+        # Clean and validate optional email
+        if 'email' in data:
+            raw_email = data.get('email')
+            if raw_email:
+                clean_email = str(raw_email).strip().lower()
+                if not clean_email or clean_email in ('none', 'null', 'nan'):
+                    data['email'] = None
+                else:
+                    existing_email = User.objects.filter(email=clean_email).exclude(id=self.instance.id if self.instance else None)
+                    if existing_email.exists():
+                        raise serializers.ValidationError({'email': f'A user with email "{clean_email}" already exists.'})
+                    data['email'] = clean_email
+            else:
+                data['email'] = None
+
+        if 'date_of_birth' in data and not data.get('date_of_birth'):
+            data['date_of_birth'] = None
 
         gender = data.get('gender', getattr(self.instance, 'gender', '') if self.instance else '')
         if not gender:
@@ -352,6 +403,31 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
                     'student_id': f'Student ID "{student_id}" already exists in category "{category.upper()}". Student IDs must be unique within each category.'
                 })
         
+        # Validate student name duplication within the same class and section for this school
+        name = data.get('name', getattr(self.instance, 'name', '') if self.instance else '')
+        if name and grade:
+            clean_name = name.strip()
+            section = data.get('section', getattr(self.instance, 'section', '') if self.instance else '')
+            clean_sec = (section or '').strip()
+
+            dup_query = User.objects.filter(
+                role='student',
+                school=self.context['request'].user.school,
+                name__iexact=clean_name,
+                grade=grade,
+            )
+            if clean_sec:
+                dup_query = dup_query.filter(section__iexact=clean_sec)
+            if self.instance:
+                dup_query = dup_query.exclude(pk=self.instance.pk)
+
+            if dup_query.exists():
+                existing = dup_query.first()
+                sec_info = f" in Section '{existing.section}'" if existing.section else ""
+                raise serializers.ValidationError({
+                    'name': f"A student named '{existing.name}' is already enrolled in Class '{existing.grade}'{sec_info} (ID: {existing.student_id}). Duplicate student enrollment is not permitted."
+                })
+
         return data
 
 class SchoolSettingsSerializer(serializers.ModelSerializer):
@@ -483,16 +559,20 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
 class StudentCategorySerializer(serializers.ModelSerializer):
     class_ids = serializers.SerializerMethodField(read_only=True)
     mixed_category_ids = serializers.SerializerMethodField(read_only=True)
+    mixed_category_codes = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = StudentCategory
-        fields = ['id', 'name', 'code', 'is_mixing', 'is_active', 'class_ids', 'mixed_category_ids']
+        fields = ['id', 'name', 'code', 'is_mixing', 'is_active', 'class_ids', 'mixed_category_ids', 'mixed_category_codes']
 
     def get_class_ids(self, obj):
         return list(obj.classes.values_list('id', flat=True))
 
     def get_mixed_category_ids(self, obj):
         return list(obj.mixed_categories.values_list('id', flat=True))
+
+    def get_mixed_category_codes(self, obj):
+        return list(obj.mixed_categories.values_list('code', flat=True))
 
 
 class StudentClassSerializer(serializers.ModelSerializer):

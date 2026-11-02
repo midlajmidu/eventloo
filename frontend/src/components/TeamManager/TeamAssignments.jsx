@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   UserPlus,
-  UserMinus,
   AlertCircle,
   X,
   Users,
   Trophy,
   Search,
-  Filter,
   Calendar,
-  MapPin,
-  Clock
+  Target,
+  CheckCircle2
 } from 'lucide-react';
 import { teamManagerAPI, categoriesAPI } from '../../services/api';
 import Pagination from '../common/Pagination';
 
 const TeamAssignments = () => {
+  const navigate = useNavigate();
   const [teams, setTeams] = useState([]);
   const [programs, setPrograms] = useState([]);
   const [assignments, setAssignments] = useState([]);
@@ -30,11 +30,14 @@ const TeamAssignments = () => {
   const [selectedTeam, setSelectedTeam] = useState(null);
   const [categories, setCategories] = useState([]);
 
+  // Search & Filter
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
 
   useEffect(() => {
     fetchData();
@@ -44,7 +47,7 @@ const TeamAssignments = () => {
   const fetchCategories = async () => {
     try {
       const res = await categoriesAPI.list();
-      setCategories(res.data.results || res.data || []);
+      setCategories(res.data?.results || res.data || []);
     } catch (err) {
       console.error('Error fetching categories:', err);
     }
@@ -54,71 +57,47 @@ const TeamAssignments = () => {
     try {
       setLoading(true);
 
-      // Get team data from localStorage
       const teamData = JSON.parse(localStorage.getItem('team_data') || '{}');
       const teamId = teamData.id || teamData.team_id;
 
-
       if (!teamId) {
-        console.error('DEBUG: No team ID found in localStorage');
-        alert('No team data found. Please login again.');
+        console.error('No team ID found in localStorage');
         return;
       }
 
       setSelectedTeam(teamId);
-
-      // Build query parameters for programs pagination
-      const programsParams = new URLSearchParams();
-      programsParams.append('page', currentPage);
-      programsParams.append('page_size', pageSize);
-
-      const [eventsRes] = await Promise.all([
-        teamManagerAPI.getTeamEvents(teamId)
-      ]);
-
-
-      // Set default team from local storage
       setTeams([teamData]);
 
-      // Handle events response
-      if (eventsRes.data.events) {
-        setEvents(eventsRes.data.events);
-      } else {
-        setEvents(eventsRes.data);
-      }
+      const [eventsRes] = await Promise.all([
+        teamManagerAPI.getTeamEvents(teamId).catch(() => ({ data: { events: [] } }))
+      ]);
 
+      const eventsList = eventsRes.data?.events || eventsRes.data?.results || eventsRes.data || [];
+      setEvents(eventsList);
 
-      // Fetch programs for all events and get team members from the first response
       const allPrograms = [];
       let teamMembersFromResponse = [];
 
-      for (const event of eventsRes.data.events || eventsRes.data) {
+      for (const event of eventsList) {
         try {
           const programsResponse = await teamManagerAPI.getEventPrograms(teamId, event.id);
-
-          // Handle both paginated and non-paginated responses
           let eventPrograms = [];
           let teamMembersFromProgramsResponse = [];
 
           if (programsResponse.data?.results) {
-            // Paginated response - the results contain the full response structure
             const resultData = programsResponse.data.results;
             eventPrograms = resultData.programs || [];
             teamMembersFromProgramsResponse = resultData.team_members || [];
           } else {
-            // Non-paginated response
             eventPrograms = programsResponse.data?.programs || [];
             teamMembersFromProgramsResponse = programsResponse.data?.team_members || [];
           }
 
-
-          // Get team members from the first response (they should be the same for all events)
           if (teamMembersFromResponse.length === 0 && teamMembersFromProgramsResponse.length > 0) {
             teamMembersFromResponse = teamMembersFromProgramsResponse;
           }
 
-          // Add event info to each program
-          eventPrograms.forEach(program => {
+          eventPrograms.forEach((program) => {
             program.event_id = event.id;
             program.event_title = event.title;
           });
@@ -128,18 +107,14 @@ const TeamAssignments = () => {
         }
       }
 
-      // Set team members from the programs response
       setTeamMembers(teamMembersFromResponse);
-
       setPrograms(allPrograms);
       setTotalCount(allPrograms.length);
-      setTotalPages(Math.ceil(allPrograms.length / pageSize));
 
-      // Get assignments from programs
       const allAssignments = [];
-      allPrograms.forEach(program => {
+      allPrograms.forEach((program) => {
         if (program.assigned_students && program.assigned_students.length > 0) {
-          program.assigned_students.forEach(student => {
+          program.assigned_students.forEach((student) => {
             const assignment = {
               id: `${program.id}-${student.student_id}`,
               program_id: program.id,
@@ -148,116 +123,64 @@ const TeamAssignments = () => {
               event_id: program.event_id,
               event_title: program.event_title,
               student_id: student.student_id,
-              student_db_id: student.id,
               student_name: student.name,
-              student_category: student.category,
+              student_db_id: student.id,
+              chest_number: student.chest_number,
               sub_team_number: student.sub_team_number || 1,
-              assignment_id: student.assignment_id,
+              is_leader: student.is_leader || false,
             };
             allAssignments.push(assignment);
           });
         }
       });
+
       setAssignments(allAssignments);
-
-
-
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      alert('Error loading data. Please try again.');
+    } catch (err) {
+      console.error('Error fetching data:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
+  const getCategoryDisplay = (code) => {
+    if (!code) return 'General';
+    const found = categories.find((c) => c.code?.toLowerCase() === code.toLowerCase());
+    return found?.name || code.toUpperCase();
   };
 
-  const handlePageSizeChange = (newPageSize) => {
-    setPageSize(newPageSize);
-    setCurrentPage(1); // Reset to first page when changing page size
+  const getCategoryBadge = (code) => {
+    return 'bg-slate-100 text-slate-700 border-slate-200/80';
   };
 
-  const handleAssignStudents = async () => {
-    if (!selectedProgram || selectedStudents.length === 0 || !selectedTeam) return;
+  const getAssignmentsForProgram = (programId) => {
+    return assignments.filter((a) => a.program_id === programId);
+  };
 
-    // For team-based programs, validate team requirements
-    if (selectedProgram.is_team_based) {
-      if (selectedProgram.team_size && selectedStudents.length !== selectedProgram.team_size) {
-        alert(`This program requires exactly ${selectedProgram.team_size} team members. You selected ${selectedStudents.length}.`);
-        return;
-      }
-
-      // A program may allow multiple independently numbered sub-teams.
-      const existingAssignments = getAssignmentsForProgram(selectedProgram.id);
-      if (existingAssignments.some(item => (item.sub_team_number || 1) === selectedSubTeam)) {
-        alert(`Sub-Team ${selectedSubTeam} is already assigned. Remove it before replacing it.`);
-        return;
-      }
-    } else {
-      // For individual programs, validate participant limit per team
-      if (selectedProgram.max_participants) {
-        const currentAssignments = getAssignmentsForProgram(selectedProgram.id);
-        const currentCount = currentAssignments.length;
-        const newCount = selectedStudents.length;
-
-        if (currentCount + newCount > selectedProgram.max_participants) {
-          alert(`Cannot assign students. This would exceed the maximum participants limit (${selectedProgram.max_participants}). Current: ${currentCount}, New: ${newCount}`);
-          return;
-        }
-      }
-
-      // Individual programs can only assign one student at a time
-      if (selectedStudents.length !== 1) {
-        alert('Individual programs can only assign one student at a time.');
-        return;
-      }
+  const handleAssignSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedProgram || selectedStudents.length === 0) {
+      alert('Please select at least one student to assign.');
+      return;
     }
 
     try {
       setSubmitting(true);
-
-      // For team-based programs, assign all students together
       if (selectedProgram.is_team_based) {
-        try {
-          await teamManagerAPI.assignStudentsToProgram(
+        await teamManagerAPI.assignStudentsToProgram(
+          selectedTeam,
+          selectedProgram.event_id,
+          selectedProgram.id,
+          selectedStudents,
+          selectedSubTeam
+        );
+      } else {
+        for (const studentId of selectedStudents) {
+          await teamManagerAPI.assignStudentToProgram(
             selectedTeam,
             selectedProgram.event_id,
             selectedProgram.id,
-            selectedStudents,
-            selectedSubTeam
+            studentId
           );
-          alert(`Successfully assigned ${selectedStudents.length} team members to ${selectedProgram.name}`);
-        } catch (err) {
-          alert(`Error assigning team: ${err.message}`);
-        }
-      } else {
-        // For individual programs, assign each student individually
-        const results = [];
-        for (const studentId of selectedStudents) {
-          try {
-            await teamManagerAPI.assignStudentToProgram(
-              selectedTeam,
-              selectedProgram.event_id,
-              selectedProgram.id,
-              studentId
-            );
-            results.push({ studentId, success: true });
-          } catch (err) {
-            results.push({ studentId, success: false, error: err.message });
-          }
-        }
-
-        const successCount = results.filter(r => r.success).length;
-        const failedCount = results.filter(r => !r.success).length;
-
-        if (successCount > 0) {
-          alert(`Successfully assigned ${successCount} students to ${selectedProgram.name}`);
-        }
-
-        if (failedCount > 0) {
-          alert(`${failedCount} assignments failed. Please try again.`);
         }
       }
 
@@ -266,16 +189,16 @@ const TeamAssignments = () => {
       setSelectedStudents([]);
       setSelectedSubTeam(1);
       fetchData();
-    } catch (error) {
-      console.error('Error assigning students:', error);
-      alert('Error assigning students. Please try again.');
+    } catch (err) {
+      console.error('Assignment error:', err);
+      alert('Failed to complete program assignment. Please check limits and student eligibility.');
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleRemoveAssignment = async (assignment) => {
-    if (!window.confirm('Are you sure you want to remove this assignment?')) return;
+    if (!window.confirm(`Remove ${assignment.student_name} from ${assignment.program_name}?`)) return;
 
     try {
       await teamManagerAPI.removeStudentFromProgram(
@@ -284,427 +207,476 @@ const TeamAssignments = () => {
         assignment.program_id,
         assignment.student_db_id
       );
-      alert('Assignment removed successfully');
       fetchData();
-    } catch (error) {
-      console.error('Error removing assignment:', error);
-      alert('Error removing assignment. Please try again.');
+    } catch (err) {
+      console.error('Remove assignment error:', err);
+      alert('Failed to remove assignment.');
     }
   };
 
-  const getAvailableStudents = () => {
-    if (!selectedProgram) return [];
+  const filteredPrograms = programs.filter((p) => {
+    const q = searchTerm.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      p.name?.toLowerCase().includes(q) ||
+      p.event_title?.toLowerCase().includes(q) ||
+      p.category?.toLowerCase().includes(q);
+    const matchesCategory =
+      selectedCategoryFilter === 'all' ||
+      p.category?.toLowerCase() === selectedCategoryFilter.toLowerCase();
+    return matchesSearch && matchesCategory;
+  });
 
-    // Get students that match the program category and are not already assigned
-    const assignedStudentIds = new Set();
-    assignments.forEach(assignment => {
-      if (assignment.program_id === selectedProgram.id) {
-        assignedStudentIds.add(assignment.student_id);
-      }
-    });
-
-    const availableStudents = teamMembers.filter(student => {
-      // For general programs, show all students
-      // For category-specific programs, only show students matching that category
-      const selectedCategory = categories.find(
-        category => category.code?.toLowerCase() === selectedProgram.category?.toLowerCase()
-      );
-      const categoryMatch = selectedProgram.category?.toLowerCase() === 'general' ||
-        selectedCategory?.is_mixing ||
-        student.category?.toLowerCase() === selectedProgram.category?.toLowerCase();
-      const notAssigned = !assignedStudentIds.has(student.student_id);
-
-      return categoryMatch && notAssigned;
-    });
-
-    return availableStudents;
-  };
-
-  const getCategoryColor = (category) => {
-    const cat = categories.find(c => c.code === category);
-    if (category === 'hs') return 'bg-blue-100 text-blue-800';
-    if (category === 'hss') return 'bg-purple-100 text-purple-800';
-    if (category === 'primary') return 'bg-green-100 text-green-800';
-    if (category === 'general' || (cat && cat.is_mixing)) return 'bg-orange-100 text-orange-800';
-    return 'bg-gray-100 text-gray-800';
-  };
-
-  const getCategoryDisplay = (category) => {
-    const cat = categories.find(c => c.code === category);
-    return cat ? cat.name : (category?.toUpperCase() || 'Unknown');
-  };
-
-  const getAssignmentsForProgram = (programId) => {
-    return assignments.filter(assignment => assignment.program_id === programId);
-  };
-
-  const getCategoryCounts = () => {
-    const counts = {};
-    teamMembers.forEach(student => {
-      const category = student.category?.toLowerCase() || 'unknown';
-      counts[category] = (counts[category] || 0) + 1;
-    });
-    return counts;
-  };
+  const paginatedPrograms = filteredPrograms.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="flex min-h-[65vh] items-center justify-center bg-[#f7f8fb]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 text-lg">Loading assignments...</p>
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600 mx-auto" />
+          <p className="mt-3 text-sm font-medium text-slate-500">Loading assignments...</p>
         </div>
       </div>
     );
   }
 
+  const teamData = JSON.parse(localStorage.getItem('team_data') || '{}');
+  const teamName = teamData.name || teamData.team_name || 'My Team';
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold text-gray-900 mb-2">Team Assignments</h1>
-              <p className="text-gray-600 text-lg">
-                Manage program assignments for your team members
-              </p>
-            </div>
-            <div className="bg-white rounded-lg px-4 py-2 shadow-sm border border-gray-200">
-              <div className="flex items-center space-x-2">
-                <Users className="h-5 w-5 text-blue-500" />
-                <span className="text-sm font-medium text-gray-700">{teamMembers.length} Team Members</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-blue-100 rounded-lg">
-                <Users className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Members</p>
-                <p className="text-2xl font-bold text-gray-900">{teamMembers.length}</p>
-              </div>
-            </div>
+    <main className="min-h-screen bg-[#f7f8fb] px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl">
+        {/* ========================================================================= */}
+        {/* 1. HEADER */}
+        {/* ========================================================================= */}
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
+              Allocations
+            </p>
+            <h1 className="mt-1 text-xl font-bold tracking-tight text-slate-900">
+              Program Assignments
+            </h1>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Assign roster students of <span className="font-semibold text-slate-700">{teamName}</span> into competitive stage items.
+            </p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <Trophy className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Programs</p>
-                <p className="text-2xl font-bold text-gray-900">{programs.length}</p>
-              </div>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs">
+              <Users className="h-3.5 w-3.5 text-indigo-600" />
+              <span>{teamMembers.length} Members Available</span>
             </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <UserPlus className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Assignments</p>
-                <p className="text-2xl font-bold text-gray-900">{assignments.length}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <div className="flex items-center">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <Calendar className="h-6 w-6 text-yellow-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Events</p>
-                <p className="text-2xl font-bold text-gray-900">{events.length}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Team Members Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Team Members</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {teamMembers.map((member) => (
-              <div key={member.id} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-medium text-gray-900">{member.name}</h3>
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(member.category)}`}>
-                    {getCategoryDisplay(member.category)}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-600 space-y-1">
-                  <p>ID: {member.student_id}</p>
-                  <p>Grade: {member.grade}</p>
-                  {member.section && <p>Section: {member.section}</p>}
-                  <p>Chest Code: {member.chest_code}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Programs Section */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-gray-900">Available Programs</h2>
             <button
-              onClick={() => setShowAssignModal(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+              onClick={() => navigate('/team-manager/students')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs hover:border-indigo-200 hover:text-indigo-600 transition-colors"
             >
-              <UserPlus className="h-4 w-4" />
-              <span>Assign Students</span>
+              <span>View Roster</span>
             </button>
           </div>
+        </header>
 
-          {programs.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {programs.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((program) => {
-                const programAssignments = getAssignmentsForProgram(program.id);
-                const availableStudents = teamMembers.filter(student => {
-                  // For general programs (general category), show all students
-                  // For category-specific programs, only show students matching that category
-                  const categoryConfig = categories.find(c => c.code?.toLowerCase() === program.category?.toLowerCase());
-                  const categoryMatch = program.category?.toLowerCase() === 'general' ||
-                    categoryConfig?.is_mixing ||
-                    student.category?.toLowerCase() === program.category?.toLowerCase();
-                  const notAssigned = !programAssignments.some(assignment => assignment.student_id === student.student_id);
-                  return categoryMatch && notAssigned;
-                });
+        {/* ========================================================================= */}
+        {/* 2. SUMMARY METRICS */}
+        {/* ========================================================================= */}
+        <section className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-3 sm:p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+              <Users className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xl font-bold tracking-tight text-slate-900">{teamMembers.length}</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Total Members</p>
+            </div>
+          </div>
 
-                return (
-                  <div key={program.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-medium text-gray-900">{program.name}</h3>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor(program.category)}`}>
-                        {getCategoryDisplay(program.category)}
-                      </span>
-                    </div>
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-3 sm:p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+              <Trophy className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xl font-bold tracking-tight text-slate-900">{programs.length}</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Active Programs</p>
+            </div>
+          </div>
 
-                    <div className="text-sm text-gray-600 mb-3">
-                      <p>Event: {program.event_title}</p>
-                      <p>Type: {program.is_team_based ? 'Team-Based' : 'Individual'}</p>
-                      {program.is_team_based ? (
-                        <div>
-                          <p>Team Size: {program.team_size || 'Not set'} members</p>
-                          <p>Sub-Teams: {new Set(programAssignments.map(a => a.sub_team_number || 1)).size}/{program.max_teams_per_school || 1}</p>
-                        </div>
-                      ) : (
-                        <div>
-                          <p>Assigned: {program.assigned_count}/{program.max_participants || '∞'}</p>
-                          <p>Available: {program.available_slots}</p>
-                        </div>
-                      )}
-                    </div>
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-3 sm:p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+              <Target className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xl font-bold tracking-tight text-slate-900">{assignments.length}</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Allocated Entries</p>
+            </div>
+          </div>
 
-                    {/* Assigned Students */}
-                    {programAssignments.length > 0 && (
-                      <div className="mb-3">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Assigned Students:</h4>
-                        <div className="space-y-1">
-                          {programAssignments.map((assignment) => (
-                            <div key={assignment.id} className="flex items-center justify-between bg-gray-50 rounded px-2 py-1">
-                              <span className="text-sm text-gray-600">{assignment.student_name}</span>
-                              <button
-                                onClick={() => handleRemoveAssignment(assignment)}
-                                className="text-red-600 hover:text-red-800 text-xs"
-                              >
-                                <UserMinus className="h-3 w-3" />
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white p-3 sm:p-3.5 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
+              <Calendar className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xl font-bold tracking-tight text-slate-900">{events.length}</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400">Festivals</p>
+            </div>
+          </div>
+        </section>
 
-                    {/* Assignment Actions */}
-                    <div className="flex items-center justify-between">
-                      <button
-                        onClick={() => {
-                          setSelectedProgram(program);
-                          setShowAssignModal(true);
-                        }}
-                        disabled={availableStudents.length === 0}
-                        className={`flex items-center space-x-1 text-sm ${availableStudents.length > 0
-                            ? 'text-blue-600 hover:text-blue-800'
-                            : 'text-gray-400 cursor-not-allowed'
-                          }`}
+        {/* ========================================================================= */}
+        {/* 3. FILTER BAR */}
+        {/* ========================================================================= */}
+        <section className="mt-5 rounded-xl border border-slate-200/80 bg-white p-2.5 sm:p-3 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-[1fr_200px_auto]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                placeholder="Search programs by title or event..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-xs text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-1 focus:ring-indigo-100"
+              />
+            </div>
+
+            <select
+              value={selectedCategoryFilter}
+              onChange={(e) => {
+                setSelectedCategoryFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="h-9 rounded-lg border border-slate-200 bg-slate-50/70 px-3 text-xs text-slate-700 outline-none focus:border-indigo-300 focus:ring-1 focus:ring-indigo-100"
+            >
+              <option value="all">All categories</option>
+              {categories.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={() => {
+                setSearchTerm('');
+                setSelectedCategoryFilter('all');
+                setCurrentPage(1);
+              }}
+              className="h-9 rounded-lg px-3 text-xs font-medium text-slate-500 transition hover:bg-slate-100 hover:text-indigo-600"
+            >
+              Clear
+            </button>
+          </div>
+        </section>
+
+        {/* ========================================================================= */}
+        {/* 4. TABLE VIEW (Matches Event Manager portal UI pattern) */}
+        {/* ========================================================================= */}
+        <section className="mt-4 overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
+            <p className="text-xs font-semibold text-slate-900">Program allocation directory</p>
+            <p className="text-[11px] text-slate-400">{filteredPrograms.length} items</p>
+          </div>
+
+          {paginatedPrograms.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-slate-50/60">
+                  <tr>
+                    {['Program', 'Category', 'Festival / Event', 'Slots / Capacity', 'Assigned Students'].map((label) => (
+                      <th
+                        key={label}
+                        className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400"
                       >
-                        <UserPlus className="h-4 w-4" />
-                        <span>Assign ({availableStudents.length} available)</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                        {label}
+                      </th>
+                    ))}
+                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedPrograms.map((program) => {
+                    const programAssignments = getAssignmentsForProgram(program.id);
+                    const assignedCount = programAssignments.length;
+                    const maxAllowed = program.is_team_based
+                      ? (program.team_size || 4)
+                      : (program.max_participants || 1);
+                    const isFull = assignedCount >= maxAllowed;
+
+                    return (
+                      <tr key={program.id} className="transition hover:bg-indigo-50/30">
+                        {/* Program Name & Type */}
+                        <td className="px-4 py-3">
+                          <div>
+                            <p className="font-semibold text-slate-900 text-xs max-w-[240px] truncate">
+                              {program.name}
+                            </p>
+                            <span className="text-[10px] text-slate-400 font-medium capitalize">
+                              {program.is_team_based ? 'Group Team Event' : 'Individual Solo'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Category */}
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${getCategoryBadge(
+                              program.category
+                            )}`}
+                          >
+                            {getCategoryDisplay(program.category)}
+                          </span>
+                        </td>
+
+                        {/* Festival / Event */}
+                        <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">
+                          <div className="flex items-center gap-1.5">
+                            <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate max-w-[200px]">{program.event_title}</span>
+                          </div>
+                        </td>
+
+                        {/* Capacity / Slots */}
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium ${
+                                isFull
+                                  ? 'border-slate-200 bg-slate-100 text-slate-600'
+                                  : 'border-indigo-100 bg-indigo-50 text-indigo-700'
+                              }`}
+                            >
+                              {assignedCount} / {maxAllowed} slots
+                            </span>
+                            <div className="h-1.5 w-14 overflow-hidden rounded-full bg-slate-100">
+                              <div
+                                className={`h-full rounded-full transition-all duration-300 ${
+                                  isFull ? 'bg-slate-400' : 'bg-indigo-600'
+                                }`}
+                                style={{
+                                  width: `${Math.min(100, (assignedCount / maxAllowed) * 100)}%`,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Assigned Students */}
+                        <td className="px-4 py-3">
+                          {programAssignments.length > 0 ? (
+                            <div className="flex flex-wrap items-center gap-1 max-w-sm">
+                              {programAssignments.map((a) => (
+                                <span
+                                  key={a.id}
+                                  className="inline-flex items-center gap-1 rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
+                                >
+                                  <span className="truncate max-w-[120px]">{a.student_name}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveAssignment(a)}
+                                    className="text-slate-400 hover:text-rose-600 transition-colors p-0.5"
+                                    title={`Remove ${a.student_name}`}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </span>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400 italic">No students assigned</span>
+                          )}
+                        </td>
+
+                        {/* Action */}
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedProgram(program);
+                              setSelectedStudents([]);
+                              setShowAssignModal(true);
+                            }}
+                            disabled={isFull}
+                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                              isFull
+                                ? 'border border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
+                                : 'bg-indigo-600 text-white shadow-2xs hover:bg-indigo-700'
+                            }`}
+                          >
+                            <UserPlus className="h-3 w-3" />
+                            <span>{isFull ? 'Full' : 'Assign'}</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
-              <Trophy className="h-12 w-12 mx-auto mb-2 text-gray-300" />
-              <p>No programs available</p>
+            <div className="p-16 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+                <Trophy className="h-5 w-5 text-slate-400" />
+              </div>
+              <h3 className="mt-4 text-sm font-semibold text-slate-900">No programs match</h3>
+              <p className="mt-1 text-sm text-slate-400">Try modifying your search or category filter.</p>
             </div>
           )}
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="mt-6">
+          {filteredPrograms.length > pageSize && (
+            <div className="border-t border-slate-100 px-5 py-3">
               <Pagination
                 currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                onPageSizeChange={handlePageSizeChange}
+                totalPages={Math.ceil(filteredPrograms.length / pageSize)}
+                onPageChange={(page) => setCurrentPage(page)}
                 pageSize={pageSize}
-                totalCount={totalCount}
+                onPageSizeChange={(size) => {
+                  setPageSize(size);
+                  setCurrentPage(1);
+                }}
+                totalCount={filteredPrograms.length}
+                className="text-slate-500"
               />
             </div>
           )}
-        </div>
+        </section>
+      </div>
 
-        {/* Assignment Modal */}
-        {showAssignModal && selectedProgram && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Assign Students to {selectedProgram.name}
-                </h3>
-                <button
-                  onClick={() => {
-                    setShowAssignModal(false);
-                    setSelectedProgram(null);
-                    setSelectedStudents([]);
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-6 w-6" />
-                </button>
-              </div>
+      {/* ========================================================================= */}
+      {/* 5. ASSIGNMENT MODAL (Eventloo Indigo Theme) */}
+      {/* ========================================================================= */}
+      {/* ========================================================================= */}
+      {/* 5. ASSIGNMENT MODAL (Eventloo Indigo Theme) */}
+      {/* ========================================================================= */}
+      {showAssignModal && selectedProgram && (() => {
+        const programAssignments = getAssignmentsForProgram(selectedProgram.id);
+        const assignedStudentIds = new Set(programAssignments.map((a) => a.student_id || a.student_db_id));
+        
+        // Only list students whose category is allowed for this program
+        const isCatAllowed = (sCat, pCat) => {
+          if (!pCat || pCat.toLowerCase() === 'all' || pCat.toLowerCase() === 'general') return true;
+          if (!sCat) return false;
+          return sCat.trim().toLowerCase() === pCat.trim().toLowerCase();
+        };
 
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-2">
-                  Select students to assign to this program. Only students matching the program category ({getCategoryDisplay(selectedProgram.category)}) are shown.
-                </p>
-                {selectedProgram.is_team_based ? (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-3">
-                    <p className="text-sm text-blue-800 font-medium mb-1">Team-Based Program Requirements:</p>
-                    <ul className="text-sm text-blue-700 space-y-1">
-                      <li>• All selected team members will participate together</li>
-                      <li>• Team size: {selectedProgram.team_size || 'Not set'} members (exact requirement)</li>
-                      <li>• Up to {selectedProgram.max_teams_per_school || 1} separate sub-team(s)</li>
-                    </ul>
-                    <label className="mt-3 block text-xs font-semibold text-blue-900">
-                      Sub-Team
-                      <select
-                        value={selectedSubTeam}
-                        onChange={(event) => setSelectedSubTeam(Number(event.target.value))}
-                        className="ml-2 rounded border border-blue-300 bg-white px-2 py-1"
-                      >
-                        {Array.from({ length: selectedProgram.max_teams_per_school || 1 }, (_, index) => (
-                          <option key={index + 1} value={index + 1}>Sub-Team {index + 1}</option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                ) : (
-                  selectedProgram.max_participants && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-3 text-xs text-amber-800 font-medium">
-                      Maximum Limit: {selectedProgram.max_participants} participant(s) per team.
-                      (Currently assigned: {getAssignmentsForProgram(selectedProgram.id).length})
-                    </div>
-                  )
-                )}
-              </div>
+        const eligibleMembers = teamMembers.filter((m) => {
+          if (assignedStudentIds.has(m.id) || assignedStudentIds.has(m.student_id)) return false;
+          return isCatAllowed(m.category, selectedProgram.category);
+        });
 
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {getAvailableStudents().map((student) => {
-                  const currentlyAssigned = getAssignmentsForProgram(selectedProgram.id).length;
-                  const maxAllowed = selectedProgram.max_participants;
-                  const isLimitReached = !selectedProgram.is_team_based && maxAllowed && (currentlyAssigned + selectedStudents.length >= maxAllowed) && !selectedStudents.includes(student.id);
-
-                  return (
-                    <label key={student.id} className={`flex items-center space-x-3 p-2 rounded transition-colors ${isLimitReached ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:bg-gray-50 cursor-pointer'
-                      }`}>
-                      <input
-                        type="checkbox"
-                        disabled={isLimitReached}
-                        checked={selectedStudents.includes(student.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            if (!selectedProgram.is_team_based && maxAllowed && (currentlyAssigned + selectedStudents.length >= maxAllowed)) {
-                              alert(`Maximum limit of ${maxAllowed} participant(s) per team reached for this program.`);
-                              return;
-                            }
-                            setSelectedStudents([...selectedStudents, student.id]);
-                          } else {
-                            setSelectedStudents(selectedStudents.filter(id => id !== student.id));
-                          }
-                        }}
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{student.name}</p>
-                        <p className="text-xs text-gray-600">
-                          {student.student_id} • Grade {student.grade} • {student.section}
-                        </p>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-
-              {getAvailableStudents().length === 0 && (
-                <div className="text-center py-4 text-gray-500">
-                  <AlertCircle className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                  <p>No available students for this program</p>
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-xs">
+            <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-start justify-between border-b border-slate-100 pb-3">
+                <div className="min-w-0 pr-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-600">
+                    {getCategoryDisplay(selectedProgram.category)} · {selectedProgram.is_team_based ? 'Team' : 'Single'}
+                  </p>
+                  <h3 className="text-sm font-bold text-slate-900 truncate mt-0.5">
+                    Assign to {selectedProgram.name}
+                  </h3>
                 </div>
-              )}
-
-              <div className="flex justify-end space-x-3 mt-6">
                 <button
+                  type="button"
                   onClick={() => {
                     setShowAssignModal(false);
                     setSelectedProgram(null);
                     setSelectedStudents([]);
                   }}
-                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAssignStudents}
-                  disabled={selectedStudents.length === 0 || submitting}
-                  className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${selectedStudents.length === 0 || submitting
-                      ? 'bg-gray-300 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
-                    }`}
-                >
-                  {submitting ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                      <span>Assigning...</span>
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus className="h-4 w-4" />
-                      <span>Assign {selectedStudents.length} Students</span>
-                    </>
-                  )}
+                  <X className="h-4 w-4" />
                 </button>
               </div>
+
+              <form onSubmit={handleAssignSubmit} className="mt-3.5 space-y-3.5">
+                <p className="text-xs text-slate-500">
+                  Select eligible <span className="font-medium text-slate-700">{getCategoryDisplay(selectedProgram.category)}</span> students:
+                </p>
+
+                <div className="space-y-1.5 max-h-56 overflow-y-auto border border-slate-200/80 rounded-lg p-1.5 bg-slate-50/50">
+                  {eligibleMembers.length > 0 ? (
+                    eligibleMembers.map((student) => {
+                      const sId = student.id || student.student_id;
+                      const isSelected = selectedStudents.includes(sId);
+                      return (
+                        <label
+                          key={sId}
+                          className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all border ${
+                            isSelected
+                              ? 'bg-indigo-50/70 border-indigo-200 shadow-2xs'
+                              : 'bg-white border-transparent hover:border-slate-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <input
+                              type={selectedProgram.is_team_based ? 'checkbox' : 'radio'}
+                              name="assignedStudent"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (selectedProgram.is_team_based) {
+                                  if (e.target.checked) {
+                                    setSelectedStudents((prev) => [...prev, sId]);
+                                  } else {
+                                    setSelectedStudents((prev) => prev.filter((id) => id !== sId));
+                                  }
+                                } else {
+                                  setSelectedStudents([sId]);
+                                }
+                              }}
+                              className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium text-slate-900 truncate">{student.name}</p>
+                              <p className="text-[10px] text-slate-400 font-mono">#{student.student_id}</p>
+                            </div>
+                          </div>
+
+                          <span className="text-[10px] font-medium text-slate-500 shrink-0">
+                            {student.grade ? `Class ${student.grade}` : (student.category || 'General')}
+                          </span>
+                        </label>
+                      );
+                    })
+                  ) : (
+                    <p className="text-xs text-slate-400 text-center py-6">
+                      No eligible {getCategoryDisplay(selectedProgram.category)} students available.
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowAssignModal(false);
+                      setSelectedProgram(null);
+                      setSelectedStudents([]);
+                    }}
+                    className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting || selectedStudents.length === 0}
+                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50 shadow-2xs transition-colors"
+                  >
+                    {submitting ? 'Assigning...' : 'Confirm'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        )}
-      </div>
-    </div>
+        );
+      })()}
+    </main>
   );
 };
 

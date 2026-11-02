@@ -6,10 +6,14 @@
  */
 export const getApiBaseUrl = () => {
   const configured = import.meta.env.VITE_API_URL;
-  if (configured) return configured.replace(/\/$/, '');
-  return import.meta.env.DEV
-    ? 'http://localhost:8002'
-    : 'https://eventloo-backend-qkvm.onrender.com';
+  if (configured !== undefined && configured !== null && configured !== '') {
+    return configured.replace(/\/$/, '');
+  }
+  if (import.meta.env.DEV) {
+    return 'http://localhost:8002';
+  }
+  // In single-container / same-origin deployments, use relative URL
+  return '';
 };
 
 

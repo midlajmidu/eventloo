@@ -129,10 +129,10 @@ function App() {
             <Route path="events" element={<TeamManagerEvents />} />
             <Route path="events/:eventId" element={<TeamEventDetail />} />
             <Route path="events/:eventId/programs/:programId/assign" element={<ProgramAssignmentPage />} />
-            <Route path="assignments" element={<TeamAssignments />} />
+            <Route path="assignments" element={<Navigate to="/team-manager/events" replace />} />
             <Route path="points" element={<TeamManagerPoints />} />
-            <Route path="profile" element={<div className="text-center py-20">Team Profile - Coming Soon!</div>} />
-            <Route path="settings" element={<div className="text-center py-20">Settings Page - Coming Soon!</div>} />
+            <Route path="profile" element={<Navigate to="/team-manager" replace />} />
+            <Route path="settings" element={<Navigate to="/team-manager" replace />} />
           </Route>
 
           {/* Protected User Routes */}

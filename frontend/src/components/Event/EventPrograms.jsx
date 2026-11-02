@@ -15,7 +15,8 @@ import {
   Filter,
   Eye,
   MoreVertical,
-  X
+  X,
+  Award
 } from 'lucide-react';
 import Pagination from '../common/Pagination';
 
@@ -82,6 +83,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
     duration_minutes_per_entry: '5',
     program_type: 'stage', // new field
     grading_points: {},
+    num_judges: event?.num_judges ? String(event.num_judges) : '3',
   });
   const activeGradeRules = Array.isArray(event?.grading_rules) && event.grading_rules.length > 0
     ? event.grading_rules
@@ -184,7 +186,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
     }
     
     if (formData.is_team_based && (!formData.max_teams_per_school || formData.max_teams_per_school <= 0)) {
-      alert('Number of sub-teams per school/team is required for team-based programs. Please enter a positive number.');
+      alert('Teams allowed per team or group is required for team-based programs. Please enter a positive number.');
       return;
     }
 
@@ -206,6 +208,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
       
       const programData = {
         ...formData,
+        num_judges: formData.num_judges ? parseInt(formData.num_judges, 10) : (event?.num_judges || 3),
         stage_id: formData.stage_id ? Number(formData.stage_id) : null,
         max_participants: formData.is_team_based ? null : parseInt(formData.max_participants) || null,
         team_size: formData.is_team_based ? parseInt(formData.team_size) || null : null,
@@ -261,6 +264,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
       duration_minutes_per_entry: program.duration_minutes_per_entry || '5',
       program_type: program.program_type || 'stage',
       grading_points: program.grading_points || {},
+      num_judges: String(program.num_judges || program.effective_num_judges || event?.num_judges || 3),
     });
     setShowAddModal(true);
   };
@@ -361,6 +365,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
       duration_minutes_per_entry: '5',
       program_type: 'stage',
       grading_points: {},
+      num_judges: event?.num_judges ? String(event.num_judges) : '3',
     });
   };
 
@@ -633,9 +638,11 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
                       {/* Type */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="space-y-1">
-                          <span className={`inline-flex px-2 py-0.5 text-[11px] font-semibold rounded-full border ${program.program_type === 'stage' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                            {program.program_type === 'stage' ? 'Stage' : 'Off-Stage'}
-                          </span>
+                          <div>
+                            <span className={`inline-flex px-2 py-0.5 text-[11px] font-semibold rounded-full border ${program.program_type === 'stage' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
+                              {program.program_type === 'stage' ? 'Stage' : 'Off-Stage'}
+                            </span>
+                          </div>
                           <div className="text-xs text-gray-500 font-medium flex items-center">
                             <Users className="h-3 w-3 mr-1 text-gray-400" />
                             {program.is_team_based ? (
@@ -801,6 +808,13 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
                     <span className="text-gray-500 font-medium">Venue</span>
                     <p className="font-bold text-gray-900 mt-0.5">{selectedViewProgram.venue || 'Not specified'}</p>
                   </div>
+                  <div>
+                    <span className="text-gray-500 font-medium">Number of Judges</span>
+                    <p className="font-bold text-gray-900 mt-0.5 flex items-center space-x-1">
+                      <Award className="h-3.5 w-3.5 text-amber-600" />
+                      <span>{selectedViewProgram.effective_num_judges || selectedViewProgram.num_judges || event?.num_judges || 3} {(selectedViewProgram.effective_num_judges || selectedViewProgram.num_judges || event?.num_judges || 3) === 1 ? 'Judge' : 'Judges'}</span>
+                    </p>
+                  </div>
                   <div className="col-span-2 pt-2 border-t border-gray-200/60">
                     <span className="text-gray-500 font-medium">Schedule</span>
                     <p className="font-bold text-gray-900 mt-0.5 flex items-center space-x-1.5">
@@ -937,6 +951,32 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
                   </div>
 
                   <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-semibold text-gray-700">Number of Judges *</label>
+                      <span className="text-[10px] text-gray-400 font-medium">Default: {event?.num_judges || 3}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[1, 2, 3, 4].map((count) => {
+                        const isSelected = String(formData.num_judges) === String(count);
+                        return (
+                          <button
+                            key={count}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, num_judges: String(count) })}
+                            className={`py-2 rounded-xl text-xs font-bold transition-all border ${
+                              isSelected
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                                : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                            }`}
+                          >
+                            {count} {count === 1 ? 'Judge' : 'Judges'}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div>
                     <label className="block text-xs font-semibold text-gray-700 mb-1">Stage / Location</label>
                     <select
                       value={formData.stage_id}
@@ -1045,7 +1085,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
                     <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 bg-indigo-50/50 p-4 rounded-xl border border-indigo-100">
                       <div>
                         <label className="block text-xs font-semibold text-gray-800 mb-1">
-                          Teams Allowed per School / Unit *
+                          Teams Allowed per Team or Group *
                         </label>
                         <input
                           type="number"

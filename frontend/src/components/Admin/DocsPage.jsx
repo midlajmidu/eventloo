@@ -396,7 +396,7 @@ const sections = [
         title: 'Template design',
         items: [
           'Upload the certificate background and enable only the fields required on the design.',
-          'Position Participant Name, Participant ID / Chest No, Category, Team / Institution, Event Name, Rank and Photo as needed.',
+          'Position Participant Name, Participant ID / Chest No, Category, Team, Event Name, Rank and Photo as needed.',
           'Adjust font, size, color, alignment and placement in the preview. Save the template for that certificate type.',
         ],
       },
@@ -472,11 +472,11 @@ const DocsPage = () => {
             <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-600 via-violet-500 to-blue-500" />
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div className="max-w-3xl">
-                <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-indigo-100 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-                  <Sparkles className="h-3.5 w-3.5" /> Administrator handbook
+                <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-indigo-700">
+                  <Sparkles className="h-3 w-3" /> Administrator handbook
                 </div>
-                <h1 className="text-3xl font-semibold tracking-tight text-slate-950 sm:text-4xl">Event management documentation</h1>
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+                <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Event management documentation</h1>
+                <p className="mt-1.5 max-w-2xl text-xs leading-5 text-slate-400 font-normal">
                   A complete operating guide from the first school setup through teams, students, events, judging, published results, documents and certificates.
                 </p>
               </div>

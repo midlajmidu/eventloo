@@ -8,6 +8,7 @@ CERTIFICATE_TYPE_CHOICES = (
     ('second_place', '2nd Place Certificate'),
     ('third_place', '3rd Place Certificate'),
     ('participation', 'Participation Certificate'),
+    ('badge', 'Badge'),
 )
 
 CERTIFICATE_TYPES = {value for value, _label in CERTIFICATE_TYPE_CHOICES}
@@ -60,6 +61,18 @@ FIELD_DEFINITIONS = {
         'label': 'Rank / Place', 'sample': '1st Place',
         'x': 75, 'y': 60, 'fontSize': 16, 'color': '#D97706',
         'fontFamily': 'helvetica', 'textAlign': 'center', 'bold': True,
+        'letterSpacing': 0, 'uppercase': False, 'enabled': False,
+    },
+    'totalPrograms': {
+        'label': 'Total Programs Count', 'sample': 'Total Programs: 3',
+        'x': 50, 'y': 77, 'fontSize': 13, 'color': '#D97706',
+        'fontFamily': 'helvetica', 'textAlign': 'center', 'bold': True,
+        'letterSpacing': 0, 'uppercase': False, 'enabled': False,
+    },
+    'assignedPrograms': {
+        'label': 'Assigned Programs List', 'sample': 'Solo Song, Elocution, Quiz (General)',
+        'x': 50, 'y': 85, 'fontSize': 11, 'color': '#1F2937',
+        'fontFamily': 'helvetica', 'textAlign': 'center', 'bold': False,
         'letterSpacing': 0, 'uppercase': False, 'enabled': False,
     },
 }

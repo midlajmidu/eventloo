@@ -55,7 +55,8 @@ INSTALLED_APPS = [
 ]
 
 USE_S3_MEDIA = bool(os.environ.get('AWS_STORAGE_BUCKET_NAME'))
-if not USE_S3_MEDIA and not DEBUG and not _is_test_run:
+ALLOW_LOCAL_MEDIA = os.environ.get('ALLOW_LOCAL_MEDIA', 'false').lower() == 'true'
+if not USE_S3_MEDIA and not ALLOW_LOCAL_MEDIA and not DEBUG and not _is_test_run:
     raise ImproperlyConfigured(
         'AWS_STORAGE_BUCKET_NAME must be set in production for private uploaded media.'
     )
@@ -115,12 +116,13 @@ import dj_database_url
 
 # Get database connection string from environment variable
 DATABASE_URL = os.environ.get("DATABASE_URL")
+ALLOW_SQLITE = os.environ.get('ALLOW_SQLITE', 'false').lower() == 'true'
 
 if DATABASE_URL:
     database_ssl_required = os.environ.get(
         'DATABASE_SSL_REQUIRE', 'False' if DEBUG or _is_test_run else 'True'
     ).lower() == 'true'
-    # Parse the Supabase database connection
+    # Parse the database connection
     db_config = dj_database_url.parse(
         DATABASE_URL,
         conn_max_age=600,      # keep connections open for reuse
@@ -130,17 +132,19 @@ if DATABASE_URL:
         'default': db_config
     }
 else:
-    if not DEBUG and not _is_test_run:
+    if not DEBUG and not _is_test_run and not ALLOW_SQLITE:
         raise ImproperlyConfigured('DATABASE_URL must be set in the production environment.')
-    # SQLite fallback (for local development)
+    # SQLite fallback (for local development or single-container standalone mode)
+    sqlite_db_path = os.environ.get('SQLITE_DB_PATH')
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
+            'NAME': Path(sqlite_db_path) if sqlite_db_path else (BASE_DIR / 'db.sqlite3'),
         }
     }
 
 REDIS_URL = os.environ.get('REDIS_URL')
+ALLOW_LOCAL_CACHE = os.environ.get('ALLOW_LOCAL_CACHE', 'false').lower() == 'true'
 if REDIS_URL:
     CACHES = {
         'default': {
@@ -149,11 +153,11 @@ if REDIS_URL:
             'TIMEOUT': 300,
         }
     }
-elif DEBUG or _is_test_run:
+elif DEBUG or _is_test_run or ALLOW_LOCAL_CACHE:
     CACHES = {
         'default': {
             'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-            'LOCATION': 'eventloo-development-only',
+            'LOCATION': 'eventloo-cache-store',
         }
     }
 else:
@@ -260,9 +264,9 @@ SIMPLE_JWT = {
 
 # CORS settings for local development
 _default_frontend_origins = (
-    'http://localhost:3000,http://localhost:3001,http://localhost:3002,'
-    'http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,'
-    'https://eventloo.vercel.app'
+    'http://localhost:3000,http://localhost:3001,http://localhost:3002,http://localhost:3003,'
+    'http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:3002,http://127.0.0.1:3003,'
+    'https://eventloo.vercel.app,https://app.eventloo.com,http://app.eventloo.com'
 )
 _cors_origins_value = os.environ.get('CORS_ALLOWED_ORIGINS')
 if not _cors_origins_value and not DEBUG and not _is_test_run:
@@ -338,7 +342,7 @@ REQUIRE_SCHOOL_STAFF_MFA = os.environ.get(
 ).lower() == 'true'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media') 
+MEDIA_ROOT = os.environ.get('MEDIA_ROOT', os.path.join(BASE_DIR, 'media')) 
 
 # File upload settings
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024

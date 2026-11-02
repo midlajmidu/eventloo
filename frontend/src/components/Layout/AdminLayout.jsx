@@ -25,16 +25,16 @@ const AdminLayout = () => {
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
-      
+
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
         {/* Top navbar */}
-        <TopNavbar 
-          sidebarOpen={sidebarOpen} 
+        <TopNavbar
+          sidebarOpen={sidebarOpen}
           setSidebarOpen={setSidebarOpen}
           user={user}
         />
-        
+
         {/* Page content */}
         <main className="flex-1 overflow-x-hidden overflow-y-auto">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-6">

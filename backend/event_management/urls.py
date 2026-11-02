@@ -42,6 +42,7 @@ if settings.ENABLE_DJANGO_ADMIN:
 # Serve static files in production
 if not settings.DEBUG:
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-else:
-    # Development static files
+
+# Serve local media files when S3 is not active
+if not settings.USE_S3_MEDIA:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT) 

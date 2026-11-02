@@ -125,7 +125,7 @@ export const authAPI = {
   login: (credentials) => api.post('token/', {
     email: credentials.email,
     password: credentials.password,
-    school_code: credentials.school_code,
+    ...(credentials.school_code ? { school_code: credentials.school_code } : {}),
     ...(credentials.otp ? { otp: credentials.otp } : {}),
   }),
   setupMfa: (credentials) => api.post('mfa/setup/', credentials),
@@ -194,6 +194,7 @@ export const dashboardAPI = {
   
   // Get team manager dashboard
   getTeamManagerDashboard: () => api.get('team-manager/dashboard/'),
+  getTeamManagerSummary: () => api.get('team-manager/dashboard/'),
 };
 
 export const usersAPI = {
@@ -434,6 +435,9 @@ export const teamsAPI = {
   // Get team credentials (admin only)
   getCredentials: (teamId) => api.get(`teams/${teamId}/credentials/`),
   
+  // Set custom team credentials (admin only)
+  setCredentials: (teamId, data) => api.post(`teams/${teamId}/credentials/`, data),
+
   // Regenerate team credentials (admin only)
   regenerateCredentials: (teamId) => api.post(`teams/${teamId}/regenerate_credentials/`),
   
@@ -500,6 +504,7 @@ export const teamManagerAPI = {
   
   // Get team manager dashboard data
   getDashboard: () => api.get('team-manager/dashboard/'),
+  getTeamManagerSummary: () => api.get('team-manager/dashboard/'),
   
   // Get global points leaderboard for team manager's teams
   getLeaderboard: () => api.get('team-manager/leaderboard/'),
@@ -522,10 +527,11 @@ export const teamManagerAPI = {
     api.post(`team-manager/${teamId}/events/${eventId}/programs/${programId}/assign/`, { student_id: studentId }),
   
   // Assign multiple students to program (for team-based programs)
-  assignStudentsToProgram: (teamId, eventId, programId, studentIds, subTeamNumber = 1) => 
+  assignStudentsToProgram: (teamId, eventId, programId, studentIds, subTeamNumber = 1, leaderId = null) => 
     api.post(`team-manager/${teamId}/events/${eventId}/programs/${programId}/assign/`, { 
       student_ids: studentIds,
-      sub_team_number: subTeamNumber 
+      sub_team_number: subTeamNumber,
+      ...(leaderId ? { leader_id: leaderId } : {})
     }),
   
   // Remove assignment by assignment ID

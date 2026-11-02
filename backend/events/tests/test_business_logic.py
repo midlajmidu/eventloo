@@ -105,27 +105,28 @@ class EventBusinessLogicTests(TestCase):
         setup_sheet = workbook['Setup']
         self.assertEqual(
             [cell.value for cell in students_sheet[1]],
-            ['name', 'gender', 'category', 'class', 'section', 'team_name', 'address'],
+            ['name', 'class', 'section', 'gender', 'team_name'],
         )
-        self.assertEqual(len(students_sheet.data_validations.dataValidation), 4)
+        self.assertEqual(len(students_sheet.data_validations.dataValidation), 3)
         setup_values = {
             value for row in setup_sheet.iter_rows(values_only=True)
             for value in row if value is not None
         }
-        self.assertIn(self.category.code, setup_values)
         self.assertIn(student_class.name, setup_values)
         self.assertIn(self.team.name, setup_values)
         self.assertIn(self.other_team.name, setup_values)
         self.assertNotIn('general', setup_values)
         self.assertNotIn('Foreign Team', setup_values)
-        self.assertEqual(workbook['Example']['B2'].value, 'Female')
-        self.assertEqual(workbook['Example']['C2'].value, self.category.code)
-        self.assertEqual(workbook['Example']['D2'].value, student_class.name)
-        self.assertEqual(workbook['Example']['F2'].value, self.team.name)
+        self.assertEqual(workbook['Example']['B2'].value, student_class.name)
+        self.assertEqual(workbook['Example']['C2'].value, 'A')
+        self.assertEqual(workbook['Example']['D2'].value, 'Male')
+        self.assertEqual(workbook['Example']['E2'].value, self.team.name)
 
         students_sheet.append([
-            'Imported Student', 'Female', 'Junor', 'Gradee 8',
-            'A', 'Blu', 'Student address',
+            'Imported Student', 'Gradee 8', 'A', 'Female', 'Blu',
+        ])
+        students_sheet.append([
+            'Defaulted Student', 'Grade 8', 'B', '', '',
         ])
         upload_bytes = BytesIO()
         workbook.save(upload_bytes)
@@ -142,11 +143,40 @@ class EventBusinessLogicTests(TestCase):
         self.assertEqual(imported.grade, student_class.code)
         self.assertEqual(imported.gender, 'female')
         self.assertEqual(imported.section, 'A')
-        self.assertEqual(imported.address, 'Student address')
         self.assertIsNone(imported.chest_code)
         self.assertTrue(self.team.members.filter(pk=imported.pk).exists())
         self.assertEqual(upload_response.data['team_assignments'][0]['team'], self.team.name)
-        self.assertEqual(len(upload_response.data['corrections']), 3)
+        self.assertGreaterEqual(len(upload_response.data['corrections']), 2)
+
+        defaulted = User.objects.get(name='Defaulted Student', school=self.school)
+        self.assertEqual(defaulted.category, self.category.code)
+        self.assertEqual(defaulted.grade, student_class.code)
+        self.assertEqual(defaulted.gender, 'other')
+        self.assertEqual(defaulted.section, 'B')
+        self.assertFalse(self.team.members.filter(pk=defaulted.pk).exists())
+
+    def test_student_bulk_upload_supports_csv_format(self):
+        student_class = StudentClass.objects.create(
+            school=self.school, category=self.category, name='Grade 10', code='10'
+        )
+        csv_content = (
+            "name,class,section,gender,team_name\n"
+            f"CSV Student,Grade 10,C,Female,{self.team.name}\n"
+        ).encode('utf-8')
+        upload = SimpleUploadedFile(
+            'students.csv', csv_content, content_type='text/csv'
+        )
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.post('/api/students/bulk_upload/', {'file': upload}, format='multipart')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data['summary']['successful_creations'], 1)
+        imported = User.objects.get(name='CSV Student', school=self.school)
+        self.assertEqual(imported.gender, 'female')
+        self.assertEqual(imported.grade, student_class.code)
+        self.assertEqual(imported.category, self.category.code)
+        self.assertEqual(imported.section, 'C')
+        self.assertTrue(self.team.members.filter(pk=imported.pk).exists())
 
     def test_student_bulk_upload_rejects_unknown_team_without_partial_creation(self):
         from openpyxl import Workbook
@@ -328,6 +358,8 @@ class EventBusinessLogicTests(TestCase):
         self.assertEqual(int(response['X-Certificate-Count']), len(winning_ids))
         reader = PdfReader(BytesIO(response.content))
         self.assertEqual(len(reader.pages), len(winning_ids))
+        self.assertAlmostEqual(float(reader.pages[0].mediabox.width), 841.89, delta=1.0)
+        self.assertAlmostEqual(float(reader.pages[0].mediabox.height), 595.28, delta=1.0)
         text = '\n'.join(page.extract_text() or '' for page in reader.pages)
         for student in self.students:
             if student.id in winning_ids:
@@ -361,6 +393,113 @@ class EventBusinessLogicTests(TestCase):
         )
         self.assertEqual(unpublished.status_code, 400)
         self.assertIn('No eligible recipients', unpublished.data['error'])
+
+    def test_badge_template_configuration_preview_and_generation(self):
+        program_a = Program.objects.create(
+            event=self.event, name='Badge Solo Item', category='junior',
+            max_participants=2, program_type='stage',
+        )
+        program_b = Program.objects.create(
+            event=self.event, name='Badge General Item', category='general',
+            max_participants=2, program_type='stage',
+        )
+        assign_students(user=self.admin, team=self.team, program=program_a, student_ids=[self.students[0].id])
+        assign_students(user=self.admin, team=self.team, program=program_a, student_ids=[self.students[1].id])
+        assign_students(user=self.admin, team=self.team, program=program_b, student_ids=[self.students[0].id])
+
+        client = APIClient()
+        client.force_authenticate(self.admin)
+
+        portrait_badge_image = self.certificate_background('badge.png', size=(300, 450))
+        fields = default_certificate_fields()
+        upload_res = client.put(
+            f'/api/events/{self.event.id}/certificate-templates/badge/',
+            {
+                'background_image': portrait_badge_image,
+                'fields': json.dumps(fields),
+            },
+            format='multipart',
+        )
+        self.assertEqual(upload_res.status_code, 200)
+        self.assertEqual(upload_res.data['certificateType'], 'badge')
+        self.assertEqual(upload_res.data['status'], 'Custom')
+
+        # Preview data
+        preview_res = client.get(
+            f'/api/events/{self.event.id}/certificate-preview-data/',
+            {'certificate_type': 'badge'},
+        )
+        self.assertEqual(preview_res.status_code, 200)
+        self.assertIsNotNone(preview_res.data['recipient'])
+        self.assertEqual(preview_res.data['recipient']['rank'], 'Participant')
+        self.assertEqual(preview_res.data['recipient']['participantName'], self.students[0].get_full_name())
+        self.assertIn('Chest No:', preview_res.data['recipient']['chestNo'])
+        self.assertEqual(preview_res.data['recipient']['eventName'], self.event.title)
+        self.assertEqual(preview_res.data['recipient']['totalPrograms'], 'Total Programs: 2')
+        self.assertIn('Badge Solo Item', preview_res.data['recipient']['assignedPrograms'])
+        self.assertIn('Badge General Item', preview_res.data['recipient']['assignedPrograms'])
+
+        # Export badges across programs (student 0 in 2 programs, student 1 in 1 program -> 2 distinct badges)
+        export_res = client.get(
+            f'/api/events/{self.event.id}/certificates/',
+            {'cert_types': 'badge', 'quality': 'standard'},
+        )
+        self.assertEqual(export_res.status_code, 200)
+        self.assertEqual(export_res['Content-Type'], 'application/pdf')
+        self.assertIn('Badges_', export_res['Content-Disposition'])
+        self.assertEqual(export_res['X-Certificate-Count'], '2')
+
+        # Verify A4 portrait dimensions using pypdf
+        import io
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(export_res.content))
+        self.assertEqual(len(reader.pages), 1)  # 2 badges fit on 1 A4 page (up to 9 badges per page)
+        page = reader.pages[0]
+        self.assertAlmostEqual(float(page.mediabox.width), 595.28, delta=1.0)
+        self.assertAlmostEqual(float(page.mediabox.height), 841.89, delta=1.0)
+
+        # Team filter export: self.team has 2 students
+        team_export_res = client.get(
+            f'/api/events/{self.event.id}/certificates/',
+            {'cert_types': 'badge', 'quality': 'standard', 'team_id': self.team.id},
+        )
+        self.assertEqual(team_export_res.status_code, 200)
+        self.assertEqual(team_export_res['X-Certificate-Count'], '2')
+
+        # Empty/unmatched team filter returns 400
+        empty_team_res = client.get(
+            f'/api/events/{self.event.id}/certificates/',
+            {'cert_types': 'badge', 'quality': 'standard', 'team_id': 99999},
+        )
+        self.assertEqual(empty_team_res.status_code, 400)
+
+        # Test 9-per-sheet pagination: assign 8 more students (total 10 students across event)
+        large_gen_program = Program.objects.create(
+            event=self.event, name='Grand General Quiz', category='general',
+            max_participants=20, program_type='stage',
+        )
+        more_students = [
+            User.objects.create_user(
+                username=f'extra_s{i}', email=f'extra_s{i}@example.com', password='x', role='student',
+                name=f'Extra Student {i}', student_id=f'EX{i}', category='junior', school=self.school,
+            ) for i in range(1, 9)
+        ]
+        self.team.members.add(*more_students)
+        for extra in more_students:
+            assign_students(user=self.admin, team=self.team, program=large_gen_program, student_ids=[extra.id])
+
+        multi_page_res = client.get(
+            f'/api/events/{self.event.id}/certificates/',
+            {'cert_types': 'badge', 'quality': 'standard'},
+        )
+        self.assertEqual(multi_page_res.status_code, 200)
+        self.assertEqual(multi_page_res['X-Certificate-Count'], '10')
+        reader_10 = PdfReader(io.BytesIO(multi_page_res.content))
+        # 10 badges / 9 per page = exactly 2 A4 pages
+        self.assertEqual(len(reader_10.pages), 2)
+        for pg in reader_10.pages:
+            self.assertAlmostEqual(float(pg.mediabox.width), 595.28, delta=1.0)
+            self.assertAlmostEqual(float(pg.mediabox.height), 841.89, delta=1.0)
 
     def test_schedule_uses_real_entry_count_warns_on_conflicts_and_exports(self):
         stage = EventStage.objects.create(event=self.event, number=1, name='Main Hall')
@@ -550,6 +689,85 @@ class EventBusinessLogicTests(TestCase):
             ).count(),
             2,
         )
+
+    def test_general_and_mixed_programs_are_unlimited_and_do_not_count_towards_limits(self):
+        self.event.max_single_programs_per_student = 1
+        self.event.max_group_programs_per_student = 1
+        self.event.save(update_fields=[
+            'max_single_programs_per_student', 'max_group_programs_per_student'
+        ])
+
+        # 1. Multiple General individual programs - unlimited!
+        gen_single_1 = Program.objects.create(
+            event=self.event, name='General Drawing', category='general', max_participants=2,
+            is_team_based=False,
+        )
+        gen_single_2 = Program.objects.create(
+            event=self.event, name='General Essay', category='open', max_participants=2,
+            is_team_based=False,
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=gen_single_1,
+            student_ids=[self.students[0].id],
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=gen_single_2,
+            student_ids=[self.students[0].id],
+        )
+
+        # 2. General group program - unlimited!
+        gen_group = Program.objects.create(
+            event=self.event, name='General Skit', category='general', max_participants=5,
+            is_team_based=True, team_size=1,
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=gen_group,
+            student_ids=[self.students[0].id],
+        )
+
+        # 3. Standard category individual program (Limit = 1)
+        # Should succeed for the 1st standard program because general ones don't consume the quota
+        std_single_1 = Program.objects.create(
+            event=self.event, name='Junior Elocution', category='junior', max_participants=2,
+            is_team_based=False,
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=std_single_1,
+            student_ids=[self.students[0].id],
+        )
+
+        # 2nd standard single program must fail due to category limit
+        std_single_2 = Program.objects.create(
+            event=self.event, name='Junior Recitation', category='junior', max_participants=2,
+            is_team_based=False,
+        )
+        with self.assertRaises(ValidationError):
+            assign_students(
+                user=self.admin, team=self.team, program=std_single_2,
+                student_ids=[self.students[0].id],
+            )
+
+        # 4. Standard category group program (Limit = 1)
+        # 1st standard group program succeeds
+        std_group_1 = Program.objects.create(
+            event=self.event, name='Junior Group Song', category='junior', max_participants=5,
+            is_team_based=True, team_size=1,
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=std_group_1,
+            student_ids=[self.students[0].id],
+        )
+
+        # 2nd standard group program must fail due to category limit
+        std_group_2 = Program.objects.create(
+            event=self.event, name='Junior Mime', category='junior', max_participants=5,
+            is_team_based=True, team_size=1,
+        )
+        with self.assertRaises(ValidationError):
+            assign_students(
+                user=self.admin, team=self.team, program=std_group_2,
+                student_ids=[self.students[0].id],
+            )
 
     def test_marks_require_all_judges_and_respect_maximum(self):
         program = Program.objects.create(event=self.event, name='Marks', category='junior')
@@ -1131,6 +1349,58 @@ class EventBusinessLogicTests(TestCase):
         }, format='json')
         self.assertEqual(allowed.status_code, 200)
 
+    def test_bulk_mark_entry_with_absent_participants_succeeds(self):
+        opponent = User.objects.create_user(
+            username='absent_opp', email='absent_opp@example.com', password='x',
+            role='student', name='Absent Student', student_id='ABS1',
+            category='junior', school=self.school,
+        )
+        self.other_team.members.add(opponent)
+
+        program = Program.objects.create(
+            event=self.event, name='Partial Attendance Song',
+            category='junior', max_participants=3,
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=program,
+            student_ids=[self.students[0].id],
+        )
+        assign_students(
+            user=self.admin, team=self.other_team, program=program,
+            student_ids=[opponent.id],
+        )
+        res1 = ProgramResult.objects.get(program=program, participant=self.students[0])
+        res2 = ProgramResult.objects.get(program=program, participant=opponent)
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        endpoint = f'/api/events/{self.event.id}/programs/{program.id}/results/bulk_mark_entry/'
+
+        # Student 0 attended (entered marks). Student 1 was absent (no marks, empty code).
+        marks = [
+            {'id': res1.id, 'code_letter': 'A', 'judge1_marks': 45, 'judge2_marks': 42},
+            {'id': res2.id, 'code_letter': '', 'judge1_marks': None, 'judge2_marks': None},
+        ]
+        response = client.post(endpoint, {'marks': marks, 'entry_status': 'submitted'}, format='json')
+        self.assertEqual(response.status_code, 200)
+
+        res1.refresh_from_db()
+        res2.refresh_from_db()
+        self.assertEqual(res1.entry_status, 'submitted')
+        self.assertEqual(res1.position, 1)
+        self.assertEqual(res2.entry_status, 'draft')
+        self.assertIsNone(res2.position)
+        self.assertEqual(res2.points_earned, 0)
+
+        # Check results complete & publishing succeeds despite absent student
+        self.assertTrue(program_results_complete(program))
+        pub_response = client.post(f'/api/events/{self.event.id}/toggle_program_publish/', {
+            'program_id': program.id,
+            'is_published': True,
+        }, format='json')
+        self.assertEqual(pub_response.status_code, 200)
+        program.refresh_from_db()
+        self.assertTrue(program.is_published)
+
     def test_global_points_sum_each_published_event_percentage(self):
         opponent = User.objects.create_user(
             username='opponent', email='opponent@example.com', password='x',
@@ -1222,6 +1492,179 @@ class EventBusinessLogicTests(TestCase):
             client.post('/api/points/award_manual_points/', {}, format='json').status_code,
             405,
         )
+
+    def test_create_student_with_team_id(self):
+        StudentClass.objects.create(
+            school=self.school, category=self.category, name='Junior 1', code='J1'
+        )
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        data = {
+            'name': 'New Test Student',
+            'gender': 'male',
+            'category': 'junior',
+            'grade': 'J1',
+            'section': 'A',
+            'team_id': self.team.id
+        }
+        response = client.post('/api/students/', data, format='json')
+        self.assertEqual(response.status_code, 201)
+        student_id = response.data['id']
+        self.assertTrue(Team.objects.filter(id=self.team.id, members__id=student_id).exists())
+
+    def test_create_student_with_all_optional_fields(self):
+        StudentClass.objects.create(
+            school=self.school, category=self.category, name='Junior 2', code='J2'
+        )
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        data = {
+            'name': 'Aarav Sharma',
+            'gender': 'male',
+            'category': 'junior',
+            'grade': 'J2',
+            'section': 'B',
+            'team_id': self.team.id,
+            'email': 'aarav.sharma@school.edu',
+            'phone_number': '+919876543210',
+            'date_of_birth': '2010-05-15',
+            'address': '123 MG Road, Calicut',
+            'guardian_name': 'Suresh Sharma',
+            'guardian_phone': '+919876543211',
+        }
+        response = client.post('/api/students/', data, format='json')
+        self.assertEqual(response.status_code, 201)
+        created = response.data
+        self.assertEqual(created['name'], 'Aarav Sharma')
+        self.assertEqual(created['email'], 'aarav.sharma@school.edu')
+        self.assertEqual(created['phone_number'], '+919876543210')
+        self.assertEqual(str(created['date_of_birth']), '2010-05-15')
+        self.assertEqual(created['address'], '123 MG Road, Calicut')
+        self.assertEqual(created['guardian_name'], 'Suresh Sharma')
+        self.assertEqual(created['guardian_phone'], '+919876543211')
+        self.assertNotIn('username', created)
+
+        # Also test with empty strings for optional fields (safe sanitization)
+        empty_data = {
+            'name': 'Diya Nair',
+            'gender': 'female',
+            'category': 'junior',
+            'grade': 'J2',
+            'section': '',
+            'team_id': None,
+            'email': '',
+            'phone_number': '',
+            'date_of_birth': '',
+            'address': '',
+            'guardian_name': '',
+            'guardian_phone': '',
+        }
+        empty_res = client.post('/api/students/', empty_data, format='json')
+        self.assertEqual(empty_res.status_code, 201)
+        self.assertIsNone(empty_res.data['email'])
+        self.assertIsNone(empty_res.data['date_of_birth'])
+        self.assertNotIn('username', empty_res.data)
+
+    def test_program_level_num_judges_and_mark_evaluation(self):
+        # 1. Fallback to event.num_judges (event has num_judges=2)
+        default_prog = Program.objects.create(
+            event=self.event, name='Default Judges Prog', category='junior', max_participants=2
+        )
+        self.assertIsNone(default_prog.num_judges)
+        self.assertEqual(default_prog.effective_num_judges, 2)
+
+        # 2. Program with custom 1 judge
+        single_judge_prog = Program.objects.create(
+            event=self.event, name='Single Judge Prog', category='junior',
+            max_participants=2, num_judges=1
+        )
+        self.assertEqual(single_judge_prog.num_judges, 1)
+        self.assertEqual(single_judge_prog.effective_num_judges, 1)
+
+        # Result for single judge program submits successfully with only judge1_marks
+        res_single = ProgramResult.objects.create(
+            program=single_judge_prog,
+            participant=self.students[0],
+            judge1_marks=Decimal('45.00'),
+            entry_status='submitted'
+        )
+        # Scaled mark = (45 / (1 * 50)) * 100 = 90.00
+        self.assertEqual(res_single.total_marks, Decimal('90.00'))
+        self.assertEqual(res_single.average_marks, Decimal('45.00'))
+
+        # 3. Program with custom 3 judges
+        trio_judge_prog = Program.objects.create(
+            event=self.event, name='Trio Judge Prog', category='junior',
+            max_participants=2, num_judges=3
+        )
+        self.assertEqual(trio_judge_prog.effective_num_judges, 3)
+
+        # Attempt to submit with only 2 judges fails validation
+        with self.assertRaises(ValidationError):
+            res_trio = ProgramResult(
+                program=trio_judge_prog,
+                participant=self.students[1],
+                judge1_marks=Decimal('30.00'),
+                judge2_marks=Decimal('35.00'),
+                entry_status='submitted'
+            )
+            res_trio.clean()
+
+        # Completing all 3 judges passes validation and calculates scaled score
+        res_trio_valid = ProgramResult.objects.create(
+            program=trio_judge_prog,
+            participant=self.students[1],
+            judge1_marks=Decimal('30.00'),
+            judge2_marks=Decimal('35.00'),
+            judge3_marks=Decimal('40.00'),
+            entry_status='submitted'
+        )
+        # Raw total = 105. Max raw = 3 * 50 = 150. Converted = (105 / 150) * 100 = 70.00
+        self.assertEqual(res_trio_valid.raw_total_marks, Decimal('105.00'))
+        self.assertEqual(res_trio_valid.total_marks, Decimal('70.00'))
+        self.assertEqual(res_trio_valid.average_marks, Decimal('35.00'))
+
+        # 4. Check ProgramSerializer output
+        from events.serializers import ProgramSerializer
+        s_data = ProgramSerializer(trio_judge_prog).data
+        self.assertEqual(s_data['num_judges'], 3)
+        self.assertEqual(s_data['effective_num_judges'], 3)
+
+        def_data = ProgramSerializer(default_prog).data
+        self.assertIsNone(def_data['num_judges'])
+        self.assertEqual(def_data['effective_num_judges'], 2)
+
+    def test_schedule_auto_calculated_ending_time_without_mandatory_end_time(self):
+        stage = EventStage.objects.create(
+            event=self.event, number=1, name='Main Stage'
+        )
+        prog = Program.objects.create(
+            event=self.event, name='Recitation 3 participants',
+            category='junior', max_participants=3, duration_minutes_per_entry=5,
+            stage=stage,
+        )
+        # Entry count should be 3 from max_participants, 3 * 5 = 15 minutes
+        self.assertEqual(prog.schedule_entry_count, 3)
+        self.assertEqual(prog.scheduled_duration_minutes, 15)
+
+        start_time = timezone.make_aware(datetime.combine(self.event.start_date, time(10, 0)))
+        client = APIClient()
+        client.force_authenticate(self.admin)
+
+        # Update schedule with empty end_time (non-mandatory)
+        res = client.patch(f'/api/events/{self.event.id}/programs/{prog.id}/schedule/', {
+            'stage_id': stage.id,
+            'start_time': start_time.isoformat(),
+            'duration_minutes_per_entry': 5,
+            'end_time': '',  # Left blank/optional
+        }, format='json')
+
+        self.assertEqual(res.status_code, 200)
+        prog.refresh_from_db()
+        expected_end = start_time + timedelta(minutes=15)
+        self.assertIsNotNone(prog.end_time)
+        self.assertEqual(prog.end_time, expected_end)
+        self.assertFalse(prog.schedule_end_is_manual)
 
 
 class MultiSchoolIsolationTests(TestCase):
@@ -1320,19 +1763,35 @@ class MultiSchoolIsolationTests(TestCase):
         ).status_code, 400)
         self.assertEqual(client.delete(f'/api/users/{self.admin_a.id}/').status_code, 400)
 
-    def test_school_code_is_required_and_checked_at_login(self):
+    def test_login_without_school_code_and_data_protection(self):
         client = APIClient()
+        # Login without school_code succeeds and correctly binds to school_a
         payload = {'email': self.admin_a.email, 'password': 'SchoolA#Pass123'}
-        self.assertEqual(client.post('/api/token/', payload, format='json').status_code, 400)
-        payload['school_code'] = self.school_b.code
-        self.assertEqual(client.post('/api/token/', payload, format='json').status_code, 400)
-        payload['school_code'] = self.school_a.code
         response = client.post('/api/token/', payload, format='json')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['user']['school']['id'], self.school_a.id)
 
         self.assertNotIn('access', response.data)
         self.assertIn('eventloo_access', response.cookies)
+
+        # Providing mismatched school_code fails
+        payload_mismatched = {'email': self.admin_a.email, 'password': 'SchoolA#Pass123', 'school_code': self.school_b.code}
+        self.assertEqual(APIClient().post('/api/token/', payload_mismatched, format='json').status_code, 400)
+
+        # Providing matching school_code also succeeds
+        payload_matched = {'email': self.admin_a.email, 'password': 'SchoolA#Pass123', 'school_code': self.school_a.code}
+        self.assertEqual(APIClient().post('/api/token/', payload_matched, format='json').status_code, 200)
+
+        # Team manager login without school_code succeeds
+        team = Team.objects.create(name='Lions', school=self.school_a, team_username='lions_lead', team_password='LionsPassword123')
+        team_res = APIClient().post('/api/team-manager/login/', {
+            'team_username': 'lions_lead',
+            'team_password': 'LionsPassword123',
+        }, format='json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(team_res.status_code, 200)
+        self.assertEqual(team_res.data['school']['id'], self.school_a.id)
+
+        # Suspended school blocks access
         self.school_a.status = 'suspended'
         self.school_a.save(update_fields=['status'])
         self.assertEqual(client.get('/api/events/').status_code, 401)
@@ -2023,3 +2482,229 @@ class MultiSchoolIsolationTests(TestCase):
     def test_production_does_not_expose_media_route(self):
         with self.assertRaises(Resolver404):
             resolve('/media/../db.sqlite3')
+
+    def test_custom_team_credentials_creation_and_jwt_login(self):
+        from django.contrib.auth.hashers import check_password
+
+        client = APIClient()
+        client.force_authenticate(self.admin_a)
+
+        # Admin creates team with custom username and password
+        payload = {
+            'name': 'Red Warriors',
+            'description': 'Senior Warriors Team',
+            'team_username': 'warriors_lead',
+            'team_password': 'SecretPassword123',
+        }
+        res = client.post('/api/teams/', payload, format='json')
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(res.data['team_username'], 'warriors_lead')
+        team_id = res.data['id']
+
+        team = Team.objects.get(id=team_id)
+        self.assertEqual(team.team_username, 'warriors_lead')
+        self.assertTrue(check_password('SecretPassword123', team.team_password))
+
+        # Anonymous team manager login attempts
+        anon_client = APIClient()
+
+        # Wrong password fails
+        bad_login = anon_client.post('/api/team-manager/login/', {
+            'team_username': 'warriors_lead',
+            'team_password': 'WrongPassword999',
+            'school_code': self.school_a.code,
+        }, format='json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertIn(bad_login.status_code, [400, 401])
+
+        # Correct credentials login succeeds
+        good_login = anon_client.post('/api/team-manager/login/', {
+            'team_username': 'warriors_lead',
+            'team_password': 'SecretPassword123',
+            'school_code': self.school_a.code,
+        }, format='json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(good_login.status_code, 200)
+        self.assertEqual(good_login.data['access_type'], 'team_manager')
+        self.assertEqual(good_login.data['team']['id'], team_id)
+
+        # Cookies contain access_token
+        from django.conf import settings
+        access_cookie = good_login.cookies.get(settings.ACCESS_COOKIE_NAME)
+        self.assertIsNotNone(access_cookie)
+
+        # Team leader accesses team-manager dashboard
+        dash_res = anon_client.get('/api/team-manager/dashboard/')
+        self.assertEqual(dash_res.status_code, 200)
+        self.assertIn('totalTeams', dash_res.data)
+        self.assertIn('teams', dash_res.data)
+
+        # Team leader accesses my_teams
+        teams_res = anon_client.get('/api/team-manager/my_teams/')
+        self.assertEqual(teams_res.status_code, 200)
+
+        # Team leader accesses leaderboard
+        board_res = anon_client.get('/api/team-manager/leaderboard/')
+        self.assertEqual(board_res.status_code, 200)
+        self.assertIn('teams', board_res.data)
+
+        # Re-login with existing cookie does not fail on pre-auth
+        relogin = anon_client.post('/api/team-manager/login/', {
+            'team_username': 'warriors_lead',
+            'team_password': 'SecretPassword123',
+            'school_code': self.school_a.code,
+        }, format='json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(relogin.status_code, 200)
+
+        # Default authenticated endpoint (e.g. categories) accepts team manager token via SchoolJWTAuthentication
+        cat_res = anon_client.get('/api/categories/')
+        self.assertEqual(cat_res.status_code, 200)
+
+    def test_admin_can_update_team_leader_credentials_and_invalidates_old_session(self):
+        client = APIClient()
+        client.force_authenticate(self.admin_a)
+
+        team = Team.objects.create(
+            name='Blue Sharks',
+            school=self.school_a,
+            team_username='sharks_lead',
+            team_password='InitialPass123',
+        )
+
+        # Team leader logs in with initial password
+        leader_client = APIClient()
+        login_res = leader_client.post('/api/team-manager/login/', {
+            'team_username': 'sharks_lead',
+            'team_password': 'InitialPass123',
+            'school_code': self.school_a.code,
+        }, format='json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(login_res.status_code, 200)
+
+        # Leader can view dashboard
+        self.assertEqual(leader_client.get('/api/team-manager/dashboard/').status_code, 200)
+
+        # Admin updates leader username & password via credentials endpoint
+        update_res = client.post(f'/api/teams/{team.id}/credentials/', {
+            'username': 'alpha_sharks',
+            'password': 'UpdatedLeaderPass999',
+        }, format='json')
+        self.assertEqual(update_res.status_code, 200)
+        self.assertEqual(update_res.data['username'], 'alpha_sharks')
+
+        # Old leader session should now be rejected (token credential hash mismatch)
+        self.assertEqual(leader_client.get('/api/team-manager/dashboard/').status_code, 401)
+
+        # Login with old password fails
+        old_attempt = APIClient().post('/api/team-manager/login/', {
+            'team_username': 'alpha_sharks',
+            'team_password': 'InitialPass123',
+            'school_code': self.school_a.code,
+        }, format='json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertIn(old_attempt.status_code, [400, 401])
+
+        # Login with new username and password succeeds
+        new_client = APIClient()
+        new_attempt = new_client.post('/api/team-manager/login/', {
+            'team_username': 'alpha_sharks',
+            'team_password': 'UpdatedLeaderPass999',
+            'school_code': self.school_a.code,
+        }, format='json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(new_attempt.status_code, 200)
+        self.assertEqual(new_client.get('/api/team-manager/dashboard/').status_code, 200)
+
+    def test_student_duplicate_enrollment_prevention(self):
+        client = APIClient()
+        client.force_authenticate(self.admin_a)
+
+        # Setup categories and classes for school_a
+        cat_lp = StudentCategory.objects.create(name='Lower Primary', code='lp', school=self.school_a)
+        cat_up = StudentCategory.objects.create(name='Upper Primary', code='up', school=self.school_a)
+        StudentClass.objects.create(name='Class 1', code='01', category=cat_lp, school=self.school_a)
+        StudentClass.objects.create(name='Class 5', code='05', category=cat_up, school=self.school_a)
+
+        # First student enrollment succeeds
+        res1 = client.post('/api/students/', {
+            'name': 'Amina Farooq',
+            'category': 'lp',
+            'grade': '01',
+            'section': 'A',
+            'gender': 'female',
+        }, format='json')
+        self.assertEqual(res1.status_code, 201)
+
+        # Duplicate enrollment in same class & section fails
+        dup_res = client.post('/api/students/', {
+            'name': 'amina farooq',
+            'category': 'lp',
+            'grade': '01',
+            'section': 'A',
+            'gender': 'female',
+        }, format='json')
+        self.assertEqual(dup_res.status_code, 400)
+        self.assertIn('name', dup_res.data)
+        self.assertIn('already enrolled', str(dup_res.data['name']))
+
+        # Same name in a different class succeeds
+        diff_class_res = client.post('/api/students/', {
+            'name': 'Amina Farooq',
+            'category': 'up',
+            'grade': '05',
+            'section': 'A',
+            'gender': 'female',
+        }, format='json')
+        self.assertEqual(diff_class_res.status_code, 201)
+
+        # Same name in same class but different section succeeds
+        diff_sec_res = client.post('/api/students/', {
+            'name': 'Amina Farooq',
+            'category': 'lp',
+            'grade': '01',
+            'section': 'B',
+            'gender': 'female',
+        }, format='json')
+        self.assertEqual(diff_sec_res.status_code, 201)
+
+    def test_get_program_participants_unifies_subteams_for_group_programs(self):
+        from events.services import assign_students
+
+        group_prog = Program.objects.create(
+            event=self.event_a,
+            name='Group Patriotic Song',
+            category='general',
+            is_team_based=True,
+            team_size=3,
+            max_teams_per_school=2,
+        )
+
+        team = Team.objects.create(name='Warriors', school=self.school_a)
+        st1 = User.objects.create(username='p1', name='P1', role='student', school=self.school_a, category='lp', gender='male')
+        st2 = User.objects.create(username='p2', name='P2', role='student', school=self.school_a, category='lp', gender='female')
+        st3 = User.objects.create(username='p3', name='P3', role='student', school=self.school_a, category='up', gender='male')
+        team.members.add(st1, st2, st3)
+
+        assign_students(
+            user=self.admin_a,
+            team=team,
+            program=group_prog,
+            student_ids=[st1.id, st2.id, st3.id],
+            sub_team_number=1,
+            leader_id=st1.id,
+        )
+
+        client = APIClient()
+        client.force_authenticate(self.admin_a)
+
+        res = client.get(f'/api/programs/{group_prog.id}/participants/')
+        self.assertEqual(res.status_code, 200)
+        results = res.data['results']
+
+        # Unified into 1 row for the sub-team instead of 3 separate rows!
+        self.assertEqual(len(results), 1)
+        entry = results[0]
+        self.assertTrue(entry['is_group'])
+        self.assertEqual(entry['team_member_count'], 3)
+        self.assertEqual(entry['sub_team_number'], 1)
+        self.assertIn('P1', entry['name'])
+        self.assertIn('P2', entry['name'])
+        self.assertIn('P3', entry['name'])
+        self.assertIsNotNone(entry['chest_number'])
+        self.assertEqual(len(entry['members']), 3)
+

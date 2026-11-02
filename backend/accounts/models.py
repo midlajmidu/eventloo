@@ -121,52 +121,9 @@ class User(AbstractUser):
             return f"Student {self.student_id}" if self.student_id else "Unknown Student"
     
     def generate_chest_code(self):
-        """Generate a unique chest code for the student"""
-        if self.chest_code:
-            return self.chest_code
-        
-        # Try to get chest number from program assignments
-        from events.models import ProgramAssignment
-        
-        # Get the latest program assignment for this student
-        latest_assignment = ProgramAssignment.objects.filter(
-            student=self
-        ).select_related('team').order_by('-assigned_at').first()
-        
-        if latest_assignment and latest_assignment.chest_number:
-            # Use the chest number from the assignment
-            self.chest_code = f"CHEST{latest_assignment.chest_number:04d}"
-        else:
-            # Generate chest code based on category and grade (fallback)
-            category_prefix = self.category.upper() if self.category else 'GEN'
-            grade_suffix = self.grade if self.grade else '00'
-            
-            # Find the next available number
-            existing_codes = User.objects.filter(
-                school_id=self.school_id,
-                chest_code__startswith=f"{category_prefix}{grade_suffix}"
-            ).values_list('chest_code', flat=True)
-            
-            # Extract numbers from existing codes
-            existing_numbers = []
-            for code in existing_codes:
-                try:
-                    number_part = code[len(f"{category_prefix}{grade_suffix}"):]
-                    if number_part.isdigit():
-                        existing_numbers.append(int(number_part))
-                except (ValueError, IndexError):
-                    continue
-            
-            # Find the next available number
-            next_number = 1
-            while next_number in existing_numbers:
-                next_number += 1
-            
-            self.chest_code = f"{category_prefix}{grade_suffix}{next_number:03d}"
-        
-        # Save the chest code
-        self.save(update_fields=['chest_code'])
-        return self.chest_code
+        """Chest numbers are event-specific and generated only when assigned to a program."""
+        return None
+
     
     class Meta:
         db_table = 'auth_user'

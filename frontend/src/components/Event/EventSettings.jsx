@@ -214,7 +214,28 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
       }, 3500);
     } catch (err) {
       console.error('Error updating event settings:', err);
-      const errMsg = err.response?.data?.message || err.response?.data?.error || 'Failed to save settings';
+      let errMsg = 'Failed to save settings';
+      if (err.response?.data) {
+        const data = err.response.data;
+        if (typeof data === 'string') {
+          errMsg = data;
+        } else if (data.message) {
+          errMsg = data.message;
+        } else if (data.error) {
+          errMsg = data.error;
+        } else if (data.detail) {
+          errMsg = data.detail;
+        } else if (typeof data === 'object') {
+          const firstKey = Object.keys(data)[0];
+          if (firstKey) {
+            const val = data[firstKey];
+            const detailStr = Array.isArray(val)
+              ? val.join(' ')
+              : (typeof val === 'string' ? val : JSON.stringify(val));
+            errMsg = firstKey === 'non_field_errors' ? detailStr : `${firstKey.replace(/_/g, ' ')}: ${detailStr}`;
+          }
+        }
+      }
       setMessage(errMsg);
       setMessageType('error');
     } finally {
@@ -305,10 +326,19 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
 
       {/* 2. Student Program Participation Limits */}
       <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-2xs space-y-4">
-        <div className="flex items-center space-x-2 text-gray-900 border-b border-gray-100 pb-2.5">
-          <Layers className="h-4 w-4 text-indigo-600" />
-          <h3 className="text-xs font-bold uppercase tracking-wider">Student Participation Limits</h3>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-2.5 gap-1">
+          <div className="flex items-center space-x-2 text-gray-900">
+            <Layers className="h-4 w-4 text-indigo-600" />
+            <h3 className="text-xs font-bold uppercase tracking-wider">Student Participation Limits</h3>
+          </div>
+          <span className="text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+            Applies to standard categories · General/combined is unlimited
+          </span>
         </div>
+
+        <p className="text-xs text-gray-500">
+          Set how many programs a student can join within their assigned category. General and combined category programs are always unlimited and do not count against these limits.
+        </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Single / Individual Events Limit */}
@@ -347,7 +377,7 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
                   className="w-full px-3.5 py-2 text-xs font-bold text-gray-800 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   placeholder="e.g. 3"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">Maximum single programs a student can enter</p>
+                <p className="text-[11px] text-gray-500 mt-1">Maximum single programs in student&apos;s category (General is unlimited)</p>
               </div>
             )}
           </div>
@@ -388,7 +418,7 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
                   className="w-full px-3.5 py-2 text-xs font-bold text-gray-800 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                   placeholder="e.g. 2"
                 />
-                <p className="text-[11px] text-gray-500 mt-1">Maximum team/group programs a student can enter</p>
+                <p className="text-[11px] text-gray-500 mt-1">Maximum team/group programs in student&apos;s category (General is unlimited)</p>
               </div>
             )}
           </div>
@@ -707,9 +737,13 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           {/* Number of Judges */}
-          <div className="space-y-2">
-            <label className="block text-xs font-semibold text-gray-700">Number of Judges</label>
-            <div className="grid grid-cols-4 gap-1.5">
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-gray-700">Default Number of Judges</label>
+              <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded">Event Fallback</span>
+            </div>
+            <p className="text-[11px] text-gray-400">Sets the default for new programs. Individual programs can override this.</p>
+            <div className="grid grid-cols-4 gap-1.5 pt-1">
               {[1, 2, 3, 4].map((count) => {
                 const isSelected = numJudges === count;
                 return (

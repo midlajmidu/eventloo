@@ -12,7 +12,8 @@ import {
   AlignLeft,
   AlignCenter,
   AlignRight,
-  Type
+  Type,
+  Download
 } from 'lucide-react';
 import { eventCertificatesAPI } from '../../services/api';
 
@@ -21,10 +22,10 @@ const TEMPLATE_TYPES = [
   { id: 'second_place', title: '2nd Place Certificate', subtitle: 'Choose a template', defaultStatus: 'Missing' },
   { id: 'third_place', title: '3rd Place Certificate', subtitle: 'Choose a template', defaultStatus: 'Missing' },
   { id: 'participation', title: 'Participation Certificate', subtitle: 'Choose a template', defaultStatus: 'Missing' },
+  { id: 'badge', title: 'Badge', subtitle: 'Choose a template', defaultStatus: 'Missing' },
   { id: 'common_prize', title: 'Common Prize Certificate', subtitle: 'Coming Soon', defaultStatus: 'Missing', comingSoon: true },
   { id: 'grade_certificate', title: 'Grade Certificate', subtitle: 'Coming Soon', defaultStatus: 'Missing', comingSoon: true },
-  { id: 'result_poster', title: 'Result Poster', subtitle: 'Coming Soon', defaultStatus: 'Missing', comingSoon: true },
-  { id: 'badge', title: 'Badge', subtitle: 'Coming Soon', defaultStatus: 'Missing', comingSoon: true }
+  { id: 'result_poster', title: 'Result Poster', subtitle: 'Coming Soon', defaultStatus: 'Missing', comingSoon: true }
 ];
 
 const FONT_OPTIONS = [
@@ -48,10 +49,28 @@ const INITIAL_FIELDS = {
   participantName: { id: 'participantName', label: 'Participant Name', sample: 'Ayisha Amna', x: 42, y: 60, fontSize: 22, color: '#000000', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: true },
   chestNo: { id: 'chestNo', label: 'Participant ID / Chest No', sample: 'Chest No: 4003', x: 42, y: 68, fontSize: 16, color: '#1E40AF', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: true },
   category: { id: 'category', label: 'Category', sample: 'Higher Secondary', x: 42, y: 75, fontSize: 14, color: '#374151', fontFamily: 'helvetica', textAlign: 'center', bold: false, letterSpacing: 0, uppercase: false, enabled: true },
-  teamName: { id: 'teamName', label: 'Team / Institution', sample: 'Palakkutty Unit', x: 42, y: 82, fontSize: 14, color: '#374151', fontFamily: 'helvetica', textAlign: 'center', bold: false, letterSpacing: 0, uppercase: false, enabled: true },
+  teamName: { id: 'teamName', label: 'Team', sample: 'Palakkutty Unit', x: 42, y: 82, fontSize: 14, color: '#374151', fontFamily: 'helvetica', textAlign: 'center', bold: false, letterSpacing: 0, uppercase: false, enabled: true },
   eventName: { id: 'eventName', label: 'Event Name', sample: 'School Arts Festival', x: 42, y: 88, fontSize: 14, color: '#1F2937', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: false },
   programName: { id: 'programName', label: 'Program Name', sample: 'Solo Song', x: 42, y: 92, fontSize: 13, color: '#374151', fontFamily: 'helvetica', textAlign: 'center', bold: false, letterSpacing: 0, uppercase: false, enabled: false },
-  rank: { id: 'rank', label: 'Rank / Place', sample: '1st Place', x: 75, y: 60, fontSize: 16, color: '#D97706', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: false }
+  rank: { id: 'rank', label: 'Rank / Place', sample: '1st Place', x: 75, y: 60, fontSize: 16, color: '#D97706', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: false },
+  totalPrograms: { id: 'totalPrograms', label: 'Total Programs Count', sample: 'Total Programs: 3', x: 42, y: 95, fontSize: 12, color: '#D97706', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: false },
+  assignedPrograms: { id: 'assignedPrograms', label: 'Assigned Programs List', sample: 'Solo Song, Elocution, Quiz (General)', x: 42, y: 97, fontSize: 11, color: '#374151', fontFamily: 'helvetica', textAlign: 'center', bold: false, letterSpacing: 0, uppercase: false, enabled: false }
+};
+
+const BADGE_INITIAL_FIELDS = {
+  eventName: { id: 'eventName', label: 'Event Name', sample: 'School Arts Festival', x: 50, y: 14, fontSize: 13, color: '#1F2937', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: true },
+  participantName: { id: 'participantName', label: 'Participant Name', sample: 'Ayisha Amna', x: 50, y: 44, fontSize: 20, color: '#000000', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: true },
+  chestNo: { id: 'chestNo', label: 'Participant ID / Chest No', sample: 'Chest No: 4003', x: 50, y: 53, fontSize: 16, color: '#1E40AF', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: true },
+  category: { id: 'category', label: 'Category', sample: 'Higher Secondary', x: 50, y: 61, fontSize: 13, color: '#374151', fontFamily: 'helvetica', textAlign: 'center', bold: false, letterSpacing: 0, uppercase: false, enabled: true },
+  teamName: { id: 'teamName', label: 'Team', sample: 'Palakkutty Unit', x: 50, y: 68, fontSize: 13, color: '#374151', fontFamily: 'helvetica', textAlign: 'center', bold: false, letterSpacing: 0, uppercase: false, enabled: true },
+  totalPrograms: { id: 'totalPrograms', label: 'Total Programs Count', sample: 'Total Programs: 3', x: 50, y: 76, fontSize: 13, color: '#D97706', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: true },
+  assignedPrograms: { id: 'assignedPrograms', label: 'Assigned Programs List', sample: 'Solo Song, Elocution, Quiz (General)', x: 50, y: 84, fontSize: 11, color: '#1F2937', fontFamily: 'helvetica', textAlign: 'center', bold: false, letterSpacing: 0, uppercase: false, enabled: true },
+  programName: { id: 'programName', label: 'Program Name', sample: 'Solo Song', x: 50, y: 92, fontSize: 12, color: '#374151', fontFamily: 'helvetica', textAlign: 'center', bold: false, letterSpacing: 0, uppercase: false, enabled: false },
+  rank: { id: 'rank', label: 'Rank / Role', sample: 'Participant', x: 50, y: 35, fontSize: 14, color: '#D97706', fontFamily: 'helvetica', textAlign: 'center', bold: true, letterSpacing: 0, uppercase: false, enabled: false }
+};
+
+const getInitialFields = (templateId) => {
+  return JSON.parse(JSON.stringify(templateId === 'badge' ? BADGE_INITIAL_FIELDS : INITIAL_FIELDS));
 };
 
 const EventCertificates = ({ event, eventId }) => {
@@ -62,6 +81,7 @@ const EventCertificates = ({ event, eventId }) => {
   const [saving, setSaving] = useState(false);
   const [selectedFieldId, setSelectedFieldId] = useState('participantName');
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const canvasRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -73,7 +93,9 @@ const EventCertificates = ({ event, eventId }) => {
     teamName: 'Palakkutty Unit',
     eventName: event?.title || 'School Arts Festival',
     programName: 'Solo Song',
-    rank: '1st Place'
+    rank: 'Participant',
+    totalPrograms: 'Total Programs: 3',
+    assignedPrograms: 'Solo Song, Elocution, Quiz (General)'
   });
 
   useEffect(() => {
@@ -116,16 +138,20 @@ const EventCertificates = ({ event, eventId }) => {
       const response = await eventCertificatesAPI.getTemplates(eventId);
       const loaded = {};
       (response.data?.results || []).forEach(template => {
+        const defaults = getInitialFields(template.certificateType);
         loaded[template.certificateType] = {
           ...template,
           id: template.certificateType,
-          fields: template.fields || JSON.parse(JSON.stringify(INITIAL_FIELDS))
+          fields: {
+            ...defaults,
+            ...(template.fields || {})
+          }
         };
       });
       setTemplates(loaded);
     } catch (e) {
       console.error('Error loading templates:', e);
-      setErrorMessage(e.response?.data?.error || 'Unable to load certificate templates.');
+      setErrorMessage(e.response?.data?.error || 'Unable to load templates.');
     }
   };
 
@@ -145,29 +171,74 @@ const EventCertificates = ({ event, eventId }) => {
       setTimeout(() => setSavedSuccess(false), 2500);
     } catch (e) {
       console.error('Error saving templates:', e);
-      setErrorMessage(e.response?.data?.error || 'Unable to save the certificate template.');
+      setErrorMessage(e.response?.data?.error || 'Unable to save the template layout.');
     } finally {
       setSaving(false);
     }
   };
 
-  const currentTemplate = templates[activeTemplateId] || {
+  const handleDownloadPdf = async () => {
+    if (!currentTemplate.bgImage) {
+      setErrorMessage('Please upload a template background image and save first.');
+      return;
+    }
+    setDownloading(true);
+    setErrorMessage('');
+    try {
+      const res = await eventCertificatesAPI.generateCertificates(eventId, {
+        cert_types: activeTemplateId,
+        quality: 'standard'
+      });
+      const isBadge = activeTemplateId === 'badge';
+      const filename = `${isBadge ? 'Badges' : 'Certificates'}_${event?.title || 'Event'}.pdf`;
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      let msg = err.response?.data?.error;
+      if (err.response?.data instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await err.response.data.text());
+          msg = parsed?.error;
+        } catch (_) {}
+      }
+      setErrorMessage(msg || `Unable to download ${activeTypeInfo.title} PDF. Ensure participants are assigned.`);
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const currentDefaults = getInitialFields(activeTemplateId);
+  const currentTemplate = templates[activeTemplateId] ? {
+    ...templates[activeTemplateId],
+    fields: {
+      ...currentDefaults,
+      ...(templates[activeTemplateId].fields || {})
+    }
+  } : {
     id: activeTemplateId,
     bgImage: '',
     status: 'Missing',
-    fields: JSON.parse(JSON.stringify(INITIAL_FIELDS))
+    aspectRatio: activeTemplateId === 'badge' ? 0.75 : 4 / 3,
+    fields: currentDefaults
   };
 
   const handleImageUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
-      setErrorMessage('Use a PNG, JPEG or WebP certificate image.');
+      setErrorMessage('Use a PNG, JPEG or WebP template image.');
       e.target.value = '';
       return;
     }
     if (file.size > 8 * 1024 * 1024) {
-      setErrorMessage('Certificate images must be 8 MB or smaller.');
+      setErrorMessage('Template images must be 8 MB or smaller.');
       e.target.value = '';
       return;
     }
@@ -177,7 +248,7 @@ const EventCertificates = ({ event, eventId }) => {
     try {
       const payload = new FormData();
       payload.append('background_image', file);
-      payload.append('fields', JSON.stringify(currentTemplate.fields || INITIAL_FIELDS));
+      payload.append('fields', JSON.stringify(currentTemplate.fields || getInitialFields(activeTemplateId)));
       const response = await eventCertificatesAPI.updateTemplate(
         eventId, activeTemplateId, payload
       );
@@ -188,7 +259,7 @@ const EventCertificates = ({ event, eventId }) => {
       setSavedSuccess(true);
       setTimeout(() => setSavedSuccess(false), 2500);
     } catch (error) {
-      setErrorMessage(error.response?.data?.error || 'Unable to upload the certificate image.');
+      setErrorMessage(error.response?.data?.error || 'Unable to upload the template image.');
     } finally {
       setSaving(false);
       e.target.value = '';
@@ -364,6 +435,17 @@ const EventCertificates = ({ event, eventId }) => {
                 <Save className="w-4 h-4" />
                 <span>{saving ? 'Saving...' : 'Save Layout'}</span>
               </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={downloading || !currentTemplate.bgImage}
+                title={!currentTemplate.bgImage ? 'Upload an image and save first' : `Download ${activeTypeInfo.title} PDF`}
+                className="px-3.5 py-2 bg-slate-900 hover:bg-black disabled:opacity-40 text-white text-xs font-bold rounded-xl transition-colors inline-flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+              >
+                <Download className="w-4 h-4" />
+                <span>{downloading ? 'Downloading...' : 'Download PDF'}</span>
+              </button>
             </div>
           </div>
 
@@ -447,7 +529,9 @@ const EventCertificates = ({ event, eventId }) => {
                       letterSpacing: `${f.letterSpacing || 0}px`,
                       textTransform: f.uppercase ? 'uppercase' : 'none'
                     }}
-                    className={`absolute z-30 px-2 py-1 rounded cursor-move whitespace-nowrap transition-all ${
+                    className={`absolute z-30 px-2 py-1 rounded cursor-move ${
+                      f.id === 'assignedPrograms' ? 'whitespace-normal max-w-[90%] text-center' : 'whitespace-nowrap'
+                    } transition-all ${
                       isSelected 
                         ? 'border border-dashed border-indigo-500 bg-transparent ring-1 ring-indigo-400' 
                         : 'border border-transparent hover:border-gray-300/40 bg-transparent'
@@ -701,7 +785,7 @@ const EventCertificates = ({ event, eventId }) => {
                 <Sparkles className="w-4 h-4 text-amber-500" />
               </div>
               <p className="text-[11px] text-gray-500">
-                Upload your certificate design image and drag fields into place.
+                Upload your template design image and drag fields into place.
               </p>
             </div>
 
@@ -819,7 +903,9 @@ const EventCertificates = ({ event, eventId }) => {
                         letterSpacing: `${f.letterSpacing || 0}px`,
                         textTransform: f.uppercase ? 'uppercase' : 'none'
                       }}
-                      className="absolute z-30 whitespace-nowrap"
+                      className={`absolute z-30 ${
+                        f.id === 'assignedPrograms' ? 'whitespace-normal max-w-[90%] text-center' : 'whitespace-nowrap'
+                      }`}
                     >
                       {sampleData[f.id] || f.sample}
                     </div>
@@ -828,7 +914,16 @@ const EventCertificates = ({ event, eventId }) => {
               </div>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={handleDownloadPdf}
+                disabled={downloading || !currentTemplate.bgImage}
+                className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 disabled:opacity-50 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl transition-colors inline-flex items-center space-x-1.5 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>{downloading ? 'Generating PDF...' : 'Download PDF'}</span>
+              </button>
               <button
                 type="button"
                 onClick={() => setPreviewModalOpen(false)}

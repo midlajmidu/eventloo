@@ -9,10 +9,13 @@ MAX_XLSX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024
 MAX_XLSX_MEMBERS = 1000
 
 
-def validate_excel_upload(upload):
-    """Validate size, extension, and container signature before parsing Excel data."""
+def validate_excel_upload(upload, allow_csv=True):
+    """Validate size, extension, and container signature before parsing spreadsheet data."""
     extension = Path(upload.name or '').suffix.lower()
-    if extension not in {'.xlsx', '.xls'}:
+    valid_exts = {'.xlsx', '.xls', '.csv'} if allow_csv else {'.xlsx', '.xls'}
+    if extension not in valid_exts:
+        if allow_csv:
+            raise ValueError('Please upload a spreadsheet file (.xlsx, .xls, or .csv).')
         raise ValueError('Please upload an Excel file (.xlsx or .xls).')
     if upload.size > MAX_EXCEL_BYTES:
         raise ValueError('File size must not exceed 10 MB.')
@@ -22,6 +25,11 @@ def validate_excel_upload(upload):
         raise ValueError('The uploaded file is not a valid XLSX workbook.')
     if extension == '.xls' and header != bytes.fromhex('D0CF11E0A1B11AE1'):
         raise ValueError('The uploaded file is not a valid XLS workbook.')
+    if extension == '.csv':
+        sample = upload.read(1024)
+        upload.seek(0)
+        if b'\x00' in sample:
+            raise ValueError('The uploaded file is not a valid CSV spreadsheet.')
     if extension == '.xlsx':
         try:
             with ZipFile(upload) as workbook:

@@ -20,6 +20,10 @@ module.exports = {
           600: '#475569',
           700: '#334155',
         }
+      },
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        display: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
       }
     },
   },

@@ -175,23 +175,33 @@ def category_is_compatible(student, program):
 
 
 def _check_student_limits(student, program):
+    # General and combined/mixing category programs are unlimited for all students
+    if program_is_general_or_mixed(program):
+        return
+
     event = program.event
     existing = ProgramAssignment.objects.filter(
         student=student,
         program__event=event,
     ).select_related('program')
 
+    # Exclude general and mixed programs from standard category participation limits
+    standard_existing = [
+        assignment for assignment in existing
+        if not program_is_general_or_mixed(assignment.program)
+    ]
+
     if program.is_team_based:
         limit = event.max_group_programs_per_student
-        count = existing.filter(program__is_team_based=True).values('program_id').distinct().count()
+        count = len({a.program_id for a in standard_existing if a.program.is_team_based})
         label = 'group/team'
     else:
         limit = event.max_single_programs_per_student
-        count = existing.filter(program__is_team_based=False).values('program_id').distinct().count()
+        count = len({a.program_id for a in standard_existing if not a.program.is_team_based})
         label = 'single/individual'
     if limit and count >= limit:
         raise ValidationError(
-            f'{student.display_name} has reached the limit of {limit} {label} programs.'
+            f'{student.display_name} has reached the limit of {limit} {label} programs for their category.'
         )
 
 
@@ -643,4 +653,4 @@ def program_results_complete(program):
         entry_status='submitted',
         average_marks__isnull=False,
     ).count()
-    return submitted >= expected
+    return submitted > 0

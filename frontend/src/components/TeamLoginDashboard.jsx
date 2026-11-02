@@ -602,10 +602,10 @@ const TeamLoginDashboard = () => {
             <div className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600 mb-1">{stat.title}</p>
-                  <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1">{stat.title}</p>
+                  <p className="text-2xl font-bold tracking-tight text-slate-900">{stat.value}</p>
                   {stat.subtitle && (
-                    <p className="text-xs text-gray-500 mt-1">{stat.subtitle}</p>
+                    <p className="text-xs text-slate-400 mt-1 font-normal">{stat.subtitle}</p>
                   )}
                 </div>
                 <div className={`${stat.bgColor} p-3 rounded-lg`}>

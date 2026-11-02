@@ -441,7 +441,7 @@ const EventCallingSheet = ({ event, eventId, onRefresh }) => {
                 <p className="text-sm text-gray-600 mt-1">
                   {selectedProgram.category?.toUpperCase()} • 
                   {selectedProgram.is_team_based ? ' Team Based' : ' Individual'} • 
-                  {participants.length} Participants
+                  {selectedProgram.is_team_based ? `${participants.length} Sub-Teams / Groups` : `${participants.length} Participants`}
                 </p>
               </div>
               <div className="flex gap-3">
@@ -491,57 +491,104 @@ const EventCallingSheet = ({ event, eventId, onRefresh }) => {
                     The PDF will include participant details, team information, and venue details.
                   </p>
                   
-                  {/* Preview Table */}
-                  <div className="overflow-x-auto">
+                  {/* Pre                  <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-100">
+                      <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-12">
                             #
                           </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                            Participant
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-36">
+                            Chest No.
                           </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                            ID
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            Participant(s)
                           </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                            ID / Sub-Team
+                          </th>
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                             Gender
                           </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                             Team
                           </th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                          <th className="px-4 py-2.5 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
                             Category
                           </th>
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {participants.map((participant, index) => (
-                          <tr key={participant.id}>
-                            <td className="px-4 py-2 text-sm text-gray-900">
+                          <tr key={participant.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="px-4 py-3 text-sm text-gray-500 font-mono">
                               {index + 1}
                             </td>
-                            <td className="px-4 py-2 text-sm font-medium text-gray-900">
-                              {participant.name}
+                            <td className="px-4 py-3 text-sm font-bold text-gray-900">
+                              {participant.is_group ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {participant.chest_number ? (
+                                    participant.chest_number.split(',').map((num, i) => (
+                                      <span key={i} className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
+                                        {num.trim()}
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="text-gray-400 text-xs italic">Pending</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono">
+                                  {participant.chest_number || 'Pending'}
+                                </span>
+                              )}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-500">
-                              {participant.identifier}
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              {participant.is_group && participant.members && participant.members.length > 0 ? (
+                                <div>
+                                  <div className="font-semibold text-gray-900 flex items-center gap-1.5 flex-wrap">
+                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                      👑 Leader
+                                    </span>
+                                    <span>
+                                      {participant.members.find(m => m.is_leader)?.name || participant.members[0]?.name}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-1 flex flex-wrap gap-1">
+                                    {participant.members.filter(m => !m.is_leader).map((m, idx) => (
+                                      <span key={idx} className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[11px]">
+                                        {m.name} {m.chest_number ? `(${m.chest_number})` : ''}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="font-medium text-gray-900">{participant.name}</span>
+                              )}
                             </td>
-                            <td className="px-4 py-2 text-sm capitalize text-gray-500">
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {participant.is_group ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
+                                  Sub-Team {participant.sub_team_number || 1} • {participant.team_member_count || participant.members?.length || 0} members
+                                </span>
+                              ) : (
+                                <span className="font-mono text-xs">{participant.identifier || '-'}</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm capitalize text-gray-500">
                               {participant.gender || '-'}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-500">
+                            <td className="px-4 py-3 text-sm text-gray-700 font-medium">
                               {participant.team_name || '-'}
                             </td>
-                            <td className="px-4 py-2 text-sm text-gray-500">
-                              {participant.category_display}
+                            <td className="px-4 py-3 text-sm text-gray-500">
+                              {participant.category_display || '-'}
                             </td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </div>         </div>
                 </div>
 
                 {/* Program Details for PDF */}

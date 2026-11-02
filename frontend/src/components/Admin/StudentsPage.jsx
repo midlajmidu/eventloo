@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { studentsAPI, teamsAPI, categoriesAPI, classesAPI } from '../../services/api';
 import Pagination from '../common/Pagination';
 import { 
@@ -14,10 +15,20 @@ import {
   Trophy,
   Upload,
   Trash2,
-  X
+  X,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
+  Download,
+  Check,
+  Phone,
+  Calendar,
+  ShieldCheck,
+  Sparkles
 } from 'lucide-react';
 
 const StudentsPage = () => {
+  const location = useLocation();
   const [students, setStudents] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -32,14 +43,31 @@ const StudentsPage = () => {
   const [showTeamAssignModal, setShowTeamAssignModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState(null);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('action') === 'create' || params.get('create') === 'true') {
+      setShowAddModal(true);
+    } else if (params.get('action') === 'upload' || params.get('upload') === 'true') {
+      setShowBulkUploadModal(true);
+    }
+  }, [location.search]);
   const [formData, setFormData] = useState({
     name: '',
     gender: '',
     category: '',
     grade: '',
     section: '',
-    address: ''
+    team_id: '',
+    email: '',
+    phone_number: '',
+    date_of_birth: '',
+    address: '',
+    guardian_name: '',
+    guardian_phone: '',
   });
+  const [submittingStudent, setSubmittingStudent] = useState(false);
+  const [formError, setFormError] = useState(null);
 
   const [categories, setCategories] = useState([]);
   const [classes, setClasses] = useState([]);
@@ -129,69 +157,62 @@ const StudentsPage = () => {
 
   const handleAddStudent = async (e) => {
     e.preventDefault();
+    setSubmittingStudent(true);
+    setFormError(null);
     try {
-      // Prepare the data for submission
+      // Prepare the data for submission with all model fields
       const studentData = {
-        name: formData.name,
+        name: formData.name.trim(),
         gender: formData.gender,
         category: formData.category,
         grade: formData.grade,
-        section: formData.section,
-        address: formData.address
+        section: formData.section?.trim() || undefined,
+        team_id: formData.team_id ? Number(formData.team_id) : undefined,
+        email: formData.email?.trim() || undefined,
+        phone_number: formData.phone_number?.trim() || undefined,
+        date_of_birth: formData.date_of_birth || undefined,
+        address: formData.address?.trim() || undefined,
+        guardian_name: formData.guardian_name?.trim() || undefined,
+        guardian_phone: formData.guardian_phone?.trim() || undefined,
       };
 
-      // Add stream for HSS students (append to section or handle separately)
-      if (formData.category === 'hss' && formData.stream) {
-        studentData.section = formData.section ? `${formData.section} (${formData.stream})` : formData.stream;
-      }
+      const response = await studentsAPI.createStudent(studentData);
+      const createdStudent = response?.data;
 
-      await studentsAPI.createStudent(studentData);
+      // Safeguard: ensure team membership is confirmed if selected
+      if (formData.team_id && createdStudent?.id) {
+        try {
+          await studentsAPI.assignToTeam(createdStudent.id, { team_id: formData.team_id });
+        } catch (teamAssignErr) {
+          console.warn('Post-creation team assign check:', teamAssignErr);
+        }
+      }
       
       setShowAddModal(false);
       resetForm();
       fetchStudents();
-      alert('Student added successfully!');
     } catch (error) {
       console.error('Error adding student:', error);
-      console.error('Error response:', error.response);
-      
-      // Provide more specific error messages
-      let errorMessage = 'Error adding student. Please check the form data.';
-      
-      if (error.response) {
-        const status = error.response.status;
+      let errorMessage = 'Failed to create student. Please verify the information entered.';
+      if (error.response?.data) {
         const data = error.response.data;
-        
-        if (status === 400) {
-          if (data?.student_id) {
-            errorMessage = `Student ID Error: ${data.student_id}`;
-          } else if (data?.name) {
-            errorMessage = `Name Error: ${data.name}`;
-          } else if (data?.category) {
-            errorMessage = `Category Error: ${data.category}`;
-          } else if (data?.grade) {
-            errorMessage = `Grade Error: ${data.grade}`;
-          } else if (typeof data === 'object') {
-            errorMessage = 'Validation errors:\n' + Object.entries(data).map(([field, errors]) => 
-              `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`
-            ).join('\n');
-          } else {
-            errorMessage = data?.detail || data?.error || 'Invalid form data. Please check all required fields.';
-          }
-        } else if (status === 403) {
-          errorMessage = 'Permission denied. You do not have permission to create students.';
-        } else if (status === 500) {
-          errorMessage = 'Server error. Please try again later.';
-        } else if (data?.error) {
+        if (typeof data === 'string') {
+          errorMessage = data;
+        } else if (data.error) {
           errorMessage = data.error;
-        } else if (data?.detail) {
+        } else if (data.detail) {
           errorMessage = data.detail;
+        } else if (typeof data === 'object') {
+          errorMessage = Object.entries(data)
+            .map(([field, errors]) => `${field.replace(/_/g, ' ')}: ${Array.isArray(errors) ? errors.join(', ') : errors}`)
+            .join(' | ');
         }
       } else if (error.message) {
         errorMessage = `Network error: ${error.message}`;
       }
-      
-      alert(errorMessage);
+      setFormError(errorMessage);
+    } finally {
+      setSubmittingStudent(false);
     }
   };
 
@@ -240,8 +261,15 @@ const StudentsPage = () => {
       category: '',
       grade: '',
       section: '',
-      address: ''
+      team_id: '',
+      email: '',
+      phone_number: '',
+      date_of_birth: '',
+      address: '',
+      guardian_name: '',
+      guardian_phone: '',
     });
+    setFormError(null);
   };
 
   const handleViewStudent = (student) => {
@@ -322,16 +350,16 @@ const StudentsPage = () => {
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-indigo-600">Directory</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">Students</h1>
-            <p className="mt-1 text-sm text-slate-500">Manage profiles, classes and team membership.</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">Directory</p>
+            <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">Students</h1>
+            <p className="text-xs text-slate-400 mt-1 font-normal">Manage profiles, classes and team membership.</p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => setShowBulkUploadModal(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-indigo-200 hover:text-indigo-700">
-              <Upload className="h-4 w-4" /> Bulk upload
+            <button onClick={() => setShowBulkUploadModal(true)} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-2xs transition hover:border-indigo-200 hover:text-indigo-700">
+              <Upload className="h-3.5 w-3.5 text-slate-400" /> Bulk upload
             </button>
-            <button onClick={() => setShowAddModal(true)} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
-              <Plus className="h-4 w-4" /> Add student
+            <button onClick={() => setShowAddModal(true)} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs transition hover:bg-indigo-700">
+              <Plus className="h-3.5 w-3.5" /> Add student
             </button>
           </div>
         </header>
@@ -340,7 +368,14 @@ const StudentsPage = () => {
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(230px,2fr)_repeat(5,minmax(115px,1fr))_auto]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input type="search" aria-label="Search students" placeholder="Search name, ID or email" value={searchTerm} onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }} className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" />
+              <input
+                type="search"
+                aria-label="Search students"
+                placeholder="Search name, ID or class"
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+              />
             </div>
             <select aria-label="Category" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setSelectedGrade(''); setCurrentPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100">
               <option value="">All categories</option>
@@ -391,7 +426,12 @@ const StudentsPage = () => {
                       <td className="whitespace-nowrap px-5 py-3.5">
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-xs font-bold text-indigo-600">{studentName?.charAt(0)?.toUpperCase() || 'S'}</div>
-                          <div className="min-w-0"><p className="max-w-[240px] truncate text-sm font-semibold text-slate-900">{studentName}</p><p className="max-w-[240px] truncate text-xs text-slate-400">{student.email || 'No email'}</p></div>
+                          <div className="min-w-0">
+                            <p className="max-w-[240px] truncate text-sm font-semibold text-slate-900">{studentName}</p>
+                            {student.email ? (
+                              <p className="max-w-[240px] truncate text-xs text-slate-400">{student.email}</p>
+                            ) : null}
+                          </div>
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5 font-mono text-xs text-slate-600">{student.student_id}</td>
@@ -422,15 +462,21 @@ const StudentsPage = () => {
           {students.length > 0 && <div className="border-t border-slate-100 px-5 py-3"><Pagination currentPage={currentPage} totalPages={Math.ceil(totalCount / pageSize)} onPageChange={handlePageChange} pageSize={pageSize} onPageSizeChange={handlePageSizeChange} totalCount={totalCount} className="text-slate-500" /></div>}
         </section>
 
-        {/* Add Student Modal */}
+        {/* Add Student Slide-Over Drawer */}
         {showAddModal && (
-          <AddStudentModal
+          <AddStudentDrawer
             formData={formData}
             setFormData={setFormData}
-            onClose={() => setShowAddModal(false)}
+            onClose={() => {
+              setShowAddModal(false);
+              setFormError(null);
+            }}
             onSubmit={handleAddStudent}
             categories={categories}
             classes={classes}
+            teams={teams}
+            loading={submittingStudent}
+            error={formError}
           />
         )}
 
@@ -678,6 +724,36 @@ const StudentProfileModal = ({ student, team, onClose, onStudentDeleted, categor
                 <div>
                   <p className="text-sm text-slate-600">Address</p>
                   <p className="font-medium">{student.address || 'Not provided'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                <Phone className="h-5 w-5 text-slate-500" />
+                <div>
+                  <p className="text-sm text-slate-600">Phone</p>
+                  <p className="font-medium">{student.phone_number || 'Not provided'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+                <Calendar className="h-5 w-5 text-slate-500" />
+                <div>
+                  <p className="text-sm text-slate-600">Date of Birth</p>
+                  <p className="font-medium">{student.date_of_birth || 'Not provided'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg md:col-span-2">
+                <ShieldCheck className="h-5 w-5 text-slate-500" />
+                <div>
+                  <p className="text-sm text-slate-600">Guardian Details</p>
+                  <p className="font-medium">
+                    {student.guardian_name ? (
+                      <>
+                        {student.guardian_name}
+                        {student.guardian_phone && <span className="text-slate-500 font-normal"> ({student.guardian_phone})</span>}
+                      </>
+                    ) : (
+                      'Not provided'
+                    )}
+                  </p>
                 </div>
               </div>
             </div>
@@ -951,11 +1027,41 @@ const TeamAssignmentModal = ({ student, teams, currentTeam, onClose, onAssign })
   );
 };
 
-// Add Student Modal Component
-const AddStudentModal = ({ formData, setFormData, onClose, onSubmit, categories, classes }) => {
+// Add Student Slide-Over Drawer Component (Opens from the right side)
+const AddStudentDrawer = ({
+  formData,
+  setFormData,
+  onClose,
+  onSubmit,
+  categories,
+  classes,
+  teams = [],
+  loading = false,
+  error = null
+}) => {
+  // Listen for Escape key to close
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  // Prevent background scrolling when drawer is open
+  useEffect(() => {
+    const originalStyle = window.getComputedStyle(document.body).overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalStyle;
+    };
+  }, []);
+
   // Get available grades based on category
   const getAvailableGrades = () => {
-    if (!formData.category) return [];
+    if (!formData.category) {
+      return classes.filter(cls => cls.is_active).map(cls => ({ value: cls.code, label: cls.name }));
+    }
     const cat = categories.find(c => c.code === formData.category);
     if (!cat) return [];
     return classes
@@ -965,193 +1071,392 @@ const AddStudentModal = ({ formData, setFormData, onClose, onSubmit, categories,
 
   // Handle category change
   const handleCategoryChange = (category) => {
-    setFormData({
-      ...formData, 
+    setFormData((prev) => ({
+      ...prev,
       category,
       grade: '' // Reset grade when category changes
-    });
+    }));
   };
 
-  // Handle grade change
+  // Handle grade change and auto-fill category if unselected
   const handleGradeChange = (grade) => {
-    setFormData({
-      ...formData,
-      grade
-    });
+    let newCategory = formData.category;
+    if (!newCategory && grade) {
+      const clsObj = classes.find(c => c.code === grade);
+      if (clsObj) {
+        const matchingCat = categories.find(cat => cat.class_ids?.includes(clsObj.id));
+        if (matchingCat) newCategory = matchingCat.code;
+      }
+    }
+    setFormData((prev) => ({
+      ...prev,
+      grade,
+      category: newCategory
+    }));
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Add New Student</h3>
-          <button
-            onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Close add student"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Full Name *
-            </label>
-            <input
-              type="text"
-              required
-              value={formData.name}
-              onChange={(e) => setFormData({...formData, name: e.target.value})}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none"
-              placeholder="Enter full name"
-            />
-          </div>
+    <div className="fixed inset-0 z-50 overflow-hidden">
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm transition-opacity animate-in fade-in duration-200"
+        onClick={onClose}
+        aria-hidden="true"
+      />
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Category *
-            </label>
-            <select
-              required
-              value={formData.category}
-              onChange={(e) => handleCategoryChange(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none"
-            >
-              <option value="">Select Category</option>
-              {categories.filter(c => c.is_active && !c.is_mixing).map(cat => (
-                <option key={cat.code} value={cat.code}>{cat.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Gender *</label>
-            <select required value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})} className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none">
-              <option value="">Select Gender</option><option value="male">Male</option><option value="female">Female</option><option value="other">Other</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Grade *
-            </label>
-            <select
-              required
-              value={formData.grade}
-              onChange={(e) => handleGradeChange(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none"
-            >
-              <option value="">Select Grade</option>
-              {getAvailableGrades().map(grade => (
-                <option key={grade.value} value={grade.value}>{grade.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Section
-            </label>
-            <input
-              type="text"
-              value={formData.section}
-              onChange={(e) => setFormData({...formData, section: e.target.value})}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none"
-              placeholder="e.g., A, B, Science, Commerce"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Address
-            </label>
-            <textarea
-              value={formData.address}
-              onChange={(e) => setFormData({...formData, address: e.target.value})}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none"
-              rows="2"
-            />
-          </div>
-
-          <div className="flex justify-end space-x-3 pt-4">
+      {/* Slide-over Container */}
+      <div className="fixed inset-y-0 right-0 flex max-w-full pl-6 md:pl-10">
+        <div className="w-screen max-w-xl bg-white shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-300">
+          
+          {/* Header */}
+          <div className="border-b border-slate-200 bg-white px-6 py-4 flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                <UserPlus className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">Add New Student</h3>
+                <p className="text-xs text-slate-500">
+                  Fill in academic details and optional student profile info.
+                </p>
+              </div>
+            </div>
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-slate-700 bg-slate-200 rounded-lg hover:bg-slate-300 transition-colors"
+              className="rounded-xl border border-slate-200 p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+              aria-label="Close drawer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          {/* Inline Error Banner */}
+          {error && (
+            <div className="mx-6 mt-4 flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50/90 p-3.5 text-xs text-rose-800 shrink-0">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-semibold text-rose-900">Please review the form</p>
+                <p className="mt-0.5 text-rose-700 break-words">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Form Area */}
+          <form id="add-student-drawer-form" onSubmit={onSubmit} className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            
+            {/* Section 1: Basic Information */}
+            <div className="rounded-xl border border-slate-200/90 bg-slate-50/50 p-4 space-y-3.5">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-indigo-600" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Basic Information</h4>
+                <span className="text-[11px] font-medium text-rose-500">* Required</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Full Name <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition"
+                  placeholder="e.g. Rahul Sharma"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Gender <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  required
+                  value={formData.gender}
+                  onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition text-slate-800"
+                >
+                  <option value="">Select Gender</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Section 2: Academic & Team Assignment */}
+            <div className="rounded-xl border border-slate-200/90 bg-slate-50/50 p-4 space-y-3.5">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-4 w-4 text-indigo-600" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Academic & Team Assignment</h4>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Category <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.category}
+                    onChange={(e) => handleCategoryChange(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition text-slate-800"
+                  >
+                    <option value="">Select Category</option>
+                    {categories.filter(c => c.is_active && !c.is_mixing).map(cat => (
+                      <option key={cat.code} value={cat.code}>{cat.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Class / Grade <span className="text-rose-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.grade}
+                    onChange={(e) => handleGradeChange(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition text-slate-800"
+                  >
+                    <option value="">Select Class</option>
+                    {getAvailableGrades().map(grade => (
+                      <option key={grade.value} value={grade.value}>{grade.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Section <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.section}
+                    onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition"
+                    placeholder="e.g. A, B, Science"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Assign Team <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <select
+                    value={formData.team_id || ''}
+                    onChange={(e) => setFormData({ ...formData, team_id: e.target.value })}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition text-slate-800"
+                  >
+                    <option value="">No Team Assigned (Unassigned)</option>
+                    {teams && teams.map(team => (
+                      <option key={team.id} value={team.id}>
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Contact Details (All Optional) */}
+            <div className="rounded-xl border border-slate-200/90 bg-slate-50/50 p-4 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4 text-indigo-600" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Contact Details</h4>
+                </div>
+                <span className="text-[11px] font-medium text-slate-400">All Optional</span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Email Address <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition"
+                    placeholder="e.g. student@school.edu"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400">Optional. Students do not require an email to participate.</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Phone Number <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={15}
+                    value={formData.phone_number}
+                    onChange={(e) => setFormData({ ...formData, phone_number: e.target.value })}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition"
+                    placeholder="e.g. +91 9876543210"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-400">Max 15 digits.</p>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Residential Address <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition"
+                  placeholder="Enter home address..."
+                />
+              </div>
+            </div>
+
+            {/* Section 4: Personal & Guardian Details (All Optional) */}
+            <div className="rounded-xl border border-slate-200/90 bg-slate-50/50 p-4 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-indigo-600" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Guardian & Personal Details</h4>
+                </div>
+                <span className="text-[11px] font-medium text-slate-400">All Optional</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Date of Birth <span className="text-slate-400 font-normal">(Optional)</span>
+                </label>
+                <input
+                  type="date"
+                  value={formData.date_of_birth}
+                  onChange={(e) => setFormData({ ...formData, date_of_birth: e.target.value })}
+                  className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition text-slate-800"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Guardian Name <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.guardian_name}
+                    onChange={(e) => setFormData({ ...formData, guardian_name: e.target.value })}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition"
+                    placeholder="e.g. Suresh Sharma"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Guardian Phone <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="tel"
+                    maxLength={15}
+                    value={formData.guardian_phone}
+                    onChange={(e) => setFormData({ ...formData, guardian_phone: e.target.value })}
+                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition"
+                    placeholder="e.g. +91 9876543210"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Section 5: Automated System Generation Card */}
+            <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+              <div className="flex items-start gap-2.5">
+                <Sparkles className="h-4 w-4 text-indigo-600 mt-0.5 shrink-0" />
+                <div className="text-xs text-indigo-900 leading-relaxed">
+                  <p className="font-semibold text-indigo-950">Automated System Setup</p>
+                  <p className="mt-0.5 text-indigo-800/90">
+                    A unique Student ID will be generated automatically upon saving (e.g. <span className="font-mono font-medium">STU2026...</span>). Total points start at 0. No dummy emails, passwords, or usernames are created for students.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+          </form>
+
+          {/* Sticky Drawer Footer */}
+          <div className="border-t border-slate-200 bg-white px-6 py-4 flex items-center justify-between gap-3 shrink-0">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              form="add-student-drawer-form"
+              disabled={loading}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700 disabled:opacity-50"
             >
-              Add Student
+              {loading ? (
+                <>
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  <span>Adding Student...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4" />
+                  <span>Save Student</span>
+                </>
+              )}
             </button>
           </div>
-        </form>
+
+        </div>
       </div>
     </div>
   );
 };
+
+// Backwards-compatibility alias
+const AddStudentModal = AddStudentDrawer;
 
 // Student Bulk Upload Modal Component
 const StudentBulkUploadModal = ({ onClose, onSuccess }) => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
 
   const handleFileUpload = async (e) => {
     e.preventDefault();
     if (!file) return;
 
     setUploading(true);
+    setUploadError(null);
+    setUploadResult(null);
+
     try {
       const formData = new FormData();
       formData.append('file', file);
       
       const response = await studentsAPI.bulkUpload(formData);
-      
-      // Show detailed success message
       const data = response.data;
-      let message = `Successfully uploaded ${data.summary.successful_creations} students!`;
-      
-      if (data.team_assignments && data.team_assignments.length > 0) {
-        const successfulAssignments = data.team_assignments.filter(a => a.success).length;
-        message += `\n\nTeam Assignments: ${successfulAssignments} successful`;
-        
-        // Show team assignment details
-        const assignmentDetails = data.team_assignments.map(a => 
-          `• ${a.student} → ${a.team_name || a.team} (${a.action.replace(/_/g, ' ')})`
-        ).join('\n');
-        
-        message += `\n\nDetails:\n${assignmentDetails}`;
+      setUploadResult(data);
+      if (onSuccess) {
+        onSuccess();
       }
-      
-      if (data.skipped && data.skipped.length > 0) {
-        message += `\n\nSkipped: ${data.skipped.length} students`;
-      }
-
-      if (data.corrections && data.corrections.length > 0) {
-        message += `\n\nMatched spelling differences:\n${data.corrections.map(item => `• ${item}`).join('\n')}`;
-      }
-      
-      onSuccess();
-      alert(message);
     } catch (error) {
       console.error('Error uploading students:', error);
-      let errorMessage = 'Error uploading students.';
-      
-      if (error.response?.data?.details) {
-        errorMessage += '\n\nDetails:\n' + error.response.data.details.join('\n');
-      }
-      
-      if (error.response?.data?.suggestions) {
-        errorMessage += '\n\nSuggestions:\n' + error.response.data.suggestions.join('\n');
-      }
-      
-      alert(errorMessage);
+      const errorData = error.response?.data;
+      setUploadError({
+        message: errorData?.error || 'Failed to upload students spreadsheet.',
+        details: Array.isArray(errorData?.details) ? errorData.details : [],
+        suggestions: Array.isArray(errorData?.suggestions) ? errorData.suggestions : []
+      });
     } finally {
       setUploading(false);
     }
@@ -1161,8 +1466,6 @@ const StudentBulkUploadModal = ({ onClose, onSuccess }) => {
     setDownloadingTemplate(true);
     try {
       const response = await studentsAPI.downloadTemplate();
-      
-      // Create blob and download
       const blob = new Blob([response.data], { 
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
       });
@@ -1182,88 +1485,268 @@ const StudentBulkUploadModal = ({ onClose, onSuccess }) => {
     }
   };
 
+  const resetForm = () => {
+    setFile(null);
+    setUploadResult(null);
+    setUploadError(null);
+  };
+
   return (
-    <div className="fixed inset-0 bg-slate-950/45 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-        <div className="flex justify-between items-center mb-6">
-          <div><p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-600">Import</p><h3 className="mt-1 text-xl font-semibold text-slate-950">Bulk upload students</h3></div>
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
+        {/* Modal Header */}
+        <div className="flex justify-between items-start mb-5 pb-3 border-b border-slate-100">
+          <div>
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
+              Bulk Import
+            </span>
+            <h3 className="mt-1.5 text-xl font-bold text-slate-900">Upload Students</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Quickly import student rosters with automatic class-category mapping and team assignment.</p>
+          </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
             aria-label="Close bulk upload"
           >
-            <X className="h-4 w-4" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Template Download Section */}
-        <div className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-indigo-100 bg-indigo-50/70 p-4">
-          <div>
-            <h4 className="font-semibold text-slate-900">Excel template</h4>
-            <p className="mt-1 text-xs text-slate-500">Prepared with your school data.</p>
-          </div>
-          <button
-            onClick={handleDownloadTemplate}
-            disabled={downloadingTemplate}
-            className="flex shrink-0 items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {downloadingTemplate ? (
-              <>
-                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                Downloading...
-              </>
-            ) : (
-              <>
-                Download Excel Template
-              </>
+        {uploadResult ? (
+          /* Success Screen */
+          <div className="space-y-5 py-2">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-5 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-3">
+                <CheckCircle2 className="h-6 w-6" />
+              </div>
+              <h4 className="text-lg font-bold text-emerald-950">Import Successful!</h4>
+              <p className="mt-1 text-sm text-emerald-800">
+                {uploadResult.message || `Successfully processed ${uploadResult.summary?.successful_creations || 0} students.`}
+              </p>
+
+              {/* Stats Bar */}
+              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-emerald-200/60 pt-4 text-left">
+                <div className="rounded-lg bg-white/70 p-3 border border-emerald-100">
+                  <div className="text-xs font-medium text-emerald-700">Total Processed</div>
+                  <div className="text-xl font-bold text-slate-900">{uploadResult.summary?.total_processed ?? 0}</div>
+                </div>
+                <div className="rounded-lg bg-white/70 p-3 border border-emerald-100">
+                  <div className="text-xs font-medium text-emerald-700">Created Students</div>
+                  <div className="text-xl font-bold text-emerald-700">{uploadResult.summary?.successful_creations ?? 0}</div>
+                </div>
+                <div className="rounded-lg bg-white/70 p-3 border border-emerald-100">
+                  <div className="text-xs font-medium text-emerald-700">Team Assignments</div>
+                  <div className="text-xl font-bold text-indigo-700">{uploadResult.summary?.team_assignments_processed ?? 0}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Team Assignments Summary */}
+            {uploadResult.team_assignments && uploadResult.team_assignments.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Trophy className="h-4 w-4 text-indigo-600" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700">Team Assignments</span>
+                </div>
+                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                  {uploadResult.team_assignments.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white border border-slate-100">
+                      <span className="font-medium text-slate-800">{item.student}</span>
+                      <span className="inline-flex items-center gap-1 font-semibold text-indigo-600">
+                        → {item.team_name || item.team}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
-          </button>
-        </div>
-        
-        {/* File Upload Form */}
-        <form onSubmit={handleFileUpload} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">
-              Select Excel file (.xlsx)
-            </label>
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={(e) => setFile(e.target.files[0])}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
-              required
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Supported formats: Excel (.xlsx, .xls). Recommended: use the downloaded .xlsx template.
-            </p>
-          </div>
 
-          <div className="flex justify-end space-x-3 pt-4 border-t">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-slate-700 bg-slate-200 rounded-lg hover:bg-slate-300 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={uploading || !file}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-            >
-              {uploading ? (
-                <>
-                  <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  Upload students
-                </>
-              )}
-            </button>
+            {/* Matched Corrections */}
+            {uploadResult.corrections && uploadResult.corrections.length > 0 && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5">
+                <span className="text-xs font-bold text-amber-900 block mb-1">Auto-matched values:</span>
+                <ul className="text-xs text-amber-800 space-y-0.5 list-disc list-inside">
+                  {uploadResult.corrections.slice(0, 5).map((corr, idx) => (
+                    <li key={idx}>{corr}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={resetForm}
+                className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+              >
+                Upload another file
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors"
+              >
+                Done
+              </button>
+            </div>
           </div>
-        </form>
+        ) : (
+          /* Upload Form */
+          <div className="space-y-5">
+            {/* Download Template Step */}
+            <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/80 via-white to-indigo-50/40 p-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 rounded-lg bg-indigo-100/80 text-indigo-700 shrink-0 mt-0.5">
+                    <FileSpreadsheet className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">Step 1: Download School Excel Template</h4>
+                    <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                      Pre-configured with dropdowns. Includes a complete <strong>Example</strong> sheet with demo data for all your school's classes and teams!
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDownloadTemplate}
+                  disabled={downloadingTemplate}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+                >
+                  {downloadingTemplate ? (
+                    <>
+                      <div className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="h-3.5 w-3.5" />
+                      Download Template
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Field Guide */}
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 text-xs">
+              <div className="font-semibold text-slate-800 mb-1.5 flex items-center justify-between">
+                <span>Spreadsheet Columns</span>
+                <span className="text-[11px] font-normal text-slate-500">Only 2 required fields</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                <div className="p-2 rounded-lg bg-white border border-slate-200/80">
+                  <div className="font-bold text-indigo-600 flex items-center gap-1">
+                    <Check className="h-3 w-3" /> name & class
+                  </div>
+                  <p className="text-slate-600 mt-0.5">Required. Student name and class/grade (e.g. 10, Grade 8).</p>
+                </div>
+                <div className="p-2 rounded-lg bg-white border border-slate-200/80">
+                  <div className="font-semibold text-slate-700">section, gender & team</div>
+                  <p className="text-slate-500 mt-0.5">Optional. Section (A, B), Gender (Male/Female), and Team name.</p>
+                </div>
+              </div>
+              <div className="mt-2 text-[11px] text-indigo-700 bg-indigo-50/60 rounded px-2.5 py-1.5 border border-indigo-100 flex items-center gap-1.5">
+                <span>💡</span>
+                <span>Category is automatically mapped from the student's class — no complex codes needed!</span>
+              </div>
+            </div>
+
+            {/* Error Display */}
+            {uploadError && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50/90 p-4 text-xs text-rose-900">
+                <div className="flex items-start gap-2.5 font-bold mb-1.5 text-rose-950">
+                  <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{uploadError.message}</span>
+                </div>
+                {uploadError.details.length > 0 && (
+                  <ul className="list-disc list-inside space-y-1 pl-1 text-rose-800 mt-2 max-h-36 overflow-y-auto">
+                    {uploadError.details.map((detail, index) => (
+                      <li key={index} className="leading-relaxed">{detail}</li>
+                    ))}
+                  </ul>
+                )}
+                {uploadError.suggestions.length > 0 && (
+                  <div className="mt-2.5 pt-2 border-t border-rose-200/60 text-rose-700">
+                    <span className="font-semibold block mb-0.5">Suggestions:</span>
+                    <ul className="list-disc list-inside space-y-0.5">
+                      {uploadError.suggestions.map((suggestion, index) => (
+                        <li key={index}>{suggestion}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 2: Upload File Form */}
+            <form onSubmit={handleFileUpload} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                  Step 2: Select Spreadsheet or CSV File
+                </label>
+                
+                <div className="relative border-2 border-dashed border-slate-300 rounded-xl p-5 hover:border-indigo-400 transition-colors bg-slate-50/40 text-center">
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    onChange={(e) => {
+                      setFile(e.target.files[0] || null);
+                      setUploadError(null);
+                    }}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    id="excel-file-upload"
+                  />
+                  {file ? (
+                    <div className="flex items-center justify-center gap-3">
+                      <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+                        <FileSpreadsheet className="h-6 w-6" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm font-semibold text-slate-900 truncate max-w-xs">{file.name}</p>
+                        <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB • Click to change file</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Upload className="mx-auto h-8 w-8 text-slate-400" />
+                      <p className="text-sm font-medium text-slate-700">Click or drag & drop to choose file</p>
+                      <p className="text-xs text-slate-400">Supported formats: Excel (.xlsx, .xls) and CSV (.csv)</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Form Action Buttons */}
+              <div className="flex justify-end items-center gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={uploading || !file}
+                  className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-2"
+                >
+                  {uploading ? (
+                    <>
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
+                      Processing students...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      Upload Students
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );

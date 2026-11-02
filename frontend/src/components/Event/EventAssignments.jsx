@@ -362,7 +362,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                   onChange={(e) => setSelectedTeamId(e.target.value)}
                   className="w-full px-4 py-3 text-sm text-gray-700 bg-white border border-gray-200 rounded-2xl appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs font-medium cursor-pointer"
                 >
-                  <option value="">Select Team / Sector</option>
+                  <option value="">Select Team</option>
                   {teams.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
