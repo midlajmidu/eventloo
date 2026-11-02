@@ -84,15 +84,12 @@ python3 manage.py migrate --noinput
 echo "[4/6] Collecting backend static assets..."
 python3 manage.py collectstatic --noinput --clear
 
-# 6. Automatic Super Admin Seeding (if requested)
-if [ -n "$SUPER_ADMIN_PASSWORD" ]; then
-    echo "[5/6] Seeding Super Admin account..."
-    export SUPER_ADMIN_EMAIL="${SUPER_ADMIN_EMAIL:-superadmin@eventloo.com}"
-    export SUPER_ADMIN_NAME="${SUPER_ADMIN_NAME:-Platform Super Admin}"
-    python3 manage.py seed_super_admin --email="$SUPER_ADMIN_EMAIL" --name="$SUPER_ADMIN_NAME" || true
-else
-    echo "[5/6] No SUPER_ADMIN_PASSWORD supplied; skipping auto-seeding."
-fi
+# 6. Automatic Super Admin Provisioning
+export SUPER_ADMIN_EMAIL="${SUPER_ADMIN_EMAIL:-superadmin@eventloo.in}"
+export SUPER_ADMIN_PASSWORD="${SUPER_ADMIN_PASSWORD:-eventlooadmin#321}"
+export SUPER_ADMIN_NAME="${SUPER_ADMIN_NAME:-Platform Super Admin}"
+echo "[5/6] Ensuring Super Admin account (${SUPER_ADMIN_EMAIL})..."
+python3 manage.py set_super_admin --email="$SUPER_ADMIN_EMAIL" --password="$SUPER_ADMIN_PASSWORD" --name="$SUPER_ADMIN_NAME" || true
 
 # 7. Hand over execution to Supervisor (runs Nginx + Gunicorn)
 echo "[6/6] Launching Nginx and Gunicorn via Supervisor..."
