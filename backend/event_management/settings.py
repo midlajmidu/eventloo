@@ -335,7 +335,7 @@ REFRESH_COOKIE_SAMESITE = os.environ.get(
 REQUIRE_AJAX_AUTH_HEADER = not DEBUG and not _is_test_run
 ENABLE_DJANGO_ADMIN = os.environ.get('ENABLE_DJANGO_ADMIN', 'False').lower() == 'true'
 REQUIRE_SUPER_ADMIN_MFA = os.environ.get(
-    'REQUIRE_SUPER_ADMIN_MFA', 'False' if DEBUG or _is_test_run else 'True'
+    'REQUIRE_SUPER_ADMIN_MFA', 'False'
 ).lower() == 'true'
 REQUIRE_SCHOOL_STAFF_MFA = os.environ.get(
     'REQUIRE_SCHOOL_STAFF_MFA', 'False' if DEBUG or _is_test_run else 'True'
