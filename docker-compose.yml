@@ -10,9 +10,9 @@ services:
       - SUPER_ADMIN_PASSWORD=${SUPER_ADMIN_PASSWORD:-Admin1234!}
       - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL:-superadmin@eventloo.com}
       - SUPER_ADMIN_NAME=${SUPER_ADMIN_NAME:-Platform Super Admin}
-      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-app.eventloo.com,localhost,127.0.0.1}
-      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://app.eventloo.com}
-      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-https://app.eventloo.com}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-app.eventloo.in,app.eventloo.com,localhost,127.0.0.1}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://app.eventloo.in,http://app.eventloo.in,https://app.eventloo.com}
+      - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-https://app.eventloo.in,http://app.eventloo.in,https://app.eventloo.com}
       - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
       # Optional: Uncomment if connecting to external PostgreSQL
       # - DATABASE_URL=postgres://user:password@host:5432/eventloo

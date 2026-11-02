@@ -12,9 +12,9 @@ sed -i "s/listen 80;/listen ${CONTAINER_PORT};/g" /etc/nginx/conf.d/default.conf
 
 # 2. Establish Default Configurations
 export WEB_CONCURRENCY="${WEB_CONCURRENCY:-2}"
-export ALLOWED_HOSTS="${ALLOWED_HOSTS:-app.eventloo.com,localhost,127.0.0.1,*}"
-export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://app.eventloo.com,http://app.eventloo.com,http://localhost:8000,http://localhost:3000}"
-export CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS:-https://app.eventloo.com,http://app.eventloo.com,http://localhost:8000,http://localhost:3000}"
+export ALLOWED_HOSTS="${ALLOWED_HOSTS:-app.eventloo.in,app.eventloo.com,localhost,127.0.0.1,*}"
+export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://app.eventloo.in,http://app.eventloo.in,https://app.eventloo.com,http://localhost:8000,http://localhost:3000}"
+export CSRF_TRUSTED_ORIGINS="${CSRF_TRUSTED_ORIGINS:-https://app.eventloo.in,http://app.eventloo.in,https://app.eventloo.com,http://localhost:8000,http://localhost:3000}"
 export ALLOW_SQLITE="${ALLOW_SQLITE:-true}"
 export ALLOW_LOCAL_MEDIA="${ALLOW_LOCAL_MEDIA:-true}"
 export ALLOW_LOCAL_CACHE="${ALLOW_LOCAL_CACHE:-true}"
