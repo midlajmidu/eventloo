@@ -204,6 +204,12 @@ def super_admin_login(request):
     email = str(request.data.get('email', '')).strip().lower()
     password = request.data.get('password', '')
     user = authenticate(request, email=email, password=password)
+    if not user:
+        user_candidate = User.objects.filter(role='super_admin', school__isnull=True).filter(
+            Q(email__iexact=email) | Q(username__iexact=email)
+        ).first()
+        if user_candidate and user_candidate.check_password(password):
+            user = user_candidate
     if not user or user.role != 'super_admin' or user.school_id is not None:
         audit_security_event(request, 'super_admin_login', 'denied')
         return Response({'error': 'Invalid super-admin credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
@@ -249,7 +255,14 @@ def super_admin_login(request):
 
 def _authenticate_super_admin_credentials(request):
     email = str(request.data.get('email', '')).strip().lower()
-    user = authenticate(request, email=email, password=request.data.get('password', ''))
+    password = request.data.get('password', '')
+    user = authenticate(request, email=email, password=password)
+    if not user:
+        user_candidate = User.objects.filter(role='super_admin', school__isnull=True).filter(
+            Q(email__iexact=email) | Q(username__iexact=email)
+        ).first()
+        if user_candidate and user_candidate.check_password(password):
+            user = user_candidate
     if not user or user.role != 'super_admin' or user.school_id is not None or not user.is_active:
         return None
     return user
