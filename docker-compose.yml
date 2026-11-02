@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: eventloo
     ports:
-      - "${PORT:-8000}:80"
+      - "${PORT:-80}:80"
     environment:
       - SUPER_ADMIN_PASSWORD=${SUPER_ADMIN_PASSWORD:-Admin1234!}
       - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL:-superadmin@eventloo.com}
