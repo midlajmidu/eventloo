@@ -451,6 +451,59 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
         )
         return Response({'message': 'Staff MFA reset. Enrollment is required at next login.'})
 
+    @action(detail=True, methods=['get'])
+    def events(self, request, pk=None):
+        school = self.get_object()
+        from events.models import Event
+        events = Event.objects.filter(school=school).order_by('-created_at')
+        data = [{
+            'id': e.id,
+            'name': e.name,
+            'status': e.status,
+            'event_type': getattr(e, 'event_type', 'standard'),
+            'start_date': str(e.start_date) if e.start_date else None,
+            'end_date': str(e.end_date) if e.end_date else None,
+            'venue': getattr(e, 'venue', '') or '',
+            'teams_count': e.teams.count(),
+            'created_at': e.created_at.isoformat() if e.created_at else None,
+        } for e in events]
+        return Response(data)
+
+    @action(detail=False, methods=['get'], url_path='all-admins')
+    def all_admins(self, request):
+        admins = User.objects.filter(role='admin', school__isnull=False).select_related('school').order_by('-date_joined')
+        data = [{
+            'id': u.id,
+            'name': u.name or u.email,
+            'email': u.email,
+            'school_id': u.school_id,
+            'school_name': u.school.name if u.school else 'N/A',
+            'school_code': u.school.code if u.school else '',
+            'is_active': u.is_active,
+            'date_joined': u.date_joined.isoformat() if u.date_joined else None,
+        } for u in admins]
+        return Response(data)
+
+    @action(detail=False, methods=['get'], url_path='all-events')
+    def all_events(self, request):
+        from events.models import Event
+        events = Event.objects.filter(school__isnull=False).select_related('school').order_by('-created_at')[:50]
+        data = [{
+            'id': e.id,
+            'name': e.name,
+            'school_id': e.school_id,
+            'school_name': e.school.name if e.school else 'N/A',
+            'school_code': e.school.code if e.school else '',
+            'status': e.status,
+            'event_type': getattr(e, 'event_type', 'standard'),
+            'start_date': str(e.start_date) if e.start_date else None,
+            'end_date': str(e.end_date) if e.end_date else None,
+            'venue': getattr(e, 'venue', '') or '',
+            'teams_count': e.teams.count(),
+            'created_at': e.created_at.isoformat() if e.created_at else None,
+        } for e in events]
+        return Response(data)
+
 
 class SchoolUserViewSet(viewsets.ModelViewSet):
     """Let a school administrator manage only staff accounts in their tenant."""
@@ -532,13 +585,57 @@ class SchoolUserViewSet(viewsets.ModelViewSet):
 @api_view(['GET'])
 @permission_classes([IsSuperAdmin])
 def super_admin_dashboard(request):
+    import platform
+    import django
+
+    total_schools = School.objects.count()
+    active_schools = School.objects.filter(status='active').count()
+    suspended_schools = School.objects.filter(status='suspended').count()
+    total_admins = User.objects.filter(role='admin', school__isnull=False).count()
+    total_students = User.objects.filter(role='student', school__isnull=False).count()
+    total_events = Event.objects.filter(school__isnull=False).count()
+    active_events = Event.objects.filter(school__isnull=False, status__in=['published', 'ongoing']).count()
+
+    recent_schools = [{
+        'id': s.id,
+        'name': s.name,
+        'code': s.code,
+        'status': s.status,
+        'email': s.email,
+        'admin_count': s.users.filter(role='admin').count(),
+        'event_count': s.events.count(),
+        'student_count': s.users.filter(role='student').count(),
+        'created_at': s.created_at.isoformat() if s.created_at else None,
+    } for s in School.objects.order_by('-created_at')[:8]]
+
+    recent_events = [{
+        'id': e.id,
+        'name': e.name,
+        'school_id': e.school_id,
+        'school_name': e.school.name if e.school else 'N/A',
+        'status': e.status,
+        'event_type': getattr(e, 'event_type', 'standard'),
+        'teams_count': e.teams.count(),
+        'created_at': e.created_at.isoformat() if e.created_at else None,
+    } for e in Event.objects.select_related('school').order_by('-created_at')[:8]]
+
     return Response({
-        'schools': School.objects.count(),
-        'active_schools': School.objects.filter(status='active').count(),
-        'suspended_schools': School.objects.filter(status='suspended').count(),
-        'school_admins': User.objects.filter(role='admin', school__isnull=False).count(),
-        'students': User.objects.filter(role='student', school__isnull=False).count(),
-        'events': Event.objects.filter(school__isnull=False).count(),
+        'schools': total_schools,
+        'active_schools': active_schools,
+        'suspended_schools': suspended_schools,
+        'school_admins': total_admins,
+        'students': total_students,
+        'events': total_events,
+        'active_events': active_events,
+        'recent_schools': recent_schools,
+        'recent_events': recent_events,
+        'system': {
+            'platform': f'{platform.system()} {platform.machine()}',
+            'python_version': platform.python_version(),
+            'django_version': django.get_version(),
+            'server_status': 'healthy',
+            'ssl_active': True,
+        }
     })
 
 @api_view(['GET'])

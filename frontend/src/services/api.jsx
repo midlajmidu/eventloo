@@ -185,6 +185,9 @@ export const superAdminAPI = {
   resetStaffMfa: (schoolId, data) => api.post(
     `super-admin/schools/${schoolId}/reset-staff-mfa/`, data
   ),
+  schoolEvents: (schoolId) => api.get(`super-admin/schools/${schoolId}/events/`),
+  allAdmins: () => api.get('super-admin/schools/all-admins/'),
+  allEvents: () => api.get('super-admin/schools/all-events/'),
 };
 
 // Dashboard API
