@@ -330,7 +330,7 @@ REFRESH_COOKIE_NAME = 'eventloo_refresh'
 ACCESS_COOKIE_NAME = 'eventloo_access'
 REFRESH_COOKIE_SECURE = not DEBUG
 REFRESH_COOKIE_SAMESITE = os.environ.get(
-    'REFRESH_COOKIE_SAMESITE', 'Lax' if DEBUG else 'None'
+    'REFRESH_COOKIE_SAMESITE', 'Lax'
 )
 REQUIRE_AJAX_AUTH_HEADER = not DEBUG and not _is_test_run
 ENABLE_DJANGO_ADMIN = os.environ.get('ENABLE_DJANGO_ADMIN', 'False').lower() == 'true'

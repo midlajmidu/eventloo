@@ -45,14 +45,15 @@ logger = logging.getLogger(__name__)
 
 
 def set_auth_cookies(response, refresh_token, access_token):
+    samesite = getattr(settings, 'REFRESH_COOKIE_SAMESITE', 'Lax') or 'Lax'
     response.set_cookie(
         settings.REFRESH_COOKIE_NAME,
         refresh_token,
         max_age=int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
         httponly=True,
         secure=settings.REFRESH_COOKIE_SECURE,
-        samesite=settings.REFRESH_COOKIE_SAMESITE,
-        path='/api/',
+        samesite=samesite,
+        path='/',
     )
     response.set_cookie(
         settings.ACCESS_COOKIE_NAME,
@@ -60,8 +61,8 @@ def set_auth_cookies(response, refresh_token, access_token):
         max_age=int(settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds()),
         httponly=True,
         secure=settings.REFRESH_COOKIE_SECURE,
-        samesite=settings.REFRESH_COOKIE_SAMESITE,
-        path='/api/',
+        samesite=samesite,
+        path='/',
     )
     return response
 
@@ -247,6 +248,9 @@ def super_admin_login(request):
     access['pwd'] = get_md5_hash_password(user.password)
     access['session_version'] = user.session_version
     response = Response({
+        'access': str(access),
+        'refresh': str(refresh),
+        'token': str(access),
         'user': {'id': user.id, 'email': user.email, 'name': user.display_name, 'role': user.role},
     })
     audit_security_event(request, 'super_admin_login', 'success', actor=user)
