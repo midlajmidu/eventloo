@@ -554,6 +554,17 @@ const Login = () => {
                 </p>
               )}
             </div>
+
+            {/* Super Admin Navigation */}
+            <div className="pt-2 text-center">
+              <a
+                href="/super-admin/login"
+                className="text-[11px] font-medium text-slate-400 hover:text-indigo-600 transition-colors inline-flex items-center gap-1"
+              >
+                <span>Platform Super Admin</span>
+                <span>→</span>
+              </a>
+            </div>
           </div>
 
         </div>
