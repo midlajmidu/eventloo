@@ -1955,9 +1955,15 @@ class StudentViewSet(viewsets.ModelViewSet):
             results = self._process_student_excel_with_ai(df)
             
             if results['errors']:
+                total_analyzed = len(results['valid_students']) + len(results['structured_errors'])
                 return Response({
                     'error': 'Data validation failed',
+                    'message': f"Found {len(results['structured_errors'])} issue(s) in your spreadsheet. No students were imported so your records remain clean.",
+                    'total_rows': total_analyzed,
+                    'valid_count': len(results['valid_students']),
+                    'error_count': len(results['structured_errors']),
                     'details': results['errors'],
+                    'structured_errors': results['structured_errors'],
                     'suggestions': results['suggestions']
                 }, status=status.HTTP_400_BAD_REQUEST)
             
@@ -2047,21 +2053,34 @@ class StudentViewSet(viewsets.ModelViewSet):
                             'success': True,
                         })
 
-            # Only return a summary and first 10 skipped/error entries to avoid large responses
+            team_assigned_count = len(team_assignment_results)
+            unassigned_team_count = len(created_students) - team_assigned_count
+
+            team_counts = {}
+            for res in team_assignment_results:
+                t_name = res.get('team_name') or res.get('team') or 'Unassigned'
+                team_counts[t_name] = team_counts.get(t_name, 0) + 1
+            if unassigned_team_count > 0:
+                team_counts['Unassigned (No Team)'] = unassigned_team_count
+
             summary = {
                 'total_processed': len(results['valid_students']),
                 'successful_creations': len(created_students),
                 'skipped_creations': 0,
-                'team_assignments_processed': len(team_assignment_results)
+                'team_assignments_processed': team_assigned_count,
+                'unassigned_team_count': unassigned_team_count,
+                'team_breakdown': team_counts,
             }
-            
+
             response_data = {
                 'success': True,
                 'message': f'Successfully processed {len(created_students)} students',
                 'summary': summary,
                 'skipped': [],
-                'team_assignments': team_assignment_results[:10],
-                'corrections': results['corrections'][:20],
+                'team_assignments': team_assignment_results,
+                'team_breakdown': team_counts,
+                'unassigned_team_count': unassigned_team_count,
+                'corrections': results['corrections'][:50],
             }
             return Response(response_data)
             
@@ -2079,9 +2098,24 @@ class StudentViewSet(viewsets.ModelViewSet):
         results = {
             'valid_students': [],
             'errors': [],
+            'structured_errors': [],
             'suggestions': [],
             'corrections': [],
         }
+
+        def record_error(row_num, student_name, field, field_label, value, issue, reason, suggestion=''):
+            msg = f"Row {row_num}: {reason}"
+            results['errors'].append(msg)
+            results['structured_errors'].append({
+                'row': row_num,
+                'student_name': student_name or '— (Name missing)',
+                'field': field,
+                'field_label': field_label,
+                'value': str(value) if value is not None else '',
+                'issue': issue,
+                'reason': reason,
+                'suggestion': suggestion,
+            })
         
         # Clean column names
         df.columns = df.columns.str.strip().str.lower().str.replace(' ', '_')
@@ -2095,7 +2129,19 @@ class StudentViewSet(viewsets.ModelViewSet):
         missing_fields = [field for field in required_fields if not column_mapping.get(field)]
         
         if missing_fields:
-            results['errors'].append(f'Missing required columns: {", ".join(missing_fields)}')
+            missing_labels = [field.replace('_', ' ').title() for field in missing_fields]
+            err_msg = f'Missing required columns: {", ".join(missing_fields)}'
+            results['errors'].append(err_msg)
+            results['structured_errors'].append({
+                'row': 1,
+                'student_name': '— Header Row —',
+                'field': 'header',
+                'field_label': 'Column Headers',
+                'value': ', '.join(missing_fields),
+                'issue': 'Missing Required Columns',
+                'reason': f'Spreadsheet is missing required column header(s): {", ".join(missing_labels)}.',
+                'suggestion': 'Download the template and make sure column headers include "name" and "class".',
+            })
             results['suggestions'].append('Please ensure your Excel file has at least columns for: name and class. Optional columns: section, gender, team_name.')
             return results
         
@@ -2104,7 +2150,18 @@ class StudentViewSet(viewsets.ModelViewSet):
             StudentClass.objects.filter(is_active=True, school=self.request.user.school).select_related('category')
         )
         if not school_classes:
-            results['errors'].append('No active classes found for your school. Please configure classes in School Settings first.')
+            err_msg = 'No active classes found for your school. Please configure classes in School Settings first.'
+            results['errors'].append(err_msg)
+            results['structured_errors'].append({
+                'row': 0,
+                'student_name': '— Setup Missing —',
+                'field': 'class',
+                'field_label': 'School Classes',
+                'value': '',
+                'issue': 'No Classes Configured',
+                'reason': 'No active classes found for your school.',
+                'suggestion': 'Go to Global Settings > Manage Classes and create active classes with categories before importing students.',
+            })
             return results
 
         school_categories = list(
@@ -2147,22 +2204,51 @@ class StudentViewSet(viewsets.ModelViewSet):
 
         # Process each row
         for index, row in df.iterrows():
+            row_num = index + 2
             try:
+                # Check if entire row is blank (e.g. empty rows at end of file)
+                row_has_data = any(
+                    not pd.isna(val) and str(val).strip().lower() not in ('', 'nan', 'none', 'null')
+                    for val in row.values
+                )
+                if not row_has_data:
+                    continue
+
                 # Extract required name field
-                full_name = str(row[column_mapping['name']]).strip()
-                if pd.isna(row[column_mapping['name']]) or not full_name or full_name.lower() in ('nan', 'none', 'null'):
+                raw_name = row.get(column_mapping['name'])
+                full_name = str(raw_name).strip() if not pd.isna(raw_name) else ''
+                if not full_name or full_name.lower() in ('nan', 'none', 'null'):
+                    record_error(
+                        row_num=row_num,
+                        student_name='— Missing Name —',
+                        field='name',
+                        field_label='Student Name',
+                        value='',
+                        issue='Student Name Missing',
+                        reason='Student name is required but was left blank in this row.',
+                        suggestion='Enter the student\'s full name in the name column.',
+                    )
                     continue
 
                 # Extract class
-                raw_class = str(row[column_mapping['class']]).strip()
-                if pd.isna(row[column_mapping['class']]) or not raw_class or raw_class.lower() in ('nan', 'none', 'null'):
-                    results['errors'].append(f'Row {index + 2}: Class is required.')
+                raw_class = str(row[column_mapping['class']]).strip() if not pd.isna(row.get(column_mapping['class'])) else ''
+                if not raw_class or raw_class.lower() in ('nan', 'none', 'null'):
+                    record_error(
+                        row_num=row_num,
+                        student_name=full_name,
+                        field='class',
+                        field_label='Class / Grade',
+                        value='',
+                        issue='Class Missing',
+                        reason='Class is required but was left blank.',
+                        suggestion='Enter a valid class (e.g. Class 10, Grade 8) configured in School Settings.',
+                    )
                     continue
 
                 # Optional category provided?
                 category_obj = None
                 if column_mapping.get('category'):
-                    raw_cat = str(row[column_mapping['category']]).strip()
+                    raw_cat = str(row[column_mapping['category']]).strip() if not pd.isna(row.get(column_mapping['category'])) else ''
                     if raw_cat and raw_cat.lower() not in ('nan', 'none', 'null'):
                         cat_match, corrected_cat = self._match_import_option(
                             raw_cat,
@@ -2170,11 +2256,21 @@ class StudentViewSet(viewsets.ModelViewSet):
                             lambda item: (item.code, item.name),
                         )
                         if not cat_match:
-                            results['errors'].append(f'Row {index + 2}: Invalid or inactive category "{raw_cat}".')
+                            valid_cats = [c.name for c in school_categories]
+                            record_error(
+                                row_num=row_num,
+                                student_name=full_name,
+                                field='category',
+                                field_label='Category',
+                                value=raw_cat,
+                                issue=f'Invalid Category "{raw_cat}"',
+                                reason=f'Invalid or inactive category "{raw_cat}".',
+                                suggestion=f'Choose from: {", ".join(valid_cats)}, or leave blank to auto-detect from class.',
+                            )
                             continue
                         if corrected_cat:
                             results['corrections'].append(
-                                f'Row {index + 2}: category "{raw_cat}" matched to "{cat_match.name}".'
+                                f'Row {row_num}: category "{raw_cat}" matched to "{cat_match.name}".'
                             )
                         category_obj = cat_match
 
@@ -2193,14 +2289,21 @@ class StudentViewSet(viewsets.ModelViewSet):
                 if not student_class:
                     valid_names = [c.name for c in candidate_classes]
                     cat_hint = f' for category "{category_obj.name}"' if category_obj else ''
-                    results['errors'].append(
-                        f'Row {index + 2}: Invalid class "{raw_class}"{cat_hint}. Available classes: {", ".join(valid_names)}.'
+                    record_error(
+                        row_num=row_num,
+                        student_name=full_name,
+                        field='class',
+                        field_label='Class / Grade',
+                        value=raw_class,
+                        issue=f'Invalid Class "{raw_class}"',
+                        reason=f'Invalid class "{raw_class}"{cat_hint}. Available classes: {", ".join(valid_names)}.',
+                        suggestion=f'Select from your school\'s configured classes: {", ".join(valid_names)}.',
                     )
                     continue
 
                 if corrected_class:
                     results['corrections'].append(
-                        f'Row {index + 2}: class "{raw_class}" matched to "{student_class.name}".'
+                        f'Row {row_num}: class "{raw_class}" matched to "{student_class.name}".'
                     )
 
                 # If category was not provided, infer directly from the class
@@ -2208,20 +2311,34 @@ class StudentViewSet(viewsets.ModelViewSet):
                     category_obj = student_class.category
 
                 if not category_obj:
-                    results['errors'].append(
-                        f'Row {index + 2}: Class "{student_class.name}" has no category assigned. Please assign a category in School Settings.'
+                    record_error(
+                        row_num=row_num,
+                        student_name=full_name,
+                        field='category',
+                        field_label='Category',
+                        value=student_class.name,
+                        issue='Class Has No Category',
+                        reason=f'Class "{student_class.name}" has no category assigned. Please assign a category in School Settings.',
+                        suggestion='Go to Global Settings > Manage Classes and set the category for this class.',
                     )
                     continue
 
                 # Handle gender (defaults to 'other' if omitted or blank)
                 gender = 'other'
                 if column_mapping.get('gender'):
-                    raw_gender = str(row[column_mapping['gender']]).strip().casefold()
+                    raw_gender = str(row[column_mapping['gender']]).strip().casefold() if not pd.isna(row.get(column_mapping['gender'])) else ''
                     if raw_gender and raw_gender not in ('nan', 'none', 'null'):
                         matched_gender = gender_aliases.get(raw_gender)
                         if not matched_gender:
-                            results['errors'].append(
-                                f'Row {index + 2}: Invalid gender "{raw_gender}". Choose Male, Female, or Other.'
+                            record_error(
+                                row_num=row_num,
+                                student_name=full_name,
+                                field='gender',
+                                field_label='Gender',
+                                value=raw_gender,
+                                issue=f'Invalid Gender "{raw_gender}"',
+                                reason=f'Invalid gender "{raw_gender}". Choose Male, Female, or Other.',
+                                suggestion='Enter Male, Female, or Other (or leave blank to default to Other).',
                             )
                             continue
                         gender = matched_gender
@@ -2237,7 +2354,7 @@ class StudentViewSet(viewsets.ModelViewSet):
 
                 # Handle optional team assignment
                 if column_mapping.get('team_name'):
-                    raw_team = str(row[column_mapping['team_name']]).strip()
+                    raw_team = str(row[column_mapping['team_name']]).strip() if not pd.isna(row.get(column_mapping['team_name'])) else ''
                     if raw_team and raw_team.lower() not in ('nan', 'none', 'null'):
                         team_obj, corrected_team = self._match_import_option(
                             raw_team,
@@ -2246,27 +2363,34 @@ class StudentViewSet(viewsets.ModelViewSet):
                         )
                         if not team_obj:
                             valid_team_names = [t.name for t in school_teams]
-                            results['errors'].append(
-                                f'Row {index + 2}: Team "{raw_team}" does not exist for this school. Available teams: {", ".join(valid_team_names) if valid_team_names else "None configured"}. (Leave blank if unassigned).'
+                            record_error(
+                                row_num=row_num,
+                                student_name=full_name,
+                                field='team',
+                                field_label='Team Name',
+                                value=raw_team,
+                                issue=f'Team "{raw_team}" Not Found',
+                                reason=f'Team "{raw_team}" does not exist for this school. Available teams: {", ".join(valid_team_names) if valid_team_names else "None configured"}. (Leave blank if unassigned).',
+                                suggestion=f'Choose an existing team ({", ".join(valid_team_names)}) or leave blank if unassigned.',
                             )
                             continue
                         if corrected_team:
                             results['corrections'].append(
-                                f'Row {index + 2}: team "{raw_team}" matched to "{team_obj.name}".'
+                                f'Row {row_num}: team "{raw_team}" matched to "{team_obj.name}".'
                             )
                         student_data['team_id'] = team_obj.id
                         student_data['team_name'] = team_obj.name
 
                 # Handle optional section
                 if column_mapping.get('section'):
-                    raw_sec = str(row[column_mapping['section']]).strip()
+                    raw_sec = str(row[column_mapping['section']]).strip() if not pd.isna(row.get(column_mapping['section'])) else ''
                     if raw_sec and raw_sec.lower() not in ('nan', 'none', 'null'):
                         student_data['section'] = raw_sec
 
                 # Handle other optional fields if present
                 for optional_field in ('address', 'guardian_name', 'email'):
                     col = column_mapping.get(optional_field)
-                    if col:
+                    if col and not pd.isna(row.get(col)):
                         val = str(row[col]).strip()
                         if val and val.lower() not in ('nan', 'none', 'null'):
                             student_data[optional_field] = val
@@ -2274,25 +2398,39 @@ class StudentViewSet(viewsets.ModelViewSet):
                 invalid_optional = False
                 for phone_field in ('phone_number', 'guardian_phone'):
                     col = column_mapping.get(phone_field)
-                    if not col or pd.isna(row[col]):
+                    if not col or pd.isna(row.get(col)):
                         continue
                     val = str(row[col]).strip()
                     if val.endswith('.0') and val[:-2].isdigit():
                         val = val[:-2]
                     if len(val) > 15:
-                        results['errors'].append(
-                            f'Row {index + 2}: {phone_field} cannot exceed 15 characters.'
+                        record_error(
+                            row_num=row_num,
+                            student_name=full_name,
+                            field='phone',
+                            field_label='Phone Number',
+                            value=val,
+                            issue='Phone Number Too Long',
+                            reason=f'{phone_field} cannot exceed 15 characters.',
+                            suggestion='Enter a valid phone number up to 15 digits or leave blank.',
                         )
                         invalid_optional = True
                     elif val and val.lower() not in ('nan', 'none', 'null'):
                         student_data[phone_field] = val
 
                 date_col = column_mapping.get('date_of_birth')
-                if date_col and not pd.isna(row[date_col]):
+                if date_col and not pd.isna(row.get(date_col)):
                     parsed_date = pd.to_datetime(row[date_col], errors='coerce')
                     if pd.isna(parsed_date):
-                        results['errors'].append(
-                            f'Row {index + 2}: Invalid date_of_birth. Use YYYY-MM-DD.'
+                        record_error(
+                            row_num=row_num,
+                            student_name=full_name,
+                            field='date_of_birth',
+                            field_label='Date of Birth',
+                            value=str(row[date_col]),
+                            issue='Invalid Date of Birth',
+                            reason='Invalid date_of_birth. Use YYYY-MM-DD.',
+                            suggestion='Use format YYYY-MM-DD (e.g. 2012-05-15) or leave blank.',
                         )
                         invalid_optional = True
                     else:
@@ -2305,8 +2443,15 @@ class StudentViewSet(viewsets.ModelViewSet):
                 sec_val = (student_data.get('section') or '').strip().casefold()
                 wb_key = (full_name.casefold().strip(), student_class.code.casefold().strip(), sec_val)
                 if wb_key in seen_in_workbook:
-                    results['errors'].append(
-                        f"Row {index + 2}: Duplicate student '{full_name}' in class '{student_class.name}' found within this spreadsheet."
+                    record_error(
+                        row_num=row_num,
+                        student_name=full_name,
+                        field='duplicate',
+                        field_label='Duplicate in File',
+                        value=full_name,
+                        issue='Duplicate In Spreadsheet',
+                        reason=f"Duplicate student '{full_name}' in class '{student_class.name}' found within this spreadsheet.",
+                        suggestion='Remove duplicate row from spreadsheet or specify distinct sections.',
                     )
                     continue
                 seen_in_workbook.add(wb_key)
@@ -2323,16 +2468,32 @@ class StudentViewSet(viewsets.ModelViewSet):
                 if existing_dup.exists():
                     dup_student = existing_dup.first()
                     sec_display = f" (Section '{dup_student.section}')" if dup_student.section else ""
-                    results['errors'].append(
-                        f"Row {index + 2}: Student '{dup_student.name}' already exists in class '{student_class.name}'{sec_display} (ID: {dup_student.student_id}). Duplicate enrollment is not allowed."
+                    record_error(
+                        row_num=row_num,
+                        student_name=full_name,
+                        field='duplicate',
+                        field_label='Already Enrolled',
+                        value=full_name,
+                        issue='Already Enrolled in Database',
+                        reason=f"Student '{dup_student.name}' already exists in class '{student_class.name}'{sec_display} (ID: {dup_student.student_id}). Duplicate enrollment is not allowed.",
+                        suggestion='Check existing student records or specify a distinct section if this is a different student with the same name.',
                     )
                     continue
 
                 results['valid_students'].append(student_data)
 
-            except Exception:
-                logger.exception('Student spreadsheet row processing failed', extra={'row': index + 2})
-                results['errors'].append(f'Row {index + 2}: This row could not be processed.')
+            except Exception as e:
+                logger.exception('Student spreadsheet row processing failed', extra={'row': row_num})
+                record_error(
+                    row_num=row_num,
+                    student_name=full_name if 'full_name' in locals() and full_name else '—',
+                    field='other',
+                    field_label='Row Format',
+                    value='',
+                    issue='Processing Error',
+                    reason='This row could not be processed.',
+                    suggestion='Verify row cell values and formats.',
+                )
 
         return results
 

@@ -201,6 +201,42 @@ class EventBusinessLogicTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(User.objects.filter(name='Should Not Exist', school=self.school).exists())
         self.assertFalse(Team.objects.filter(name='Misspelled Team', school=self.school).exists())
+        self.assertIn('structured_errors', response.data)
+        self.assertGreaterEqual(len(response.data['structured_errors']), 1)
+        err = response.data['structured_errors'][0]
+        self.assertEqual(err['row'], 2)
+        self.assertEqual(err['student_name'], 'Should Not Exist')
+        self.assertEqual(err['field'], 'team')
+        self.assertEqual(err['value'], 'Misspelled Team')
+        self.assertIn('Misspelled Team', err['reason'])
+        self.assertIn('suggestion', err)
+
+    def test_student_bulk_upload_identifies_missing_name_and_invalid_fields(self):
+        StudentClass.objects.create(
+            school=self.school, category=self.category, name='Grade 8', code='8'
+        )
+        csv_content = (
+            "name,class,section,gender,team_name\n"
+            f",Grade 8,A,Male,{self.team.name}\n"
+            f"Valid Student,NonExistentClass,B,Female,\n"
+        ).encode('utf-8')
+        upload = SimpleUploadedFile('students_with_issues.csv', csv_content, content_type='text/csv')
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.post('/api/students/bulk_upload/', {'file': upload}, format='multipart')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('structured_errors', response.data)
+        errors = response.data['structured_errors']
+        self.assertEqual(len(errors), 2)
+        # Row 2 has missing name
+        row2_err = [e for e in errors if e['row'] == 2][0]
+        self.assertEqual(row2_err['field'], 'name')
+        self.assertIn('required', row2_err['reason'].lower())
+        # Row 3 has invalid class
+        row3_err = [e for e in errors if e['row'] == 3][0]
+        self.assertEqual(row3_err['field'], 'class')
+        self.assertEqual(row3_err['value'], 'NonExistentClass')
+        self.assertIn('NonExistentClass', row3_err['reason'])
 
     def test_student_gender_is_required_and_propagates_to_event_participants(self):
         StudentClass.objects.create(

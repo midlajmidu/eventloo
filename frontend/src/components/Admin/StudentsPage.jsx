@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { studentsAPI, teamsAPI, categoriesAPI, classesAPI } from '../../services/api';
 import Pagination from '../common/Pagination';
@@ -7,24 +7,32 @@ import {
   Plus, 
   Search, 
   Eye, 
-  UserPlus,
-  GraduationCap,
-  Mail,
-  MapPin,
-  User,
-  Trophy,
-  Upload,
-  Trash2,
-  X,
-  FileSpreadsheet,
-  CheckCircle2,
-  AlertCircle,
-  Download,
-  Check,
-  Phone,
-  Calendar,
-  ShieldCheck,
-  Sparkles
+  UserPlus, 
+  GraduationCap, 
+  Mail, 
+  MapPin, 
+  User, 
+  Trophy, 
+  Upload, 
+  Trash2, 
+  X, 
+  FileSpreadsheet, 
+  CheckCircle2, 
+  AlertCircle, 
+  Download, 
+  Check, 
+  Phone, 
+  Calendar, 
+  ShieldCheck, 
+  Sparkles,
+  Filter,
+  Copy,
+  ChevronLeft,
+  ChevronRight,
+  AlertTriangle,
+  FileText,
+  RefreshCw,
+  ArrowRight
 } from 'lucide-react';
 
 const StudentsPage = () => {
@@ -511,10 +519,10 @@ const StudentsPage = () => {
             onClose={() => setShowBulkUploadModal(false)}
             onSuccess={() => {
               fetchStudents();
-              setShowBulkUploadModal(false);
             }}
             categories={categories}
             classes={classes}
+            teams={teams}
           />
         )}
       </div>
@@ -1423,17 +1431,155 @@ const AddStudentDrawer = ({
 // Backwards-compatibility alias
 const AddStudentModal = AddStudentDrawer;
 
-// Student Bulk Upload Modal Component
-const StudentBulkUploadModal = ({ onClose, onSuccess }) => {
+// Normalizes backend errors into structured error objects for the Issue Resolution Center
+const normalizeImportErrors = (errorData) => {
+  if (Array.isArray(errorData?.structured_errors) && errorData.structured_errors.length > 0) {
+    return errorData.structured_errors;
+  }
+
+  const rawDetails = Array.isArray(errorData?.details) ? errorData.details : [];
+  if (rawDetails.length === 0 && (errorData?.error || errorData?.message)) {
+    return [{
+      row: '—',
+      student_name: '—',
+      field: 'other',
+      field_label: 'Upload Error',
+      value: '',
+      issue: 'Import Blocked',
+      reason: errorData.message || errorData.error,
+      suggestion: Array.isArray(errorData?.suggestions) && errorData.suggestions.length > 0
+        ? errorData.suggestions.join('; ')
+        : 'Please verify the file format and required fields, then re-upload.'
+    }];
+  }
+
+  return rawDetails.map((detail, idx) => {
+    const str = String(detail || '').trim();
+    const rowMatch = str.match(/^Row\s+(\d+):\s*(.*)/i);
+    const row = rowMatch ? parseInt(rowMatch[1], 10) : idx + 2;
+    const rest = rowMatch ? rowMatch[2] : str;
+
+    let field = 'other';
+    let field_label = 'Other';
+    let student_name = '—';
+    let value = '';
+    let issue = 'Validation Issue';
+    let reason = rest;
+    let suggestion = 'Check this row in your spreadsheet and correct the value.';
+
+    if (/team/i.test(rest)) {
+      field = 'team';
+      field_label = 'Team Name';
+      const teamMatch = rest.match(/team\s*["']([^"']+)["']/i);
+      value = teamMatch ? teamMatch[1] : '';
+      issue = value ? `Team "${value}" Not Found` : 'Team Name Issue';
+      suggestion = 'Enter an existing team name from your school setup or leave blank.';
+    } else if (/class|grade/i.test(rest)) {
+      field = 'class';
+      field_label = 'Class / Grade';
+      const classMatch = rest.match(/class\s*["']([^"']+)["']/i);
+      value = classMatch ? classMatch[1] : '';
+      issue = value ? `Invalid Class "${value}"` : 'Class / Grade Issue';
+      suggestion = 'Enter an existing active class name or code.';
+    } else if (/name/i.test(rest) && !/guardian/i.test(rest)) {
+      field = 'name';
+      field_label = 'Student Name';
+      issue = 'Missing Student Name';
+      suggestion = 'Provide the student full name for this row.';
+    } else if (/duplicate/i.test(rest)) {
+      field = 'duplicate';
+      field_label = 'Duplicate';
+      issue = 'Duplicate Student';
+      const nameMatch = rest.match(/Student\s*['"]([^'"]+)['"]/i);
+      student_name = nameMatch ? nameMatch[1] : '—';
+      suggestion = 'Remove duplicate entry or specify a distinct section.';
+    } else if (/gender/i.test(rest)) {
+      field = 'gender';
+      field_label = 'Gender';
+      issue = 'Invalid Gender';
+      suggestion = 'Use Male, Female, or Other (or leave blank).';
+    } else if (/phone/i.test(rest)) {
+      field = 'phone';
+      field_label = 'Phone Number';
+      issue = 'Phone Format';
+      suggestion = 'Provide a valid phone number up to 15 digits.';
+    } else if (/date/i.test(rest) || /dob/i.test(rest)) {
+      field = 'date_of_birth';
+      field_label = 'Date of Birth';
+      issue = 'Invalid Date';
+      suggestion = 'Use YYYY-MM-DD format (e.g. 2012-05-15) or leave blank.';
+    }
+
+    return {
+      row,
+      student_name,
+      field,
+      field_label,
+      value,
+      issue,
+      reason,
+      suggestion,
+    };
+  });
+};
+
+// Exports errors to a downloadable CSV file
+const handleDownloadIssuesCSV = (issues) => {
+  if (!issues || issues.length === 0) return;
+  const headers = ['Row Number', 'Student Name', 'Field Affected', 'Value in Sheet', 'Issue Title', 'Detailed Reason', 'Actionable Fix'];
+  const rows = issues.map((item) => [
+    item.row ?? '',
+    item.student_name === '—' ? '' : (item.student_name ?? ''),
+    item.field_label || item.field || '',
+    item.value ?? '',
+    item.issue ?? '',
+    item.reason ?? '',
+    item.suggestion ?? ''
+  ]);
+
+  const escapeCell = (val) => {
+    const str = String(val ?? '');
+    if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+      return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+  };
+
+  const csvContent = [
+    headers.map(escapeCell).join(','),
+    ...rows.map((row) => row.map(escapeCell).join(','))
+  ].join('\r\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', `student_upload_issues_${new Date().toISOString().slice(0, 10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+// Student Bulk Upload Modal Component with Issue Resolution Center
+const StudentBulkUploadModal = ({ onClose, onSuccess, categories = [], classes = [], teams = [] }) => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [uploadResult, setUploadResult] = useState(null);
   const [uploadError, setUploadError] = useState(null);
 
-  const handleFileUpload = async (e) => {
-    e.preventDefault();
-    if (!file) return;
+  // Issue Resolution Center controls
+  const [issueFilter, setIssueFilter] = useState('all');
+  const [issueSearch, setIssueSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [copiedIssues, setCopiedIssues] = useState(false);
+  const [teamAssignmentSearch, setTeamAssignmentSearch] = useState('');
+  const pageSize = 12;
+
+  const uploadSpreadsheetFile = async (fileToUpload) => {
+    const target = fileToUpload || file;
+    if (!target) return;
 
     setUploading(true);
     setUploadError(null);
@@ -1441,8 +1587,8 @@ const StudentBulkUploadModal = ({ onClose, onSuccess }) => {
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
-      
+      formData.append('file', target);
+
       const response = await studentsAPI.bulkUpload(formData);
       const data = response.data;
       setUploadResult(data);
@@ -1452,14 +1598,28 @@ const StudentBulkUploadModal = ({ onClose, onSuccess }) => {
     } catch (error) {
       console.error('Error uploading students:', error);
       const errorData = error.response?.data;
+      const structured = normalizeImportErrors(errorData);
       setUploadError({
-        message: errorData?.error || 'Failed to upload students spreadsheet.',
+        message: errorData?.message || errorData?.error || 'Validation failed for uploaded spreadsheet.',
+        total_rows: errorData?.total_rows ?? null,
+        valid_count: errorData?.valid_count ?? null,
+        error_count: errorData?.error_count ?? structured.length,
+        structured_errors: structured,
         details: Array.isArray(errorData?.details) ? errorData.details : [],
         suggestions: Array.isArray(errorData?.suggestions) ? errorData.suggestions : []
       });
+      setCurrentPage(1);
+      setIssueFilter('all');
+      setIssueSearch('');
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleFileUpload = (e) => {
+    e.preventDefault();
+    if (!file) return;
+    uploadSpreadsheetFile(file);
   };
 
   const handleDownloadTemplate = async () => {
@@ -1489,264 +1649,790 @@ const StudentBulkUploadModal = ({ onClose, onSuccess }) => {
     setFile(null);
     setUploadResult(null);
     setUploadError(null);
+    setIssueFilter('all');
+    setIssueSearch('');
+    setCurrentPage(1);
   };
 
+  // Copy issues summary to clipboard
+  const handleCopyIssues = (issues) => {
+    if (!issues || issues.length === 0) return;
+    const text = [
+      `=== STUDENT BULK UPLOAD ISSUES (${issues.length} detected) ===`,
+      ...issues.map((item, idx) => 
+        `#${idx + 1} [Row ${item.row}] ${item.student_name && item.student_name !== '—' ? `Student: ${item.student_name} | ` : ''}${item.field_label} ("${item.value}"): ${item.reason}${item.suggestion ? ` -> Fix: ${item.suggestion}` : ''}`
+      )
+    ].join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedIssues(true);
+    setTimeout(() => setCopiedIssues(false), 2000);
+  };
+
+  const structuredErrors = uploadError?.structured_errors || [];
+
+  // Issue counts by category
+  const counts = useMemo(() => {
+    const c = { all: 0, team: 0, class: 0, name: 0, duplicate: 0, other: 0 };
+    if (!structuredErrors) return c;
+    c.all = structuredErrors.length;
+    structuredErrors.forEach((err) => {
+      if (err.field === 'team') c.team += 1;
+      else if (err.field === 'class' || err.field === 'category') c.class += 1;
+      else if (err.field === 'name') c.name += 1;
+      else if (err.field === 'duplicate') c.duplicate += 1;
+      else c.other += 1;
+    });
+    return c;
+  }, [structuredErrors]);
+
+  // Filtered issues based on active tab and search query
+  const filteredIssues = useMemo(() => {
+    if (!structuredErrors) return [];
+    return structuredErrors.filter((err) => {
+      if (issueFilter === 'team' && err.field !== 'team') return false;
+      if (issueFilter === 'class' && err.field !== 'class' && err.field !== 'category') return false;
+      if (issueFilter === 'name' && err.field !== 'name') return false;
+      if (issueFilter === 'duplicate' && err.field !== 'duplicate') return false;
+      if (issueFilter === 'other' && ['team', 'class', 'category', 'name', 'duplicate'].includes(err.field)) return false;
+
+      if (issueSearch.trim()) {
+        const q = issueSearch.toLowerCase().trim();
+        const inRow = String(err.row).includes(q) || `row ${err.row}`.includes(q);
+        const inName = (err.student_name || '').toLowerCase().includes(q);
+        const inVal = (err.value || '').toLowerCase().includes(q);
+        const inReason = (err.reason || '').toLowerCase().includes(q);
+        const inIssue = (err.issue || '').toLowerCase().includes(q);
+        const inField = (err.field_label || '').toLowerCase().includes(q);
+        return inRow || inName || inVal || inReason || inIssue || inField;
+      }
+      return true;
+    });
+  }, [structuredErrors, issueFilter, issueSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredIssues.length / pageSize));
+  const paginatedIssues = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredIssues.slice(start, start + pageSize);
+  }, [filteredIssues, currentPage, pageSize]);
+
+  // Filtered team assignments in success view
+  const filteredAssignments = useMemo(() => {
+    if (!uploadResult?.team_assignments) return [];
+    if (!teamAssignmentSearch.trim()) return uploadResult.team_assignments;
+    const q = teamAssignmentSearch.toLowerCase().trim();
+    return uploadResult.team_assignments.filter((item) => 
+      (item.student || '').toLowerCase().includes(q) ||
+      (item.team || item.team_name || '').toLowerCase().includes(q)
+    );
+  }, [uploadResult?.team_assignments, teamAssignmentSearch]);
+
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl">
-        {/* Modal Header */}
-        <div className="flex justify-between items-start mb-5 pb-3 border-b border-slate-100">
-          <div>
-            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 transition-all">
+      <div 
+        className={`w-full max-h-[92vh] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl transition-all duration-200 overflow-hidden ${
+          uploadError ? 'max-w-5xl' : uploadResult ? 'max-w-3xl' : 'max-w-2xl'
+        }`}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
               Bulk Import
             </span>
-            <h3 className="mt-1.5 text-xl font-bold text-slate-900">Upload Students</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Quickly import student rosters with automatic class-category mapping and team assignment.</p>
+            {uploadError && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                <AlertCircle className="h-3 w-3" />
+                {uploadError.error_count || structuredErrors.length} Issue{(uploadError.error_count || structuredErrors.length) > 1 ? 's' : ''} Found
+              </span>
+            )}
+            {uploadResult && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <CheckCircle2 className="h-3 w-3" />
+                Completed
+              </span>
+            )}
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
-            aria-label="Close bulk upload"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            aria-label="Close bulk upload modal"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {uploadResult ? (
-          /* Success Screen */
-          <div className="space-y-5 py-2">
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-5 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-3">
-                <CheckCircle2 className="h-6 w-6" />
-              </div>
-              <h4 className="text-lg font-bold text-emerald-950">Import Successful!</h4>
-              <p className="mt-1 text-sm text-emerald-800">
-                {uploadResult.message || `Successfully processed ${uploadResult.summary?.successful_creations || 0} students.`}
-              </p>
-
-              {/* Stats Bar */}
-              <div className="mt-4 grid grid-cols-3 gap-3 border-t border-emerald-200/60 pt-4 text-left">
-                <div className="rounded-lg bg-white/70 p-3 border border-emerald-100">
-                  <div className="text-xs font-medium text-emerald-700">Total Processed</div>
-                  <div className="text-xl font-bold text-slate-900">{uploadResult.summary?.total_processed ?? 0}</div>
-                </div>
-                <div className="rounded-lg bg-white/70 p-3 border border-emerald-100">
-                  <div className="text-xs font-medium text-emerald-700">Created Students</div>
-                  <div className="text-xl font-bold text-emerald-700">{uploadResult.summary?.successful_creations ?? 0}</div>
-                </div>
-                <div className="rounded-lg bg-white/70 p-3 border border-emerald-100">
-                  <div className="text-xs font-medium text-emerald-700">Team Assignments</div>
-                  <div className="text-xl font-bold text-indigo-700">{uploadResult.summary?.team_assignments_processed ?? 0}</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Team Assignments Summary */}
-            {uploadResult.team_assignments && uploadResult.team_assignments.length > 0 && (
-              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Trophy className="h-4 w-4 text-indigo-600" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700">Team Assignments</span>
-                </div>
-                <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-                  {uploadResult.team_assignments.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs py-1 px-2 rounded bg-white border border-slate-100">
-                      <span className="font-medium text-slate-800">{item.student}</span>
-                      <span className="inline-flex items-center gap-1 font-semibold text-indigo-600">
-                        → {item.team_name || item.team}
-                      </span>
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto flex-1">
+          {uploadError ? (
+            /* =========================================================================
+               ISSUE RESOLUTION CENTER (Validation Issues Detected)
+               ========================================================================= */
+            <div className="space-y-5">
+              {/* Alert Banner */}
+              <div className="rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 via-rose-50/60 to-white p-5 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 rounded-xl bg-rose-100 text-rose-600 shrink-0 mt-0.5">
+                      <AlertTriangle className="h-6 w-6" />
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Matched Corrections */}
-            {uploadResult.corrections && uploadResult.corrections.length > 0 && (
-              <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5">
-                <span className="text-xs font-bold text-amber-900 block mb-1">Auto-matched values:</span>
-                <ul className="text-xs text-amber-800 space-y-0.5 list-disc list-inside">
-                  {uploadResult.corrections.slice(0, 5).map((corr, idx) => (
-                    <li key={idx}>{corr}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={resetForm}
-                className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
-              >
-                Upload another file
-              </button>
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* Upload Form */
-          <div className="space-y-5">
-            {/* Download Template Step */}
-            <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/80 via-white to-indigo-50/40 p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-indigo-100/80 text-indigo-700 shrink-0 mt-0.5">
-                    <FileSpreadsheet className="h-5 w-5" />
+                    <div>
+                      <h4 className="text-base font-bold text-rose-950">
+                        Spreadsheet Validation Blocked ({uploadError.error_count || structuredErrors.length} Issue{(uploadError.error_count || structuredErrors.length) > 1 ? 's' : ''})
+                      </h4>
+                      <p className="text-xs text-rose-800/90 mt-1 leading-relaxed">
+                        No students were imported so your roster remains clean and uncorrupted. Every row with an issue has been pinpointed below with the exact row number and required fix.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900">Step 1: Download School Excel Template</h4>
-                    <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
-                      Pre-configured with dropdowns. Includes a complete <strong>Example</strong> sheet with demo data for all your school's classes and teams!
-                    </p>
+
+                  {/* Quick Action Buttons */}
+                  <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadIssuesCSV(structuredErrors)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 shadow-xs transition-colors"
+                      title="Download errors as CSV to review side-by-side with Excel"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span>Download Issues CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyIssues(structuredErrors)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-xs transition-colors"
+                      title="Copy issue summary to clipboard"
+                    >
+                      {copiedIssues ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          <span className="text-emerald-700">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5" />
+                          <span>Copy Issues</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
+
+                {/* Metrics Summary Strip */}
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-rose-200/70 pt-4 text-left">
+                  <div className="rounded-lg bg-white/80 p-3 border border-rose-100">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Rows Evaluated</div>
+                    <div className="text-xl font-bold text-slate-900 mt-0.5">
+                      {uploadError.total_rows || (structuredErrors.length + (uploadError.valid_count || 0))}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">Total data rows in file</div>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-3 border border-emerald-200">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Valid Rows Ready</div>
+                    <div className="text-xl font-bold text-emerald-700 mt-0.5">
+                      {uploadError.valid_count ?? '—'}
+                    </div>
+                    <div className="text-[11px] text-emerald-600/80 mt-0.5">Will import once issues fixed</div>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-3 border border-rose-200">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-rose-700">Issues to Fix</div>
+                    <div className="text-xl font-bold text-rose-700 mt-0.5">
+                      {uploadError.error_count || structuredErrors.length}
+                    </div>
+                    <div className="text-[11px] text-rose-600/80 mt-0.5">Rows requiring attention</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter Tabs & Search Bar */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  {/* Category Filter Tabs */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none text-xs">
+                    <button
+                      type="button"
+                      onClick={() => { setIssueFilter('all'); setCurrentPage(1); }}
+                      className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                        issueFilter === 'all'
+                          ? 'bg-slate-900 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>All Issues</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        issueFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}>{counts.all}</span>
+                    </button>
+
+                    {counts.team > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setIssueFilter('team'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                          issueFilter === 'team'
+                            ? 'bg-purple-600 text-white shadow-xs'
+                            : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                        }`}
+                      >
+                        <Trophy className="h-3 w-3" />
+                        <span>Team Issues</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          issueFilter === 'team' ? 'bg-purple-800 text-white' : 'bg-purple-200 text-purple-800'
+                        }`}>{counts.team}</span>
+                      </button>
+                    )}
+
+                    {counts.class > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setIssueFilter('class'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                          issueFilter === 'class'
+                            ? 'bg-sky-600 text-white shadow-xs'
+                            : 'bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200'
+                        }`}
+                      >
+                        <GraduationCap className="h-3 w-3" />
+                        <span>Class / Category</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          issueFilter === 'class' ? 'bg-sky-800 text-white' : 'bg-sky-200 text-sky-800'
+                        }`}>{counts.class}</span>
+                      </button>
+                    )}
+
+                    {counts.name > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setIssueFilter('name'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                          issueFilter === 'name'
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
+                        }`}
+                      >
+                        <User className="h-3 w-3" />
+                        <span>Missing Name</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          issueFilter === 'name' ? 'bg-amber-800 text-white' : 'bg-amber-200 text-amber-800'
+                        }`}>{counts.name}</span>
+                      </button>
+                    )}
+
+                    {counts.duplicate > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setIssueFilter('duplicate'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                          issueFilter === 'duplicate'
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                        }`}
+                      >
+                        <Copy className="h-3 w-3" />
+                        <span>Duplicates</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          issueFilter === 'duplicate' ? 'bg-rose-800 text-white' : 'bg-rose-200 text-rose-800'
+                        }`}>{counts.duplicate}</span>
+                      </button>
+                    )}
+
+                    {counts.other > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setIssueFilter('other'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                          issueFilter === 'other'
+                            ? 'bg-slate-700 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                        }`}
+                      >
+                        <span>Other</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          issueFilter === 'other' ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-800'
+                        }`}>{counts.other}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Search Input */}
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search row #, student, value..."
+                      value={issueSearch}
+                      onChange={(e) => { setIssueSearch(e.target.value); setCurrentPage(1); }}
+                      className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    />
+                    {issueSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setIssueSearch('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Issues Table */}
+                <div className="rounded-xl border border-slate-200 overflow-hidden shadow-xs bg-white">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                          <th className="py-2.5 px-3 w-24">Excel Row</th>
+                          <th className="py-2.5 px-3 w-40">Student Name</th>
+                          <th className="py-2.5 px-3 w-36">Field</th>
+                          <th className="py-2.5 px-3 w-36">Value in File</th>
+                          <th className="py-2.5 px-4">Reason & Action Required</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {paginatedIssues.length === 0 ? (
+                          <tr>
+                            <td colSpan="5" className="py-8 text-center text-slate-500">
+                              <AlertCircle className="h-6 w-6 text-slate-300 mx-auto mb-1.5" />
+                              <div className="font-semibold text-slate-700">No issues match your filter</div>
+                              <div className="text-[11px] text-slate-400 mt-0.5">Try clearing your search query or switching categories.</div>
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedIssues.map((issue, idx) => {
+                            const isTeam = issue.field === 'team';
+                            const isClass = issue.field === 'class' || issue.field === 'category';
+                            const isName = issue.field === 'name';
+                            const isDup = issue.field === 'duplicate';
+
+                            const fieldBadgeClass = isTeam
+                              ? 'bg-purple-50 text-purple-700 border-purple-200'
+                              : isClass
+                              ? 'bg-sky-50 text-sky-700 border-sky-200'
+                              : isName
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : isDup
+                              ? 'bg-rose-50 text-rose-700 border-rose-200'
+                              : 'bg-slate-100 text-slate-700 border-slate-200';
+
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                                {/* Row Number */}
+                                <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                                  <span className="inline-flex items-center gap-1 font-mono font-bold text-[11px] px-2 py-0.5 rounded bg-slate-900 text-white shadow-2xs">
+                                    Row {issue.row}
+                                  </span>
+                                </td>
+
+                                {/* Student Name */}
+                                <td className="py-2.5 px-3 align-top">
+                                  {issue.student_name && issue.student_name !== '—' ? (
+                                    <span className="font-semibold text-slate-900 block truncate max-w-[150px]" title={issue.student_name}>
+                                      {issue.student_name}
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                      Missing Name
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Field Affected */}
+                                <td className="py-2.5 px-3 align-top whitespace-nowrap">
+                                  <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded border ${fieldBadgeClass}`}>
+                                    {isTeam && <Trophy className="h-3 w-3 shrink-0" />}
+                                    {isClass && <GraduationCap className="h-3 w-3 shrink-0" />}
+                                    {isName && <User className="h-3 w-3 shrink-0" />}
+                                    {isDup && <Copy className="h-3 w-3 shrink-0" />}
+                                    <span>{issue.field_label || issue.field}</span>
+                                  </span>
+                                </td>
+
+                                {/* Value Entered in Excel */}
+                                <td className="py-2.5 px-3 align-top">
+                                  {issue.value !== undefined && issue.value !== null && String(issue.value).trim() !== '' ? (
+                                    <code 
+                                      className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200 block truncate max-w-[140px]" 
+                                      title={String(issue.value)}
+                                    >
+                                      "{issue.value}"
+                                    </code>
+                                  ) : (
+                                    <span className="text-[11px] italic text-slate-400">
+                                      (empty cell)
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Reason & Fix */}
+                                <td className="py-2.5 px-4 align-top">
+                                  <div className="font-semibold text-slate-900 text-xs">
+                                    {issue.issue || issue.reason}
+                                  </div>
+                                  {issue.reason && issue.issue && issue.reason !== issue.issue && (
+                                    <div className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                                      {issue.reason}
+                                    </div>
+                                  )}
+                                  {issue.suggestion && (
+                                    <div className="mt-1 inline-flex items-start gap-1 text-[11px] font-medium text-indigo-700 bg-indigo-50/80 px-2 py-1 rounded border border-indigo-100">
+                                      <span className="shrink-0">💡</span>
+                                      <span><strong>Fix:</strong> {issue.suggestion}</span>
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Footer */}
+                  {filteredIssues.length > pageSize && (
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/80 border-t border-slate-200 text-xs text-slate-600">
+                      <div>
+                        Showing <strong>{(currentPage - 1) * pageSize + 1}</strong> to{' '}
+                        <strong>{Math.min(currentPage * pageSize, filteredIssues.length)}</strong> of{' '}
+                        <strong>{filteredIssues.length}</strong> issues
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="px-2.5 py-1 rounded border border-slate-200 bg-white font-medium hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                        >
+                          <ChevronLeft className="h-3 w-3" />
+                          <span>Prev</span>
+                        </button>
+                        <span className="px-2 py-1 font-semibold text-slate-700">
+                          {currentPage} / {totalPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className="px-2.5 py-1 rounded border border-slate-200 bg-white font-medium hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                        >
+                          <span>Next</span>
+                          <ChevronRight className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Suggestions strip */}
+              {uploadError.suggestions && uploadError.suggestions.length > 0 && (
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3.5 text-xs text-indigo-900">
+                  <div className="font-bold flex items-center gap-1.5 mb-1 text-indigo-950">
+                    <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                    <span>How to proceed:</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-0.5 text-indigo-800">
+                    {uploadError.suggestions.map((sug, i) => (
+                      <li key={i}>{sug}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={handleDownloadTemplate}
                   disabled={downloadingTemplate}
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
                 >
-                  {downloadingTemplate ? (
-                    <>
-                      <div className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-3.5 w-3.5" />
-                      Download Template
-                    </>
-                  )}
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download Reference Template</span>
                 </button>
+
+                <div className="flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                  >
+                    Back to Upload
+                  </button>
+
+                  <label className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm cursor-pointer transition-colors">
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>Upload Corrected File</span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      className="hidden"
+                      onChange={(e) => {
+                        const selected = e.target.files[0];
+                        if (selected) {
+                          setFile(selected);
+                          setUploadError(null);
+                          uploadSpreadsheetFile(selected);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
               </div>
             </div>
+          ) : uploadResult ? (
+            /* =========================================================================
+               SUCCESS SCREEN (Roster Imported Successfully with Team Breakdown)
+               ========================================================================= */
+            <div className="space-y-5 py-2">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-5 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-3 shadow-xs">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+                <h4 className="text-lg font-bold text-emerald-950">Roster Imported Successfully!</h4>
+                <p className="mt-1 text-xs text-emerald-800">
+                  {uploadResult.message || `Successfully processed ${uploadResult.summary?.successful_creations || 0} students.`}
+                </p>
 
-            {/* Field Guide */}
-            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 text-xs">
-              <div className="font-semibold text-slate-800 mb-1.5 flex items-center justify-between">
-                <span>Spreadsheet Columns</span>
-                <span className="text-[11px] font-normal text-slate-500">Only 2 required fields</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                <div className="p-2 rounded-lg bg-white border border-slate-200/80">
-                  <div className="font-bold text-indigo-600 flex items-center gap-1">
-                    <Check className="h-3 w-3" /> name & class
+                {/* Stats Bar */}
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 border-t border-emerald-200/60 pt-4 text-left">
+                  <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
+                    <div className="text-[11px] font-semibold text-emerald-700">Total Evaluated</div>
+                    <div className="text-xl font-bold text-slate-900 mt-0.5">{uploadResult.summary?.total_processed ?? 0}</div>
                   </div>
-                  <p className="text-slate-600 mt-0.5">Required. Student name and class/grade (e.g. 10, Grade 8).</p>
-                </div>
-                <div className="p-2 rounded-lg bg-white border border-slate-200/80">
-                  <div className="font-semibold text-slate-700">section, gender & team</div>
-                  <p className="text-slate-500 mt-0.5">Optional. Section (A, B), Gender (Male/Female), and Team name.</p>
+                  <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
+                    <div className="text-[11px] font-semibold text-emerald-700">Created Students</div>
+                    <div className="text-xl font-bold text-emerald-700 mt-0.5">{uploadResult.summary?.successful_creations ?? 0}</div>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
+                    <div className="text-[11px] font-semibold text-indigo-700">Team Assigned</div>
+                    <div className="text-xl font-bold text-indigo-700 mt-0.5">{uploadResult.summary?.team_assignments_processed ?? 0}</div>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
+                    <div className="text-[11px] font-semibold text-slate-600">Unassigned</div>
+                    <div className="text-xl font-bold text-slate-700 mt-0.5">{uploadResult.summary?.unassigned_team_count ?? 0}</div>
+                  </div>
                 </div>
               </div>
-              <div className="mt-2 text-[11px] text-indigo-700 bg-indigo-50/60 rounded px-2.5 py-1.5 border border-indigo-100 flex items-center gap-1.5">
-                <span>💡</span>
-                <span>Category is automatically mapped from the student's class — no complex codes needed!</span>
-              </div>
-            </div>
 
-            {/* Error Display */}
-            {uploadError && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50/90 p-4 text-xs text-rose-900">
-                <div className="flex items-start gap-2.5 font-bold mb-1.5 text-rose-950">
-                  <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
-                  <span>{uploadError.message}</span>
+              {/* Team Distribution Breakdown */}
+              {uploadResult.team_breakdown && Object.keys(uploadResult.team_breakdown).length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Trophy className="h-4 w-4 text-indigo-600" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-800">Team Distribution</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {Object.entries(uploadResult.team_breakdown).map(([tName, tCount], idx) => (
+                      <div key={idx} className="p-2.5 rounded-lg bg-white border border-slate-200/80 shadow-2xs">
+                        <div className="text-xs font-semibold text-slate-800 truncate" title={tName}>
+                          {tName}
+                        </div>
+                        <div className="text-lg font-bold text-indigo-600 mt-0.5">
+                          {tCount} <span className="text-[11px] font-normal text-slate-500">students</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                {uploadError.details.length > 0 && (
-                  <ul className="list-disc list-inside space-y-1 pl-1 text-rose-800 mt-2 max-h-36 overflow-y-auto">
-                    {uploadError.details.map((detail, index) => (
-                      <li key={index} className="leading-relaxed">{detail}</li>
+              )}
+
+              {/* Team Assignments Activity List */}
+              {uploadResult.team_assignments && uploadResult.team_assignments.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-indigo-600" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                        Assigned Students ({uploadResult.team_assignments.length})
+                      </span>
+                    </div>
+                    {uploadResult.team_assignments.length > 8 && (
+                      <input
+                        type="text"
+                        placeholder="Search assigned student or team..."
+                        value={teamAssignmentSearch}
+                        onChange={(e) => setTeamAssignmentSearch(e.target.value)}
+                        className="text-xs px-2.5 py-1 rounded border border-slate-200 bg-white placeholder-slate-400 focus:outline-none"
+                      />
+                    )}
+                  </div>
+                  <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1 text-xs">
+                    {filteredAssignments.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between py-1.5 px-2.5 rounded bg-white border border-slate-100 shadow-2xs">
+                        <span className="font-medium text-slate-800">{item.student}</span>
+                        <span className="inline-flex items-center gap-1 font-semibold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded text-[11px] border border-indigo-100">
+                          → {item.team_name || item.team}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Auto-matched Corrections */}
+              {uploadResult.corrections && uploadResult.corrections.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3.5">
+                  <span className="text-xs font-bold text-amber-900 block mb-1">Auto-matched values ({uploadResult.corrections.length}):</span>
+                  <ul className="text-xs text-amber-800 space-y-0.5 list-disc list-inside">
+                    {uploadResult.corrections.slice(0, 5).map((corr, idx) => (
+                      <li key={idx}>{corr}</li>
                     ))}
                   </ul>
-                )}
-                {uploadError.suggestions.length > 0 && (
-                  <div className="mt-2.5 pt-2 border-t border-rose-200/60 text-rose-700">
-                    <span className="font-semibold block mb-0.5">Suggestions:</span>
-                    <ul className="list-disc list-inside space-y-0.5">
-                      {uploadError.suggestions.map((suggestion, index) => (
-                        <li key={index}>{suggestion}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Step 2: Upload File Form */}
-            <form onSubmit={handleFileUpload} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                  Step 2: Select Spreadsheet or CSV File
-                </label>
-                
-                <div className="relative border-2 border-dashed border-slate-300 rounded-xl p-5 hover:border-indigo-400 transition-colors bg-slate-50/40 text-center">
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    onChange={(e) => {
-                      setFile(e.target.files[0] || null);
-                      setUploadError(null);
-                    }}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                    id="excel-file-upload"
-                  />
-                  {file ? (
-                    <div className="flex items-center justify-center gap-3">
-                      <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
-                        <FileSpreadsheet className="h-6 w-6" />
-                      </div>
-                      <div className="text-left">
-                        <p className="text-sm font-semibold text-slate-900 truncate max-w-xs">{file.name}</p>
-                        <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB • Click to change file</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-1">
-                      <Upload className="mx-auto h-8 w-8 text-slate-400" />
-                      <p className="text-sm font-medium text-slate-700">Click or drag & drop to choose file</p>
-                      <p className="text-xs text-slate-400">Supported formats: Excel (.xlsx, .xls) and CSV (.csv)</p>
-                    </div>
-                  )}
                 </div>
-              </div>
+              )}
 
-              {/* Form Action Buttons */}
-              <div className="flex justify-end items-center gap-3 pt-3 border-t border-slate-100">
+              {/* Footer */}
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  Upload another file
+                </button>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                  className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={uploading || !file}
-                  className="px-5 py-2 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-2"
-                >
-                  {uploading ? (
-                    <>
-                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full" />
-                      Processing students...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      Upload Students
-                    </>
-                  )}
+                  Done
                 </button>
               </div>
-            </form>
-          </div>
-        )}
+            </div>
+          ) : (
+            /* =========================================================================
+               INITIAL UPLOAD SCREEN (Template Download & File Drag/Drop)
+               ========================================================================= */
+            <div className="space-y-5">
+              {/* Step 1: Download Template */}
+              <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/80 via-white to-indigo-50/40 p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-indigo-100/80 text-indigo-700 shrink-0 mt-0.5">
+                      <FileSpreadsheet className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">Step 1: Download School Excel Template</h4>
+                      <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                        Pre-configured with dropdowns matching your school's classes and teams. Includes a complete <strong>Example</strong> sheet with sample rows!
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    disabled={downloadingTemplate}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+                  >
+                    {downloadingTemplate ? (
+                      <>
+                        <div className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-3.5 w-3.5" />
+                        Download Template
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Spreadsheet Column Reference */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 text-xs">
+                <div className="font-semibold text-slate-800 mb-1.5 flex items-center justify-between">
+                  <span>Spreadsheet Columns</span>
+                  <span className="text-[11px] font-normal text-slate-500">Only 2 required fields</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2 rounded-lg bg-white border border-slate-200/80">
+                    <div className="font-bold text-indigo-600 flex items-center gap-1">
+                      <Check className="h-3 w-3" /> name & class
+                    </div>
+                    <p className="text-slate-600 mt-0.5">Required. Student name and class/grade (e.g. 10, Grade 8).</p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white border border-slate-200/80">
+                    <div className="font-semibold text-slate-700">section, gender & team</div>
+                    <p className="text-slate-500 mt-0.5">Optional. Section (A, B), Gender (Male/Female), and Team name.</p>
+                  </div>
+                </div>
+                <div className="mt-2 text-[11px] text-indigo-700 bg-indigo-50/60 rounded px-2.5 py-1.5 border border-indigo-100 flex items-center gap-1.5">
+                  <span>💡</span>
+                  <span>Category is automatically mapped from the student's class — no complex codes needed!</span>
+                </div>
+              </div>
+
+              {/* Step 2: Upload File */}
+              <form onSubmit={handleFileUpload} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                    Step 2: Select Spreadsheet or CSV File
+                  </label>
+                  
+                  <div className="relative border-2 border-dashed border-slate-300 rounded-xl p-6 hover:border-indigo-400 transition-colors bg-slate-50/40 text-center">
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      onChange={(e) => {
+                        setFile(e.target.files[0] || null);
+                        setUploadError(null);
+                      }}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      id="excel-file-upload"
+                    />
+                    {file ? (
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+                          <FileSpreadsheet className="h-6 w-6" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm font-semibold text-slate-900 truncate max-w-xs">{file.name}</p>
+                          <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB • Click or drag to change file</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <Upload className="mx-auto h-8 w-8 text-slate-400" />
+                        <p className="text-sm font-medium text-slate-700">Click or drag & drop to choose file</p>
+                        <p className="text-xs text-slate-400">Supported formats: Excel (.xlsx, .xls) and CSV (.csv) up to 1,000+ students</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Form Action Buttons */}
+                <div className="flex justify-end items-center gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={uploading || !file}
+                    className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-2"
+                  >
+                    {uploading ? (
+                      <>
+                        <div className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
+                        Processing spreadsheet...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-3.5 w-3.5" />
+                        Upload & Validate Students
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
