@@ -16,10 +16,12 @@ import {
   Lock,
   Layers,
   MapPin,
-  Calendar
+  Calendar,
+  UserCheck
 } from 'lucide-react';
 import { eventsAPI, teamManagerAPI, categoriesAPI, eventScheduleAPI } from '../../services/api';
 import EventPrograms from '../Event/EventPrograms';
+import EventParticipants from '../Event/EventParticipants';
 import EventResults from '../Event/EventResults';
 import TeamEventDetail from './TeamEventDetail';
 
@@ -145,10 +147,17 @@ const TeamEventDashboard = () => {
   const tabs = [
     {
       id: 'programs',
-      name: 'Programs & Participants',
+      name: 'Programs',
       icon: BookOpen,
       badge: null,
-      description: 'View all programs, categories, points, and participant rosters',
+      description: 'View all event programs, stages, and competition guidelines',
+    },
+    {
+      id: 'participants',
+      name: 'Participants',
+      icon: UserCheck,
+      badge: null,
+      description: 'View your team participants, chest numbers, and digital passes',
     },
     {
       id: 'schedule',
@@ -207,6 +216,19 @@ const TeamEventDashboard = () => {
             categories={categories}
             readOnly={true}
           />
+        );
+
+      case 'participants':
+        return (
+          <div className="min-h-[560px] p-4 sm:p-6 bg-white">
+            <EventParticipants
+              eventId={eventId}
+              categories={categories}
+              teamId={teamData?.id || teamData?.team_id}
+              teamName={teamData?.name || teamData?.team_name}
+              isTeamManager={true}
+            />
+          </div>
         );
 
       case 'schedule':

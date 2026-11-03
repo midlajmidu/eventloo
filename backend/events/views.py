@@ -1152,17 +1152,30 @@ class EventViewSet(viewsets.ModelViewSet):
         """Get participants who are assigned to at least one program in this event and have a chest number"""
         event = self.get_object()
 
-        # Chest numbers are created transactionally at assignment time. This GET
-        # endpoint is deliberately read-only and exposes assigned participants only.
-        assigned_student_ids = ProgramAssignment.objects.filter(
+        # If team_id query parameter is passed or user is team manager, filter strictly to that team
+        team_id = request.query_params.get('team_id') or request.query_params.get('team')
+        if not team_id and getattr(request.user, 'role', '') == 'team_manager':
+            managed_team = getattr(request.user, 'managed_team', None) or getattr(request.user, 'team', None)
+            if managed_team:
+                team_id = managed_team.id
+
+        assigned_query = ProgramAssignment.objects.filter(
             program__event=event,
             student__isnull=False,
-        ).values_list('student_id', flat=True).distinct()
+        )
+        if team_id:
+            assigned_query = assigned_query.filter(team_id=team_id)
+
+        assigned_student_ids = assigned_query.values_list('student_id', flat=True).distinct()
         chest_numbers = ChestNumber.objects.filter(
             event=event,
             student_id__in=assigned_student_ids,
             chest_number__isnull=False,
-        ).select_related('student', 'team')
+        )
+        if team_id:
+            chest_numbers = chest_numbers.filter(team_id=team_id)
+
+        chest_numbers = chest_numbers.select_related('student', 'team')
 
         serializer = ChestNumberSerializer(chest_numbers, many=True)
         return Response(serializer.data)

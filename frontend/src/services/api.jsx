@@ -336,7 +336,7 @@ export const eventsAPI = {
     reportApi.get(`events/${eventId}/reports/participants-team-executable/`, { responseType: 'blob' }),
 
   // Get chest numbers / assigned participants for an event
-  getChestNumbers: (eventId) => api.get(`events/${eventId}/chest_numbers/`),
+  getChestNumbers: (eventId, params = {}) => api.get(`events/${eventId}/chest_numbers/`, { params }),
 
   // Toggle schedule publish status for team managers
   toggleSchedulePublish: (eventId, isPublished) =>
@@ -632,7 +632,7 @@ export const eventProgramsAPI = {
   getCategoryCounts: (eventId) => api.get(`events/${eventId}/programs/category_counts/`),
 
   // Get chest numbers / assigned participants for an event
-  getChestNumbers: (eventId) => api.get(`events/${eventId}/chest_numbers/`),
+  getChestNumbers: (eventId, params = {}) => api.get(`events/${eventId}/chest_numbers/`, { params }),
 };
 
 export const eventStagesAPI = {
