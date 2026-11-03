@@ -587,37 +587,50 @@ class SchoolUserViewSet(viewsets.ModelViewSet):
 def super_admin_dashboard(request):
     import platform
     import django
+    from events.models import Event
 
-    total_schools = School.objects.count()
-    active_schools = School.objects.filter(status='active').count()
-    suspended_schools = School.objects.filter(status='suspended').count()
-    total_admins = User.objects.filter(role='admin', school__isnull=False).count()
-    total_students = User.objects.filter(role='student', school__isnull=False).count()
-    total_events = Event.objects.filter(school__isnull=False).count()
-    active_events = Event.objects.filter(school__isnull=False, status__in=['published', 'ongoing']).count()
+    try:
+        total_schools = School.objects.count()
+        active_schools = School.objects.filter(status='active').count()
+        suspended_schools = School.objects.filter(status='suspended').count()
+        total_admins = User.objects.filter(role='admin', school__isnull=False).count()
+        total_students = User.objects.filter(role='student', school__isnull=False).count()
+        total_events = Event.objects.filter(school__isnull=False).count()
+        active_events = Event.objects.filter(school__isnull=False, status__in=['published', 'ongoing']).count()
 
-    recent_schools = [{
-        'id': s.id,
-        'name': s.name,
-        'code': s.code,
-        'status': s.status,
-        'email': s.email,
-        'admin_count': s.users.filter(role='admin').count(),
-        'event_count': s.events.count(),
-        'student_count': s.users.filter(role='student').count(),
-        'created_at': s.created_at.isoformat() if s.created_at else None,
-    } for s in School.objects.order_by('-created_at')[:8]]
+        recent_schools = [{
+            'id': s.id,
+            'name': s.name,
+            'code': s.code,
+            'status': s.status,
+            'email': s.email,
+            'admin_count': s.users.filter(role='admin').count(),
+            'event_count': s.events.count(),
+            'student_count': s.users.filter(role='student').count(),
+            'created_at': s.created_at.isoformat() if s.created_at else None,
+        } for s in School.objects.order_by('-created_at')[:8]]
 
-    recent_events = [{
-        'id': e.id,
-        'name': e.name,
-        'school_id': e.school_id,
-        'school_name': e.school.name if e.school else 'N/A',
-        'status': e.status,
-        'event_type': getattr(e, 'event_type', 'standard'),
-        'teams_count': e.teams.count(),
-        'created_at': e.created_at.isoformat() if e.created_at else None,
-    } for e in Event.objects.select_related('school').order_by('-created_at')[:8]]
+        recent_events = [{
+            'id': e.id,
+            'name': e.name,
+            'school_id': e.school_id,
+            'school_name': e.school.name if e.school else 'N/A',
+            'status': e.status,
+            'event_type': getattr(e, 'event_type', 'standard'),
+            'teams_count': e.teams.count(),
+            'created_at': e.created_at.isoformat() if e.created_at else None,
+        } for e in Event.objects.select_related('school').order_by('-created_at')[:8]]
+    except Exception as exc:
+        logger.exception("Error loading super_admin_dashboard telemetry: %s", exc)
+        total_schools = School.objects.count()
+        active_schools = School.objects.filter(status='active').count()
+        suspended_schools = School.objects.filter(status='suspended').count()
+        total_admins = User.objects.filter(role='admin', school__isnull=False).count()
+        total_students = 0
+        total_events = 0
+        active_events = 0
+        recent_schools = []
+        recent_events = []
 
     return Response({
         'schools': total_schools,

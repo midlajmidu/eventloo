@@ -103,19 +103,36 @@ const SuperAdminDashboard = () => {
   const loadDashboardData = async () => {
     try {
       setRefreshing(true);
-      const [dashRes, schoolsRes] = await Promise.all([
+      const [dashRes, schoolsRes] = await Promise.allSettled([
         superAdminAPI.dashboard(),
         superAdminAPI.schools({ page, page_size: pageSize, search: query.trim() || undefined }),
       ]);
-      setStats(dashRes.data || {});
-      setSchools(schoolsRes.data.results || schoolsRes.data || []);
-      setSchoolCount(schoolsRes.data.count ?? schoolsRes.data.length ?? 0);
+
+      if (dashRes.status === 'fulfilled') {
+        setStats(dashRes.value?.data || {});
+      } else {
+        console.warn('Dashboard telemetry fetch failed:', dashRes.reason);
+      }
+
+      if (schoolsRes.status === 'fulfilled') {
+        const payload = schoolsRes.value?.data;
+        setSchools(payload?.results || payload || []);
+        setSchoolCount(payload?.count ?? (Array.isArray(payload) ? payload.length : 0));
+      } else {
+        console.warn('Schools list fetch failed:', schoolsRes.reason);
+      }
+
+      if (dashRes.status === 'rejected' && schoolsRes.status === 'rejected') {
+        setError('Could not refresh platform telemetry.');
+      } else {
+        setError('');
+      }
 
       // Optional async loads for cross-tenant overview tabs
       superAdminAPI.allAdmins().then(res => setAllAdmins(res.data || [])).catch(() => {});
       superAdminAPI.allEvents().then(res => setAllEvents(res.data || [])).catch(() => {});
     } catch (err) {
-      setError('Could not refresh platform telemetry.');
+      console.error('Platform telemetry load error:', err);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -315,29 +332,29 @@ const SuperAdminDashboard = () => {
     <div className="flex h-screen bg-slate-50 text-slate-800 font-sans antialiased overflow-hidden">
       
       {/* ============================================================== */}
-      {/* SIDEBAR NAVIGATION (EVENT MANAGER PORTAL AESTHETIC)             */}
+      {/* SIDEBAR NAVIGATION (WHITE BG & EVENT MANAGER PORTAL THEME)     */}
       {/* ============================================================== */}
-      <aside className="hidden lg:flex w-72 flex-col bg-slate-900 border-r border-slate-800 select-none">
+      <aside className="hidden lg:flex w-72 flex-col bg-white border-r border-slate-200/90 select-none">
         
         {/* Brand Header */}
-        <div className="flex items-center gap-3 px-6 h-20 border-b border-slate-800/80 bg-slate-950/40">
-          <EventlooLogo variant="full" size="md" />
+        <div className="flex items-center h-20 px-6 border-b border-slate-100 bg-white">
+          <EventlooLogo variant="full" size="md" showSubtitle />
         </div>
 
-        {/* Super Admin Badge Banner */}
-        <div className="px-5 py-3.5 mx-4 mt-4 rounded-xl bg-gradient-to-r from-indigo-950/70 to-slate-800/60 border border-indigo-500/20 flex items-center gap-3">
-          <div className="h-8 w-8 rounded-lg bg-indigo-600/30 border border-indigo-400/30 flex items-center justify-center text-indigo-400 shrink-0">
-            <ShieldCheck className="h-4 w-4" />
+        {/* Super Admin Control Plane Badge */}
+        <div className="px-4 py-3 mx-4 mt-4 rounded-xl bg-indigo-50/70 border border-indigo-100/80 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shrink-0 shadow-xs">
+            <ShieldCheck className="h-5 w-5" />
           </div>
           <div className="overflow-hidden">
-            <div className="text-xs font-bold text-white tracking-wide truncate">Control Plane</div>
-            <div className="text-[10px] text-indigo-300/80 font-medium truncate">Root Infrastructure</div>
+            <div className="text-xs font-bold text-slate-900 tracking-tight truncate">Control Plane</div>
+            <div className="text-[10px] text-indigo-600 font-semibold tracking-wide truncate">Root Infrastructure</div>
           </div>
         </div>
 
         {/* Nav Links */}
-        <nav className="flex-1 px-4 py-5 space-y-1.5 overflow-y-auto">
-          <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+        <nav className="flex-1 px-3 py-5 space-y-1 overflow-y-auto">
+          <div className="px-3 mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-400">
             Platform Management
           </div>
 
@@ -355,19 +372,19 @@ const SuperAdminDashboard = () => {
                 key={item.id}
                 type="button"
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 ${
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 group ${
                   active
-                    ? 'bg-indigo-600 text-white font-semibold shadow-lg shadow-indigo-600/20'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                    ? 'bg-indigo-50 text-indigo-700 font-semibold shadow-2xs'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <Icon className={`h-4 w-4 ${active ? 'text-white' : 'text-slate-400'}`} />
+                  <Icon className={`h-4.5 w-4.5 transition-colors ${active ? 'text-indigo-600' : 'text-slate-400 group-hover:text-slate-600'}`} />
                   <span>{item.label}</span>
                 </div>
                 {item.count !== null && item.count !== undefined && (
                   <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
-                    active ? 'bg-indigo-700 text-indigo-100' : 'bg-slate-800 text-slate-400'
+                    active ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-500'
                   }`}>
                     {item.count}
                   </span>
@@ -378,21 +395,21 @@ const SuperAdminDashboard = () => {
         </nav>
 
         {/* Footer Admin Profile & Logout */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/40">
-          <div className="flex items-center justify-between p-2 rounded-xl bg-slate-800/50 border border-slate-700/50">
+        <div className="p-4 border-t border-slate-100 bg-slate-50/50">
+          <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
             <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-sm">
+              <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-600 flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-xs">
                 SA
               </div>
               <div className="truncate">
-                <div className="text-xs font-semibold text-white truncate">Super Admin</div>
+                <div className="text-xs font-bold text-slate-900 truncate">Super Admin</div>
                 <div className="text-[10px] text-slate-400 truncate">superadmin@eventloo.in</div>
               </div>
             </div>
             <button
               type="button"
               onClick={handleLogout}
-              className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
               title="Sign Out"
             >
               <LogOut className="h-4 w-4" />
@@ -492,87 +509,104 @@ const SuperAdminDashboard = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 
                 {/* Total Organizations */}
-                <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-300 transition-all">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Organizations</span>
-                    <div className="h-9 w-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                      <Building2 className="h-5 w-5" />
+                <div className="group rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_12px_24px_rgba(15,23,42,0.06)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Organizations</p>
+                      <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{stats.schools ?? 0}</p>
+                      <div className="mt-1.5 flex items-center gap-2 text-xs font-medium">
+                        <span className="text-emerald-600 font-semibold">{stats.active_schools ?? 0} Active</span>
+                        <span className="text-slate-300">•</span>
+                        <span className="text-amber-600 font-semibold">{stats.suspended_schools ?? 0} Suspended</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-3 text-3xl font-extrabold text-slate-900">{stats.schools ?? 0}</div>
-                  <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                    <span className="text-emerald-600 font-bold">{stats.active_schools ?? 0} Active</span>
-                    <span>•</span>
-                    <span className="text-amber-600 font-bold">{stats.suspended_schools ?? 0} Suspended</span>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                      <Building2 className="h-4.5 w-4.5" strokeWidth={1.8} />
+                    </div>
                   </div>
                 </div>
 
                 {/* Total School Admins */}
-                <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-300 transition-all">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">School Admins</span>
-                    <div className="h-9 w-9 rounded-xl bg-violet-50 text-violet-600 flex items-center justify-center font-bold">
-                      <Users className="h-5 w-5" />
+                <div className="group rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_12px_24px_rgba(15,23,42,0.06)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">School Admins</p>
+                      <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{stats.school_admins ?? 0}</p>
+                      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 font-normal">
+                        <ShieldCheck className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                        <span>Isolated tenant credentials</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-3 text-3xl font-extrabold text-slate-900">{stats.school_admins ?? 0}</div>
-                  <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
-                    <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
-                    <span>Isolated tenant credentials</span>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+                      <Users className="h-4.5 w-4.5" strokeWidth={1.8} />
+                    </div>
                   </div>
                 </div>
 
                 {/* Total Global Events */}
-                <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-300 transition-all">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Global Events</span>
-                    <div className="h-9 w-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                      <Calendar className="h-5 w-5" />
+                <div className="group rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_12px_24px_rgba(15,23,42,0.06)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Global Events</p>
+                      <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{stats.events ?? 0}</p>
+                      <div className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500 font-normal">
+                        <span className="text-emerald-600 font-semibold">{stats.active_events ?? 0} Ongoing / Published</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="mt-3 text-3xl font-extrabold text-slate-900">{stats.events ?? 0}</div>
-                  <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-500">
-                    <span className="text-emerald-600 font-bold">{stats.active_events ?? 0} Ongoing / Published</span>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                      <Calendar className="h-4.5 w-4.5" strokeWidth={1.8} />
+                    </div>
                   </div>
                 </div>
 
                 {/* Total Students Enrolled */}
-                <div className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-indigo-300 transition-all">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Student Roster</span>
-                    <div className="h-9 w-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
-                      <Layers className="h-5 w-5" />
+                <div className="group rounded-xl border border-slate-200/80 bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_12px_24px_rgba(15,23,42,0.06)]">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Student Roster</p>
+                      <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{stats.students ?? 0}</p>
+                      <div className="mt-1.5 text-xs text-slate-400 font-normal">Across all registered schools</div>
+                    </div>
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+                      <Layers className="h-4.5 w-4.5" strokeWidth={1.8} />
                     </div>
                   </div>
-                  <div className="mt-3 text-3xl font-extrabold text-slate-900">{stats.students ?? 0}</div>
-                  <div className="mt-2 text-xs text-slate-500">Across all registered schools</div>
                 </div>
               </div>
 
               {/* Server & Infrastructure Health Card */}
-              <div className="p-6 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 text-white shadow-xl border border-slate-700/60 flex flex-col md:flex-row md:items-center justify-between gap-6">
+              <div className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="space-y-2">
-                  <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-[11px] font-semibold text-indigo-300">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-[11px] font-semibold text-indigo-700">
                     <Server className="h-3.5 w-3.5" />
                     <span>Single-Container Architecture Active</span>
                   </div>
-                  <h3 className="text-xl font-bold tracking-tight">Lightsail Ubuntu 22.04 LTS Telemetry</h3>
-                  <p className="text-xs text-slate-300 max-w-xl">
-                    React 18 + Gunicorn + Nginx managed by Supervisor. Persistent data saved under <code className="text-indigo-300 font-mono">/app/data/db.sqlite3</code>.
+                  <h3 className="text-lg font-bold text-slate-900 tracking-tight">Lightsail Ubuntu 22.04 LTS Telemetry</h3>
+                  <p className="text-xs text-slate-500 max-w-xl">
+                    React 18 + Gunicorn + Nginx managed by Supervisor. Persistent data saved under <code className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded font-mono text-[11px]">/app/data/db.sqlite3</code>.
                   </p>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 shrink-0">
-                  <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Database</div>
-                    <div className="text-xs font-bold text-emerald-400 mt-1">SQLite 3 (Mounted)</div>
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-center hover:bg-slate-100/70 transition-colors">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Database</div>
+                    <div className="text-xs font-bold text-emerald-600 mt-1 flex items-center justify-center gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      SQLite 3 (Mounted)
+                    </div>
                   </div>
-                  <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">SSL Certificate</div>
-                    <div className="text-xs font-bold text-emerald-400 mt-1">Let's Encrypt TLS</div>
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-center hover:bg-slate-100/70 transition-colors">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">SSL Certificate</div>
+                    <div className="text-xs font-bold text-indigo-600 mt-1 flex items-center justify-center gap-1.5">
+                      <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
+                      Let's Encrypt TLS
+                    </div>
                   </div>
-                  <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-center col-span-2 sm:col-span-1">
-                    <div className="text-[10px] text-slate-400 uppercase font-bold">Domain</div>
-                    <div className="text-xs font-bold text-indigo-300 mt-1">app.eventloo.in</div>
+                  <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200/80 text-center hover:bg-slate-100/70 transition-colors col-span-2 sm:col-span-1">
+                    <div className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Public Domain</div>
+                    <div className="text-xs font-bold text-violet-600 mt-1 flex items-center justify-center gap-1.5">
+                      <Globe className="h-3.5 w-3.5 text-violet-600" />
+                      app.eventloo.in
+                    </div>
                   </div>
                 </div>
               </div>
