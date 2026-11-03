@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { 
-  Award, 
   Calendar, 
   MapPin, 
   User, 
@@ -10,14 +9,17 @@ import {
   Printer, 
   CheckCircle2, 
   Clock, 
-  School as SchoolIcon, 
   Hash, 
   Users, 
   Layers, 
   Copy, 
   Check, 
   RefreshCw, 
-  AlertCircle 
+  AlertCircle,
+  Flag,
+  Bookmark,
+  QrCode,
+  Trophy
 } from 'lucide-react';
 import EventlooLogo from '../common/EventlooLogo';
 import QRCodeSVG from '../common/QRCodeSVG';
@@ -37,6 +39,7 @@ const PublicParticipantBadge = () => {
     if (eventId && identifier) {
       fetchBadgeData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventId, identifier]);
 
   const fetchBadgeData = async () => {
@@ -78,31 +81,16 @@ const PublicParticipantBadge = () => {
     }
   };
 
-  // Helper formatting for time
-  const formatTime = (isoString) => {
-    if (!isoString) return '';
-    try {
-      const d = new Date(isoString);
-      return d.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-      });
-    } catch {
-      return '';
-    }
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200/90 p-8 flex flex-col items-center text-center space-y-4 shadow-sm animate-pulse">
-          <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center">
-            <RefreshCw className="w-7 h-7 text-slate-400 animate-spin" />
+      <div className="min-h-screen bg-[#f7f8fb] flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-3xl border border-slate-200/90 p-8 flex flex-col items-center text-center space-y-4 shadow-sm animate-pulse">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600">
+            <RefreshCw className="w-7 h-7 animate-spin" />
           </div>
-          <div className="h-5 w-36 bg-slate-200 rounded-full" />
+          <div className="h-5 w-40 bg-slate-200 rounded-full" />
           <div className="h-3.5 w-52 bg-slate-100 rounded-full" />
-          <div className="h-28 w-full bg-slate-100 rounded-xl mt-4" />
+          <div className="h-32 w-full bg-slate-100 rounded-2xl mt-4" />
         </div>
       </div>
     );
@@ -110,9 +98,9 @@ const PublicParticipantBadge = () => {
 
   if (error || !badgeData) {
     return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl border border-slate-200 shadow-sm p-6 text-center space-y-4">
-          <div className="w-12 h-12 mx-auto rounded-xl bg-rose-50 text-rose-500 flex items-center justify-center">
+      <div className="min-h-screen bg-[#f7f8fb] flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-sm p-6 text-center space-y-4">
+          <div className="w-12 h-12 mx-auto rounded-2xl bg-rose-50 text-rose-500 flex items-center justify-center">
             <AlertCircle className="w-6 h-6" />
           </div>
           <h2 className="text-lg font-bold text-slate-900">Digital Pass Not Found</h2>
@@ -122,7 +110,7 @@ const PublicParticipantBadge = () => {
           <div className="pt-2">
             <button
               onClick={fetchBadgeData}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
             >
               Try Again
             </button>
@@ -139,10 +127,10 @@ const PublicParticipantBadge = () => {
   const publicUrl = window.location.href;
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-800 flex flex-col items-center justify-start pb-12 print:bg-white print:p-0">
+    <div className="min-h-screen bg-[#f6f7fb] font-sans text-slate-800 flex flex-col items-center justify-start pb-12 print:bg-white print:p-0">
       
       {/* Main Container - Mobile Optimized */}
-      <main className="w-full max-w-md px-4 pt-5 space-y-4">
+      <main className="w-full max-w-md px-4 pt-4 space-y-3">
         
         {/* Top Minimal Navigation Bar */}
         <header className="flex items-center justify-between px-1 py-1 print:hidden">
@@ -150,320 +138,373 @@ const PublicParticipantBadge = () => {
             <EventlooLogo size="sm" theme="light" showSubtitle={false} />
           </div>
 
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-2">
             <button
               onClick={handleCopyLink}
               title="Copy badge pass link"
-              className="p-2 rounded-xl bg-white border border-slate-200/90 text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs cursor-pointer"
+              className="w-9 h-9 rounded-full bg-slate-100/90 hover:bg-slate-200/90 text-slate-700 border border-slate-200/80 transition-colors shadow-2xs flex items-center justify-center cursor-pointer"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
             </button>
             <button
               onClick={handlePrint}
               title="Print badge pass"
-              className="p-2 rounded-xl bg-white border border-slate-200/90 text-slate-700 hover:bg-slate-100 transition-colors shadow-2xs cursor-pointer"
+              className="w-9 h-9 rounded-full bg-slate-100/90 hover:bg-slate-200/90 text-slate-700 border border-slate-200/80 transition-colors shadow-2xs flex items-center justify-center cursor-pointer"
             >
               <Printer className="w-4 h-4" />
             </button>
           </div>
         </header>
 
-        {/* ======================================================== */}
-        {/* WHITE MINIMAL & PROFESSIONAL BADGE CARD                   */}
-        {/* ======================================================== */}
-        <section className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden print:border-slate-300 print:shadow-none">
-          
-          {/* Institution Header Row */}
-          <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-3">
-            <div className="flex items-center space-x-3 min-w-0">
-              {school.logo ? (
-                <img
-                  src={school.logo}
-                  alt={school.name}
-                  className="w-11 h-11 rounded-xl object-contain bg-white p-1 border border-slate-200/80 shrink-0"
-                />
-              ) : (
-                <div className="w-11 h-11 rounded-xl bg-slate-100 border border-slate-200/80 flex items-center justify-center font-bold text-slate-800 text-base shrink-0">
-                  {school.name ? school.name.charAt(0).toUpperCase() : <SchoolIcon className="w-5 h-5 text-slate-600" />}
-                </div>
-              )}
-              <div className="truncate">
-                <span className="text-[10px] font-bold tracking-wider uppercase text-slate-400 block">
-                  INSTITUTION
-                </span>
-                <h2 className="text-xs sm:text-sm font-bold text-slate-900 truncate">
-                  {school.name}
-                </h2>
-              </div>
-            </div>
-
-            <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-              <ShieldCheck className="w-3 h-3 text-emerald-600" />
-              <span>OFFICIAL</span>
-            </span>
+        {/* ========================================================================= */}
+        {/* PHYSICAL LANYARD STRAP & CHROME BADGE CLAMP (EVENTLOO INDIGO COLOR)       */}
+        {/* ========================================================================= */}
+        <div className="relative flex flex-col items-center pt-2 -mb-7 z-10 print:hidden select-none pointer-events-none">
+          {/* Lanyard Fabric Ribbon */}
+          <div className="w-12 h-16 bg-gradient-to-r from-indigo-800 via-indigo-600 to-indigo-800 shadow-md relative overflow-hidden flex items-center justify-center">
+            {/* Subtle woven fabric texture lines */}
+            <div className="absolute inset-0 bg-[repeating-linear-gradient(45deg,transparent,transparent_2px,rgba(255,255,255,0.08)_2px,rgba(255,255,255,0.08)_4px)]" />
+            <div className="w-full h-full border-x border-indigo-950/30" />
           </div>
 
-          {/* Event Title & Metadata Banner */}
-          <div className="px-5 py-3 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between">
-            <div className="min-w-0 pr-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                FESTIVAL / EVENT
-              </span>
-              <h3 className="text-sm font-bold text-slate-900 truncate">
-                {event.title}
-              </h3>
+          {/* Chrome / Metallic Buckle Clamp */}
+          <div className="w-12 h-7 bg-gradient-to-b from-slate-200 via-white to-slate-400 rounded-sm border border-slate-300 shadow-md relative -mt-0.5 flex flex-col items-center justify-center">
+            {/* Clamp highlight & screw detailing */}
+            <div className="w-10 h-0.5 bg-white/90 shadow-2xs" />
+            <div className="flex items-center justify-between w-9 mt-1 px-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-slate-400 border border-slate-300 shadow-inner" />
+              <div className="w-1.5 h-1.5 rounded-full bg-slate-400 border border-slate-300 shadow-inner" />
             </div>
-            {event.start_date && (
-              <div className="text-right shrink-0">
-                <span className="text-[11px] font-medium text-slate-600 flex items-center justify-end space-x-1">
-                  <Calendar className="w-3 h-3 text-slate-400" />
-                  <span>{formatDate(event.start_date)}</span>
+          </div>
+
+          {/* Transparent / Metallic Hook Loop going through card hole */}
+          <div className="w-5 h-4 bg-gradient-to-b from-slate-400 via-slate-200 to-slate-400 rounded-b-md shadow-xs -mt-0.5 border border-slate-400/80" />
+        </div>
+
+        {/* ========================================================================= */}
+        {/* WHITE MINIMAL & PROFESSIONAL BADGE CARD (EXACT MODEL UI MATCH)            */}
+        {/* ========================================================================= */}
+        <section className="bg-white rounded-[32px] border border-slate-200/80 shadow-xl shadow-slate-200/60 overflow-hidden relative print:border-slate-300 print:shadow-none print:mt-0">
+          
+          {/* Lanyard Hole Cutout Slot in Card */}
+          <div className="pt-4 flex justify-center print:hidden">
+            <div className="w-16 h-3 bg-slate-200/90 rounded-full border border-slate-300/60 shadow-inner" />
+          </div>
+
+          <div className="px-6 pt-3 pb-0">
+            {/* Top Row: Institution Name & OFFICIAL Pill */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                {/* Eventloo Indigo Accent Bar */}
+                <div className="w-1.5 h-7 rounded-full bg-indigo-600 shrink-0 mt-0.5" />
+                <div className="truncate">
+                  <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate">
+                    {school.name || 'Institution'}
+                  </h2>
+                  <span className="text-[9px] font-extrabold tracking-[0.2em] text-slate-400 uppercase block mt-0.5">
+                    INSTITUTION
+                  </span>
+                </div>
+              </div>
+
+              {/* Official Verified Pill */}
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 shadow-2xs">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span>OFFICIAL</span>
+              </span>
+            </div>
+
+            {/* Festival / Event Section */}
+            <div className="flex items-end justify-between mt-5 pb-3 border-b border-slate-100">
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  FESTIVAL / EVENT
                 </span>
-                {event.venue && (
-                  <span className="text-[10px] text-slate-400 block truncate max-w-[140px]">
-                    {event.venue}
+                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
+                  {event.title}
+                </h3>
+              </div>
+
+              {event.start_date && (
+                <div className="text-right shrink-0 pb-0.5">
+                  <span className="text-xs font-semibold text-slate-500 flex items-center justify-end gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{formatDate(event.start_date)}</span>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Avatar & Participant Identity */}
+            <div className="text-center pt-5">
+              {/* Circular Avatar with Tinted Ring */}
+              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-indigo-600/70 bg-indigo-50/70 flex items-center justify-center mx-auto shadow-xs">
+                {participant.name ? (
+                  <span className="text-3xl sm:text-4xl font-black text-indigo-700">
+                    {participant.name.charAt(0).toUpperCase()}
+                  </span>
+                ) : (
+                  <User className="w-10 h-10 text-indigo-400" />
+                )}
+              </div>
+
+              {/* Participant Name */}
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase mt-4">
+                {participant.name}
+              </h1>
+
+              {/* CHEST NO #1000 Hero Pill */}
+              <div className="mt-3 inline-flex items-center rounded-full bg-[#1e1b4b] text-white px-5 py-2 shadow-sm">
+                <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-200/90">
+                  CHEST NO
+                </span>
+                <span className="h-3.5 w-px bg-white/20 mx-2.5" />
+                <span className="text-base sm:text-lg font-black text-white tracking-wider">
+                  #{participant.chest_number || 'N/A'}
+                </span>
+              </div>
+
+              {/* Metadata Badges: Team, Category, Grade */}
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
+                {participant.team_name && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold">
+                    <Users className="w-3.5 h-3.5 text-slate-500" />
+                    <span>{participant.team_name}</span>
+                  </span>
+                )}
+
+                {participant.category && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold uppercase">
+                    <Layers className="w-3.5 h-3.5 text-slate-500" />
+                    <span>{participant.category}</span>
+                  </span>
+                )}
+
+                {(participant.grade || participant.student_id) && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold">
+                    <Hash className="w-3.5 h-3.5 text-slate-500" />
+                    <span>
+                      {participant.grade ? `Grade ${participant.grade}` : `ID: ${participant.student_id}`}
+                      {participant.section ? ` - ${participant.section}` : ''}
+                    </span>
                   </span>
                 )}
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Participant Identity Hero */}
-          <div className="p-6 text-center">
-            
-            {/* Clean Avatar */}
-            <div className="relative inline-block mb-2.5">
-              <div className="w-20 h-20 rounded-full bg-slate-100 border-2 border-slate-200/90 flex items-center justify-center text-2xl font-bold text-slate-700 mx-auto shadow-xs">
-                {participant.name ? participant.name.charAt(0).toUpperCase() : <User className="w-8 h-8 text-slate-400" />}
-              </div>
-              <div className="absolute bottom-0 right-0 w-5 h-5 rounded-full bg-emerald-600 text-white flex items-center justify-center border-2 border-white shadow-xs">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-              </div>
-            </div>
-
-            {/* Participant Name */}
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight uppercase leading-snug">
-              {participant.name}
-            </h1>
-
-            {/* Chest Number Badge - Bold, Minimal, High-Contrast */}
-            <div className="mt-3 inline-flex items-center space-x-2 px-4 py-1.5 rounded-xl bg-slate-900 text-white font-mono shadow-xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                CHEST NO
-              </span>
-              <span className="text-lg font-bold text-white tracking-tight">
-                #{participant.chest_number || 'N/A'}
-              </span>
-            </div>
-
-            {/* Details Tags */}
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5 text-xs">
-              <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 font-medium">
-                <Users className="w-3.5 h-3.5 text-slate-500" />
-                <span>{participant.team_name || 'Individual'}</span>
-              </span>
-
-              <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 font-medium uppercase">
-                <Layers className="w-3.5 h-3.5 text-slate-500" />
-                <span>{participant.category || 'General'}</span>
-              </span>
-
-              {(participant.grade || participant.student_id) && (
-                <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 border border-slate-200 font-medium">
-                  <Hash className="w-3.5 h-3.5 text-slate-500" />
-                  <span>
-                    {participant.grade ? `Grade ${participant.grade}` : `ID: ${participant.student_id}`}
-                    {participant.section ? ` - ${participant.section}` : ''}
-                  </span>
-                </span>
-              )}
-            </div>
-
-            {/* Metric Counters Grid */}
-            <div className="mt-6 pt-5 border-t border-slate-100 grid grid-cols-3 gap-2 text-center">
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                  Total Events
-                </span>
-                <span className="text-lg font-bold text-slate-900 mt-0.5 block">
-                  {stats.total_programs}
-                </span>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                  Stage Events
-                </span>
-                <span className="text-lg font-bold text-slate-900 mt-0.5 block">
-                  {stats.stage_count}
-                </span>
-              </div>
-
-              <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                  Off-Stage
-                </span>
-                <span className="text-lg font-bold text-slate-900 mt-0.5 block">
-                  {stats.offstage_count}
-                </span>
-              </div>
-            </div>
-
+          {/* Bottom Dual-Tone Wave Graphic in Eventloo Indigo */}
+          <div className="w-full overflow-hidden leading-none mt-6 -mb-1 select-none pointer-events-none">
+            <svg
+              viewBox="0 0 400 55"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="w-full h-14 block object-cover"
+              preserveAspectRatio="none"
+            >
+              <path
+                d="M0 32C80 12 160 45 240 22C310 3 360 16 400 12V55H0V32Z"
+                fill="url(#badgeWaveLight)"
+                opacity="0.35"
+              />
+              <path
+                d="M0 42C100 22 190 52 280 30C335 15 375 28 400 24V55H0V42Z"
+                fill="url(#badgeWaveDark)"
+              />
+              <defs>
+                <linearGradient id="badgeWaveLight" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#818CF8" />
+                  <stop offset="100%" stopColor="#4F46E5" />
+                </linearGradient>
+                <linearGradient id="badgeWaveDark" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#4338CA" />
+                  <stop offset="100%" stopColor="#1E1B4B" />
+                </linearGradient>
+              </defs>
+            </svg>
           </div>
 
         </section>
 
-        {/* ======================================================== */}
-        {/* TABS (Programs vs Digital QR Pass)                        */}
-        {/* ======================================================== */}
-        <div className="flex bg-slate-200/70 p-1 rounded-xl border border-slate-200/90 print:hidden">
+        {/* ========================================================================= */}
+        {/* STATS BAR (TOTAL EVENTS | STAGE EVENTS | OFF-STAGE)                       */}
+        {/* ========================================================================= */}
+        <section className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs flex items-center justify-around divide-x divide-slate-100">
+          {/* Total Events */}
+          <div className="flex items-center gap-3 px-2 flex-1 justify-center">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Calendar className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
+                {stats.total_programs}
+              </span>
+              <span className="text-[11px] font-medium text-slate-500 block">
+                Total Events
+              </span>
+            </div>
+          </div>
+
+          {/* Stage Events */}
+          <div className="flex items-center gap-3 px-2 flex-1 justify-center">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Layers className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
+                {stats.stage_count}
+              </span>
+              <span className="text-[11px] font-medium text-slate-500 block">
+                Stage Events
+              </span>
+            </div>
+          </div>
+
+          {/* Off-Stage Events */}
+          <div className="flex items-center gap-3 px-2 flex-1 justify-center">
+            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <Flag className="w-4 h-4" />
+            </div>
+            <div>
+              <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
+                {stats.offstage_count}
+              </span>
+              <span className="text-[11px] font-medium text-slate-500 block">
+                Off-Stage
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================================= */}
+        {/* TAB BUTTONS (Programs (X) | Digital QR Pass)                              */}
+        {/* ========================================================================= */}
+        <div className="flex items-center gap-2 pt-1 print:hidden">
           <button
             onClick={() => setActiveTab('programs')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
+            className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
               activeTab === 'programs'
-                ? 'bg-white text-slate-900 shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-[#1e1b4b] text-white shadow-sm'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80'
             }`}
           >
-            <Award className="w-3.5 h-3.5 text-slate-500" />
+            <Bookmark className="w-4 h-4" />
             <span>Programs ({programs.length})</span>
           </button>
 
           <button
             onClick={() => setActiveTab('qr')}
-            className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center space-x-1.5 ${
+            className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
               activeTab === 'qr'
-                ? 'bg-white text-slate-900 shadow-2xs'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-[#1e1b4b] text-white shadow-sm'
+                : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80'
             }`}
           >
-            <Share2 className="w-3.5 h-3.5 text-slate-500" />
+            <QrCode className="w-4 h-4" />
             <span>Digital QR Pass</span>
           </button>
         </div>
 
-        {/* ======================================================== */}
-        {/* TAB 1: ENROLLED COMPETITIONS LIST                         */}
-        {/* ======================================================== */}
+        {/* ========================================================================= */}
+        {/* TAB CONTENT 1: REGISTERED PROGRAMS LIST                                   */}
+        {/* ========================================================================= */}
         {(activeTab === 'programs' || window.matchMedia?.('print').matches) && (
-          <section className="space-y-2.5">
+          <section className="space-y-2.5 pt-1">
             <div className="flex items-center justify-between px-1">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                Registered Programs
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                REGISTERED PROGRAMS
               </h3>
-              <span className="text-[11px] text-slate-400 font-medium">
+              <span className="text-xs font-semibold text-slate-400">
                 {programs.length} total
               </span>
             </div>
 
             {programs.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {programs.map((prog, idx) => (
                   <div
                     key={prog.id || idx}
-                    className="bg-white rounded-xl p-3.5 sm:p-4 border border-slate-200/90 shadow-2xs space-y-2 hover:border-slate-300 transition-colors"
+                    className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-3 hover:shadow-xs transition-shadow"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-[10px] font-mono text-slate-400 font-bold">
-                            #{String(idx + 1).padStart(2, '0')}
-                          </span>
-                          <h4 className="text-sm font-bold text-slate-900 truncate">
-                            {prog.name}
-                          </h4>
-                        </div>
-
-                        {/* Program Meta Chips */}
-                        <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px]">
-                          {/* Stage or Offstage */}
-                          <span className="px-2 py-0.5 rounded-md font-medium text-[10px] bg-slate-100 text-slate-700 border border-slate-200">
-                            {prog.type_label || (prog.is_stage ? 'Stage' : 'Offstage')}
-                          </span>
-
-                          {/* Mode Solo/Group */}
-                          <span className="px-2 py-0.5 rounded-md font-medium text-[10px] bg-slate-100 text-slate-600 border border-slate-200">
-                            {prog.mode_label || (prog.is_team_based ? 'Group' : 'Individual')}
-                          </span>
-
-                          {/* Stage Venue */}
-                          {prog.stage_name && (
-                            <span className="inline-flex items-center space-x-1 text-slate-600 text-[11px]">
-                              <MapPin className="w-3 h-3 text-slate-400" />
-                              <span className="truncate max-w-[140px]">{prog.stage_name}</span>
-                            </span>
-                          )}
-
-                          {/* Scheduled Time */}
-                          {prog.start_time && (
-                            <span className="inline-flex items-center space-x-1 text-slate-600 text-[11px]">
-                              <Clock className="w-3 h-3 text-slate-400" />
-                              <span>{formatTime(prog.start_time)}</span>
-                            </span>
-                          )}
-                        </div>
+                    {/* Top Row: #01, Name, Status Badge */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="px-2 py-0.5 rounded-lg text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                          #{String(idx + 1).padStart(2, '0')}
+                        </span>
+                        <h4 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+                          {prog.name}
+                        </h4>
                       </div>
 
-                      {/* Status / Result Badge */}
-                      <div className="text-right shrink-0">
-                        {prog.status === 'Participated' ? (
-                          <div className="flex flex-col items-end">
-                            <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              Participated
-                            </span>
-                            {prog.position && (
-                              <span className="text-[11px] font-bold text-amber-700 mt-1">
-                                {prog.position === 1 ? '🥇 1st Place' : prog.position === 2 ? '🥈 2nd Place' : prog.position === 3 ? '🥉 3rd Place' : `Rank #${prog.position}`}
-                              </span>
-                            )}
-                            {prog.grade && prog.grade !== '-' && (
-                              <span className="text-[10px] font-medium text-slate-500">
-                                Grade: {prog.grade}
-                              </span>
-                            )}
-                          </div>
-                        ) : prog.status === 'Completed' ? (
-                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-                            Completed
-                          </span>
-                        ) : (
-                          <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                            Scheduled
+                      {/* Status badge */}
+                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                        {prog.status === 'Participated' ? 'Participated' : prog.status === 'Completed' ? 'Completed' : 'Scheduled'}
+                      </span>
+                    </div>
+
+                    {/* Bottom Row: Tags (Stage, Group, Venue) & Awards */}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5 text-slate-600">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium text-[11px]">
+                          {prog.type_label || (prog.is_stage ? 'Stage' : 'Off-Stage')}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium text-[11px]">
+                          {prog.mode_label || (prog.is_team_based ? 'Group' : 'Individual')}
+                        </span>
+                        {prog.stage_name && (
+                          <span className="flex items-center gap-1 text-slate-500 text-xs ml-1">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                            <span className="truncate max-w-[130px]">{prog.stage_name}</span>
                           </span>
                         )}
                       </div>
+
+                      {/* Award / Result */}
+                      {prog.position ? (
+                        <span className="font-bold text-amber-600 flex items-center gap-1 text-xs shrink-0">
+                          <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                          <span>
+                            {prog.position === 1 ? '1st Place' : prog.position === 2 ? '2nd Place' : prog.position === 3 ? '3rd Place' : `Rank #${prog.position}`}
+                          </span>
+                        </span>
+                      ) : prog.grade && prog.grade !== '-' ? (
+                        <span className="font-bold text-indigo-600 text-xs shrink-0">
+                          Grade {prog.grade}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="bg-white rounded-xl p-6 text-center text-xs text-slate-400 border border-slate-200/90">
+              <div className="bg-white rounded-2xl p-8 text-center text-xs text-slate-400 border border-slate-200/80 shadow-2xs">
                 No programs assigned to this participant yet.
               </div>
             )}
           </section>
         )}
 
-        {/* ======================================================== */}
-        {/* TAB 2: DIGITAL QR CODE PASS                               */}
-        {/* ======================================================== */}
+        {/* ========================================================================= */}
+        {/* TAB CONTENT 2: DIGITAL QR PASS (SCANNABLE VERIFICATION CARD)              */}
+        {/* ========================================================================= */}
         {activeTab === 'qr' && (
-          <section className="bg-white rounded-2xl p-6 border border-slate-200/90 shadow-sm text-center space-y-4">
+          <section className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs text-center space-y-4">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Official QR Digital Pass</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Scan with any smartphone camera to verify participant credentials.
+              <h3 className="text-base font-bold text-slate-900">Official Digital QR Pass</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                Scan with any smartphone camera to verify participant credentials and live results.
               </p>
             </div>
 
-            {/* QR Card Box */}
+            {/* High-Resolution QR Frame */}
             <div className="mx-auto w-56 h-56 bg-white p-3 rounded-2xl shadow-xs flex items-center justify-center border border-slate-200">
               <QRCodeSVG
                 svgString={qr_code_svg}
                 eventId={event.id}
                 studentId={participant.id}
                 value={publicUrl}
-                size={200}
+                size={210}
                 className="w-full h-full"
               />
             </div>
@@ -480,20 +521,20 @@ const PublicParticipantBadge = () => {
             <div className="pt-2">
               <button
                 onClick={handleCopyLink}
-                className="w-full py-2 px-4 rounded-xl bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors shadow-xs flex items-center justify-center space-x-2 cursor-pointer"
+                className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer"
               >
-                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4 text-slate-300" />}
-                <span>{copied ? 'Link Copied!' : 'Copy Public URL'}</span>
+                {copied ? <Check className="w-4 h-4 text-white" /> : <Copy className="w-4 h-4 text-white" />}
+                <span>{copied ? 'Link Copied to Clipboard!' : 'Copy Verification Link'}</span>
               </button>
             </div>
           </section>
         )}
 
-        {/* ======================================================== */}
-        {/* FOOTER                                                    */}
-        {/* ======================================================== */}
-        <footer className="pt-3 pb-2 text-center space-y-1.5">
-          <div className="inline-flex items-center space-x-1.5 text-xs text-slate-500">
+        {/* ========================================================================= */}
+        {/* FOOTER                                                                    */}
+        {/* ========================================================================= */}
+        <footer className="pt-4 pb-2 text-center space-y-1 print:hidden">
+          <div className="inline-flex items-center gap-1.5 text-xs text-slate-500">
             <span>Powered by</span>
             <span className="font-bold text-slate-800">Eventloo</span>
           </div>
