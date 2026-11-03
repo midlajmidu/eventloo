@@ -33,9 +33,12 @@ if not _allowed_hosts_value and not DEBUG and not _is_test_run:
     raise ImproperlyConfigured('ALLOWED_HOSTS must be explicitly set in production.')
 ALLOWED_HOSTS = [
     host.strip() for host in (
-        _allowed_hosts_value or '127.0.0.1,localhost'
+        _allowed_hosts_value or '127.0.0.1,localhost,testserver'
     ).split(',') if host.strip()
 ]
+if DEBUG and 'testserver' not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append('testserver')
+
 
 # Application definition
 INSTALLED_APPS = [

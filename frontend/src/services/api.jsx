@@ -208,9 +208,25 @@ export const usersAPI = {
   remove: (id) => api.delete(`users/${id}/`),
 };
 
+// Public API for unauthenticated views (e.g., QR-scanned digital participant badges)
+export const publicAPI = {
+  getParticipantBadge: (eventId, studentIdentifier, params = {}) => {
+    return axios.get(`${API_BASE_URL}events/${eventId}/participants/${studentIdentifier}/public-badge/`, {
+      params,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+  },
+  getParticipantQrUrl: (eventId, studentIdentifier, targetUrl = '', size = 240) => {
+    const params = new URLSearchParams();
+    if (targetUrl) params.append('target_url', targetUrl);
+    if (size) params.append('size', size.toString());
+    return `${API_BASE_URL}events/${eventId}/participants/${studentIdentifier}/qr/?${params.toString()}`;
+  },
+};
 
 
-// Events API
 export const eventsAPI = {
   // Generic get method for custom endpoints
   get: (url) => api.get(url),

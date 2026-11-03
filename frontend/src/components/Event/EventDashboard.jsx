@@ -89,7 +89,7 @@ const EventDashboard = () => {
     { id: 'top-scorers', name: 'Top Scorers', icon: Medal, description: 'View event top performers and points' },
     { id: 'documents', name: 'Documents', icon: FileText, description: 'Generate calling sheets & valuation forms' },
     { id: 'points', name: 'Points', icon: Award, description: 'Team points overview' },
-    { id: 'certificates', name: 'Templates', icon: Sparkles, description: 'Design certificates & badge templates' },
+    { id: 'certificates', name: 'Templates', icon: Sparkles, description: 'Design certificate templates' },
     { id: 'settings', name: 'Settings', icon: Settings, description: 'Event judge & mark configuration' },
   ];
 

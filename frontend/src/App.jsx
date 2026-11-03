@@ -32,6 +32,7 @@ import TeamEventDetail from './components/TeamManager/TeamEventDetail';
 import TeamStudents from './components/TeamManager/TeamStudents';
 import ProgramAssignmentPage from './components/TeamManager/ProgramAssignmentPage';
 import TeamEventDashboard from './components/TeamManager/TeamEventDashboard';
+import PublicParticipantBadge from './components/Public/PublicParticipantBadge';
 
 import './index.css';
 
@@ -69,6 +70,9 @@ function App() {
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/super-admin/login" element={<SuperAdminLogin />} />
+          <Route path="/events/:eventId/badge/:studentId" element={<PublicParticipantBadge />} />
+          <Route path="/public/events/:eventId/participants/:studentId" element={<PublicParticipantBadge />} />
+          <Route path="/public/events/:eventId/badges/:chestOrStudentId" element={<PublicParticipantBadge />} />
           <Route
             path="/super-admin"
             element={

@@ -65,4 +65,8 @@ urlpatterns = [
     path('events/<int:event_id>/certificate-templates/<str:certificate_type>/', views.certificate_template_detail, name='certificate_template_detail'),
     path('events/<int:event_id>/certificate-preview-data/', views.certificate_preview_data, name='certificate_preview_data'),
     path('events/<int:event_id>/certificates/', views.generate_certificates, name='generate_certificates'),
+
+    # Public Participant Badge & QR endpoints (No auth required)
+    path('events/<int:event_id>/participants/<str:student_identifier>/public-badge/', views.get_public_participant_badge, name='get_public_participant_badge'),
+    path('events/<int:event_id>/participants/<str:student_identifier>/qr/', views.get_participant_qr_code, name='get_participant_qr_code'),
 ]

@@ -22,7 +22,6 @@ const TEMPLATE_TYPES = [
   { id: 'second_place', title: '2nd Place Certificate', subtitle: 'Choose a template', defaultStatus: 'Missing' },
   { id: 'third_place', title: '3rd Place Certificate', subtitle: 'Choose a template', defaultStatus: 'Missing' },
   { id: 'participation', title: 'Participation Certificate', subtitle: 'Choose a template', defaultStatus: 'Missing' },
-  { id: 'badge', title: 'Badge', subtitle: 'Choose a template', defaultStatus: 'Missing' },
   { id: 'common_prize', title: 'Common Prize Certificate', subtitle: 'Coming Soon', defaultStatus: 'Missing', comingSoon: true },
   { id: 'grade_certificate', title: 'Grade Certificate', subtitle: 'Coming Soon', defaultStatus: 'Missing', comingSoon: true },
   { id: 'result_poster', title: 'Result Poster', subtitle: 'Coming Soon', defaultStatus: 'Missing', comingSoon: true }

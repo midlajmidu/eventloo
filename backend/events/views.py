@@ -7949,3 +7949,260 @@ def generate_certificates(request, event_id):
     except Exception:
         logger.exception('Certificate PDF generation failed')
         return Response({'error': 'Unable to generate certificates.'}, status=500)
+
+
+def generate_qr_svg_string(url_or_text, size=200):
+    """Generate scalable vector SVG string for QR code using ReportLab"""
+    try:
+        from reportlab.graphics.barcode.qr import QrCodeWidget
+        from reportlab.graphics.shapes import Drawing
+        from reportlab.graphics import renderSVG
+        qr = QrCodeWidget(url_or_text)
+        bounds = qr.getBounds()
+        w = max(bounds[2] - bounds[0], 1)
+        h = max(bounds[3] - bounds[1], 1)
+        d = Drawing(size, size, transform=[size / w, 0, 0, size / h, 0, 0])
+        d.add(qr)
+        return renderSVG.drawToString(d)
+    except Exception as e:
+        logger.warning(f"QR code generation failed: {e}")
+        return ""
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_public_participant_badge(request, event_id, student_identifier):
+    """
+    Public endpoint to view an event-specific participant digital badge.
+    Allows parents, judges, and attendees to scan a QR code on mobile
+    and view verified participant information without authentication.
+    """
+    try:
+        event = Event.objects.select_related('school').get(id=event_id)
+    except Event.DoesNotExist:
+        return Response({'error': 'Event not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    chest_obj = None
+    student = None
+
+    # 1. Check by chest number in this event
+    if student_identifier.isdigit():
+        chest_obj = ChestNumber.objects.filter(
+            event=event, chest_number=int(student_identifier)
+        ).select_related('student', 'team').first()
+
+    # 2. Check by student user PK
+    if not chest_obj and student_identifier.isdigit():
+        chest_obj = ChestNumber.objects.filter(
+            event=event, student_id=int(student_identifier)
+        ).select_related('student', 'team').first()
+        if not chest_obj:
+            student = User.objects.filter(id=int(student_identifier), school_id=event.school_id).first()
+
+    # 3. Check by student's admission / student_id string
+    if not chest_obj and not student:
+        chest_obj = ChestNumber.objects.filter(
+            event=event, student__student_id=student_identifier
+        ).select_related('student', 'team').first()
+        if not chest_obj:
+            student = User.objects.filter(student_id=student_identifier, school_id=event.school_id).first()
+
+    if chest_obj:
+        student = chest_obj.student
+
+    if not student:
+        return Response({'error': 'Participant not found for this event.'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Ensure chest_obj is loaded if student was resolved first
+    if not chest_obj:
+        chest_obj = ChestNumber.objects.filter(event=event, student=student).select_related('team').first()
+
+    # Resolve team
+    team = None
+    if chest_obj and chest_obj.team:
+        team = chest_obj.team
+    else:
+        assignment_with_team = ProgramAssignment.objects.filter(
+            program__event=event, student=student, team__isnull=False
+        ).select_related('team').first()
+        if assignment_with_team:
+            team = assignment_with_team.team
+
+    # Fetch all assigned programs for this participant in this event
+    assignments = ProgramAssignment.objects.filter(
+        program__event=event,
+        student=student
+    ).select_related('program', 'program__stage', 'team').order_by('program__start_time', 'program__name')
+
+    programs_list = []
+    total_points = 0
+    stage_count = 0
+    offstage_count = 0
+
+    for pa in assignments:
+        prog = pa.program
+        if not prog:
+            continue
+
+        is_stage = getattr(prog, 'program_type', 'off_stage') == 'stage'
+        if is_stage:
+            stage_count += 1
+        else:
+            offstage_count += 1
+
+        result = None
+        if not prog.is_team_based:
+            result = ProgramResult.objects.filter(program=prog, participant=student).first()
+        elif team or pa.team:
+            effective_team = pa.team or team
+            result = ProgramResult.objects.filter(
+                program=prog, team=effective_team, sub_team_number=pa.sub_team_number or 1
+            ).first()
+
+        status_str = 'Scheduled'
+        grade_str = '-'
+        position_val = None
+        points_val = 0
+
+        if result and result.entry_status == 'submitted' and prog.is_published:
+            status_str = 'Participated'
+            grade_str = result.grade or '-'
+            position_val = result.position
+            awarded = getattr(result, 'points_earned', 0) or 0
+            if not prog.is_team_based:
+                points_val = awarded
+                total_points += points_val
+            else:
+                points_val = awarded
+        elif prog.is_finished:
+            status_str = 'Completed'
+
+        # Stage / Venue
+        stage_name = ''
+        if prog.stage:
+            stage_name = prog.stage.display_name
+        elif prog.venue:
+            stage_name = prog.venue
+        else:
+            stage_name = 'Stage TBA' if is_stage else 'Off-stage TBA'
+
+        start_time_iso = prog.start_time.isoformat() if prog.start_time else None
+        end_time_iso = prog.end_time.isoformat() if prog.end_time else None
+
+        programs_list.append({
+            'id': prog.id,
+            'name': prog.name,
+            'category': prog.category,
+            'program_type': prog.program_type,
+            'type_label': 'Stage' if is_stage else 'Offstage',
+            'is_stage': is_stage,
+            'is_team_based': prog.is_team_based,
+            'mode_label': 'Group' if prog.is_team_based else 'Individual',
+            'stage_name': stage_name,
+            'start_time': start_time_iso,
+            'end_time': end_time_iso,
+            'status': status_str,
+            'grade': grade_str,
+            'position': position_val,
+            'points': points_val,
+        })
+
+    # School branding from System Settings
+    school = event.school
+    school_logo_url = None
+    if school and school.logo:
+        try:
+            school_logo_url = request.build_absolute_uri(school.logo.url)
+        except Exception:
+            school_logo_url = getattr(school.logo, 'url', None)
+
+    category_name = student.category or (programs_list[0]['category'] if programs_list else 'General')
+    if category_name:
+        category_name = category_name.upper()
+
+    origin = request.headers.get('Origin') or request.META.get('HTTP_ORIGIN') or ''
+    custom_target = request.query_params.get('target_url')
+    if custom_target:
+        public_url = custom_target
+    elif origin:
+        public_url = f"{origin.rstrip('/')}/events/{event.id}/badge/{student.id}"
+    else:
+        try:
+            public_url = request.build_absolute_uri(f"/events/{event.id}/badge/{student.id}")
+        except Exception:
+            public_url = f"/events/{event.id}/badge/{student.id}"
+
+    qr_svg = generate_qr_svg_string(public_url, size=240)
+
+    return Response({
+        'status': 'success',
+        'school': {
+            'id': school.id if school else None,
+            'name': school.name if school else 'School',
+            'logo': school_logo_url,
+            'email': getattr(school, 'email', ''),
+            'phone': getattr(school, 'phone', ''),
+            'address': getattr(school, 'address', ''),
+        },
+        'event': {
+            'id': event.id,
+            'title': event.title,
+            'description': event.description,
+            'start_date': event.start_date.isoformat() if event.start_date else None,
+            'end_date': event.end_date.isoformat() if event.end_date else None,
+            'venue': event.venue or '',
+            'status': event.status,
+            'academic_year': getattr(event, 'academic_year', ''),
+        },
+        'participant': {
+            'id': student.id,
+            'name': student.get_full_name(),
+            'student_id': student.student_id or '',
+            'chest_number': chest_obj.chest_number if chest_obj else None,
+            'category': category_name,
+            'gender': student.gender or '',
+            'grade': student.grade or '',
+            'section': student.section or '',
+            'team_id': team.id if team else None,
+            'team_name': team.name if team else 'Individual',
+        },
+        'stats': {
+            'total_programs': len(programs_list),
+            'stage_count': stage_count,
+            'offstage_count': offstage_count,
+            'total_points': total_points,
+        },
+        'programs': programs_list,
+        'public_url': public_url,
+        'qr_code_svg': qr_svg,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_participant_qr_code(request, event_id, student_identifier):
+    """
+    Direct QR Code endpoint returning pure SVG image for a participant's badge.
+    Usage: <img src="/api/events/<event_id>/participants/<student_id>/qr/" />
+    """
+    target_url = request.query_params.get('target_url')
+    if not target_url:
+        origin = request.headers.get('Origin') or request.META.get('HTTP_ORIGIN') or ''
+        if origin:
+            target_url = f"{origin.rstrip('/')}/events/{event_id}/badge/{student_identifier}"
+        else:
+            try:
+                target_url = request.build_absolute_uri(f"/events/{event_id}/badge/{student_identifier}")
+            except Exception:
+                target_url = f"/events/{event_id}/badge/{student_identifier}"
+
+    try:
+        size = int(request.query_params.get('size', 200))
+    except (ValueError, TypeError):
+        size = 200
+
+    svg_data = generate_qr_svg_string(target_url, size=size)
+    response = HttpResponse(svg_data, content_type='image/svg+xml')
+    response['Cache-Control'] = 'public, max-age=3600'
+    return response
+
