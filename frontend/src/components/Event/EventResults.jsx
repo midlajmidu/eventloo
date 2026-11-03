@@ -44,6 +44,7 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
   const [teamPoints, setTeamPoints] = useState([]);
   const [loadingPoints, setLoadingPoints] = useState(false);
   const [pointsFilter, setPointsFilter] = useState('published'); // 'published' or 'all'
+  const [programWinnersMap, setProgramWinnersMap] = useState({});
 
   // Slide-over Drawer for Detailed View Result
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -92,6 +93,31 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
       const pointsRes = await eventPointsAPI.getEventTeamPoints(eventId, isPublishedOnly);
       const pointsList = Array.isArray(pointsRes.data) ? pointsRes.data : (pointsRes.data.results || []);
       setTeamPoints(pointsList);
+
+      // Extract winners for each program from the pointsList breakdown!
+      const winnersMap = {};
+      pointsList.forEach((team) => {
+        const progResults = team.program_results || [];
+        progResults.forEach((pr) => {
+          if (!winnersMap[pr.program_id]) {
+            winnersMap[pr.program_id] = [];
+          }
+          winnersMap[pr.program_id].push({
+            position: pr.position,
+            participant_name: pr.participant_name,
+            team_name: team.team_name,
+            points_earned: pr.points_earned,
+            grade: pr.grade,
+          });
+        });
+      });
+
+      // Sort winners for each program by position ascending
+      Object.keys(winnersMap).forEach((pId) => {
+        winnersMap[pId].sort((a, b) => (a.position || 999) - (b.position || 999));
+      });
+
+      setProgramWinnersMap(winnersMap);
     } catch (error) {
       console.error('Error loading team points:', error);
     } finally {
@@ -153,26 +179,37 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
     setLoadingDrawerResults(true);
 
     try {
-      const res = await markEntryAPI.getParticipants(eventId, program.id);
-      const allParticipants = res.data || [];
+      let allParticipants = [];
+      try {
+        const res = await markEntryAPI.getParticipants(eventId, program.id);
+        allParticipants = res.data || [];
+      } catch (err) {
+        console.warn('markEntryAPI error, attempting results API fallback:', err);
+      }
 
-      // Filter & Sort by position or average marks
-      const withMarks = allParticipants.filter(p =>
-        p.entry_status === 'submitted' && (
-          p.judge1_marks !== null ||
-          p.judge2_marks !== null ||
-          p.judge3_marks !== null ||
-          p.judge4_marks !== null ||
-          p.average_marks !== null ||
-          p.position > 0
-        )
+      if (!allParticipants || allParticipants.length === 0) {
+        try {
+          const res2 = await eventResultsAPI.getProgramResults(eventId, program.id);
+          allParticipants = Array.isArray(res2.data) ? res2.data : (res2.data?.results || []);
+        } catch (err2) {
+          console.warn('eventResultsAPI fallback error:', err2);
+        }
+      }
+
+      // Filter & Sort by position or marks
+      const withMarks = (allParticipants || []).filter(p =>
+        p.position > 0 ||
+        (p.points_earned && Number(p.points_earned) > 0) ||
+        p.entry_status === 'submitted' ||
+        p.average_marks !== null ||
+        p.total_marks !== null
       );
 
       const sorted = withMarks.sort((a, b) => {
         if (a.position && b.position) return a.position - b.position;
         if (a.position) return -1;
         if (b.position) return 1;
-        return (b.average_marks || 0) - (a.average_marks || 0);
+        return (Number(b.average_marks || b.total_marks) || 0) - (Number(a.average_marks || a.total_marks) || 0);
       });
 
       setDrawerResults(sorted);
@@ -394,14 +431,53 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                             #{idx + 1}
                           </td>
 
-                          {/* Competition Name & Category */}
+                          {/* Competition Name, Category & Live Winners */}
                           <td className="px-4 py-3">
-                            <div className="font-bold text-gray-900 text-xs">
-                              {prog.name}
+                            <div className="font-bold text-gray-900 text-xs flex items-center gap-2">
+                              <span>{prog.name}</span>
+                              {prog.is_team_based && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                  Group
+                                </span>
+                              )}
                             </div>
                             <div className="text-[11px] text-gray-400 font-medium mt-0.5">
                               {getCategoryName(prog.category)}
                             </div>
+
+                            {/* Live Published Winners Display */}
+                            {programWinnersMap[prog.id] && programWinnersMap[prog.id].length > 0 ? (
+                              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                                {programWinnersMap[prog.id].map((w, wIdx) => (
+                                  <span
+                                    key={wIdx}
+                                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${
+                                      w.position === 1
+                                        ? 'bg-amber-50 text-amber-900 border-amber-200 shadow-2xs'
+                                        : w.position === 2
+                                          ? 'bg-slate-50 text-slate-800 border-slate-200 shadow-2xs'
+                                          : 'bg-orange-50 text-orange-900 border-orange-200 shadow-2xs'
+                                    }`}
+                                  >
+                                    <span className="font-bold">
+                                      {w.position === 1 ? '🥇 1st' : w.position === 2 ? '🥈 2nd' : '🥉 3rd'}:
+                                    </span>
+                                    <span className="font-bold text-gray-900">{w.participant_name}</span>
+                                    <span className="text-[10px] text-slate-500 font-medium">({w.team_name})</span>
+                                    <span className="font-extrabold text-indigo-600">+{w.points_earned} pts</span>
+                                    {w.grade && (
+                                      <span className="ml-0.5 px-1 rounded bg-white text-[10px] font-extrabold border border-slate-200">
+                                        {w.grade}
+                                      </span>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : isPublished ? (
+                              <div className="mt-1.5 text-[11px] text-slate-400 italic">
+                                Results published · click View Results for full rankings
+                              </div>
+                            ) : null}
                           </td>
 
                           {/* Status Badge */}

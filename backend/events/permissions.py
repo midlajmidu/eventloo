@@ -178,7 +178,9 @@ class IsTeamManagerOrAdmin(permissions.BasePermission):
                 and (not event_id or Event.objects.filter(id=event_id, school_id=school_id).exists())
                 and (not program_id or Program.objects.filter(id=program_id, event__school_id=school_id).exists())
             )
-        is_team_view = getattr(view, 'basename', None) == 'team' or 'teams' in getattr(request, 'path', '')
+        is_team_view = getattr(view, 'basename', None) in ('team', 'teams') or (
+            '/teams/' in getattr(request, 'path', '') and '/events/' not in getattr(request, 'path', '')
+        )
         route_team_id = view.kwargs.get('team_id') or (view.kwargs.get('pk') if is_team_view else None)
         token_team_id = getattr(request.user, 'team_id', None)
 
