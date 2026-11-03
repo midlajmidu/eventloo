@@ -338,3 +338,45 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* 3D Flip Card Styles */
+.perspective-1200 {
+  perspective: 1200px;
+  -webkit-perspective: 1200px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+  -webkit-transform: rotateY(180deg);
+}
+
+.rotate-y-0 {
+  transform: rotateY(0deg);
+  -webkit-transform: rotateY(0deg);
+}
+
+/* Custom sleek slim scrollbar for badge back side */
+.badge-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.badge-scrollbar::-webkit-scrollbar-track {
+  background: #F1F5F9;
+  border-radius: 4px;
+}
+.badge-scrollbar::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+.badge-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
+}

@@ -17,7 +17,9 @@ import {
   Flag,
   Bookmark,
   QrCode,
-  Trophy
+  Trophy,
+  RotateCw,
+  RotateCcw
 } from 'lucide-react';
 import EventlooLogo from '../common/EventlooLogo';
 import QRCodeSVG from '../common/QRCodeSVG';
@@ -31,7 +33,8 @@ const PublicParticipantBadge = () => {
   const [badgeData, setBadgeData] = useState(null);
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState('programs'); // 'programs' | 'qr'
+  const [isFlipped, setIsFlipped] = useState(false);
+  const [backTab, setBackTab] = useState('programs'); // 'programs' | 'qr'
 
   useEffect(() => {
     if (eventId && identifier) {
@@ -152,353 +155,433 @@ const PublicParticipantBadge = () => {
         </div>
 
         {/* ========================================================================= */}
-        {/* WHITE MINIMAL & PROFESSIONAL BADGE CARD (EXACT MODEL UI MATCH)            */}
+        {/* 3D FLIP CARD CONTAINER (FRONT: ID BADGE | BACK: SCHEDULE, STATS & QR)     */}
         {/* ========================================================================= */}
-        <section className="bg-white rounded-[32px] border border-slate-200/80 shadow-xl shadow-slate-200/60 overflow-hidden relative print:border-slate-300 print:shadow-none print:mt-0">
-          
-          {/* Lanyard Hole Cutout Slot in Card */}
-          <div className="pt-4 flex justify-center print:hidden">
-            <div className="w-16 h-3 bg-slate-200/90 rounded-full border border-slate-300/60 shadow-inner" />
-          </div>
-
-          <div className="px-6 pt-3 pb-0">
-            {/* Top Row: Institution Name & OFFICIAL Pill */}
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-2.5 min-w-0">
-                {/* Eventloo Indigo Accent Bar */}
-                <div className="w-1.5 h-7 rounded-full bg-indigo-600 shrink-0 mt-0.5" />
-                <div className="truncate">
-                  <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate">
-                    {school.name || 'Institution'}
-                  </h2>
-                  <span className="text-[9px] font-extrabold tracking-[0.2em] text-slate-400 uppercase block mt-0.5">
-                    INSTITUTION
-                  </span>
-                </div>
-              </div>
-
-              {/* Official Verified Pill */}
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 shadow-2xs">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                <span>OFFICIAL</span>
-              </span>
-            </div>
-
-            {/* Festival / Event Section */}
-            <div className="flex items-end justify-between mt-5 pb-3 border-b border-slate-100">
-              <div className="min-w-0">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                  FESTIVAL / EVENT
-                </span>
-                <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
-                  {event.title}
-                </h3>
-              </div>
-
-              {event.start_date && (
-                <div className="text-right shrink-0 pb-0.5">
-                  <span className="text-xs font-semibold text-slate-500 flex items-center justify-end gap-1.5">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>{formatDate(event.start_date)}</span>
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Avatar & Participant Identity */}
-            <div className="text-center pt-5">
-              {/* Circular Avatar with Tinted Ring */}
-              <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-indigo-600/70 bg-indigo-50/70 flex items-center justify-center mx-auto shadow-xs">
-                {participant.name ? (
-                  <span className="text-3xl sm:text-4xl font-black text-indigo-700">
-                    {participant.name.charAt(0).toUpperCase()}
-                  </span>
-                ) : (
-                  <User className="w-10 h-10 text-indigo-400" />
-                )}
-              </div>
-
-              {/* Participant Name */}
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase mt-4">
-                {participant.name}
-              </h1>
-
-              {/* CHEST NO #1000 Hero Pill */}
-              <div className="mt-3 inline-flex items-center rounded-full bg-[#1e1b4b] text-white px-5 py-2 shadow-sm">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-200/90">
-                  CHEST NO
-                </span>
-                <span className="h-3.5 w-px bg-white/20 mx-2.5" />
-                <span className="text-base sm:text-lg font-black text-white tracking-wider">
-                  #{participant.chest_number || 'N/A'}
-                </span>
-              </div>
-
-              {/* Metadata Badges: Team, Category, Grade */}
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
-                {participant.team_name && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold">
-                    <Users className="w-3.5 h-3.5 text-slate-500" />
-                    <span>{participant.team_name}</span>
-                  </span>
-                )}
-
-                {participant.category && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold uppercase">
-                    <Layers className="w-3.5 h-3.5 text-slate-500" />
-                    <span>{participant.category}</span>
-                  </span>
-                )}
-
-                {(participant.grade || participant.student_id) && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold">
-                    <Hash className="w-3.5 h-3.5 text-slate-500" />
-                    <span>
-                      {participant.grade ? `Grade ${participant.grade}` : `ID: ${participant.student_id}`}
-                      {participant.section ? ` - ${participant.section}` : ''}
-                    </span>
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Bottom Dual-Tone Wave Graphic in Eventloo Indigo */}
-          <div className="w-full overflow-hidden leading-none mt-6 -mb-1 select-none pointer-events-none">
-            <svg
-              viewBox="0 0 400 55"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="w-full h-14 block object-cover"
-              preserveAspectRatio="none"
+        <div className="w-full perspective-1200 print:perspective-none">
+          <div
+            className={`relative w-full transition-transform duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] preserve-3d ${
+              isFlipped ? 'rotate-y-180' : 'rotate-y-0'
+            }`}
+          >
+            {/* --------------------------------------------------------------------- */}
+            {/* FRONT FACE: PHYSICAL CREDENTIAL BADGE                                  */}
+            {/* --------------------------------------------------------------------- */}
+            <div
+              onClick={() => setIsFlipped(true)}
+              title="Click to flip badge"
+              className="w-full bg-white rounded-[32px] border border-slate-200/80 shadow-xl shadow-slate-200/60 overflow-hidden relative cursor-pointer backface-hidden min-h-[580px] sm:min-h-[600px] flex flex-col justify-between transition-shadow hover:shadow-2xl select-none"
             >
-              <path
-                d="M0 32C80 12 160 45 240 22C310 3 360 16 400 12V55H0V32Z"
-                fill="url(#badgeWaveLight)"
-                opacity="0.35"
-              />
-              <path
-                d="M0 42C100 22 190 52 280 30C335 15 375 28 400 24V55H0V42Z"
-                fill="url(#badgeWaveDark)"
-              />
-              <defs>
-                <linearGradient id="badgeWaveLight" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#818CF8" />
-                  <stop offset="100%" stopColor="#4F46E5" />
-                </linearGradient>
-                <linearGradient id="badgeWaveDark" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stopColor="#4338CA" />
-                  <stop offset="100%" stopColor="#1E1B4B" />
-                </linearGradient>
-              </defs>
-            </svg>
-          </div>
+              {/* Lanyard Hole Cutout Slot in Card */}
+              <div className="pt-4 flex justify-center print:hidden">
+                <div className="w-16 h-3 bg-slate-200/90 rounded-full border border-slate-300/60 shadow-inner" />
+              </div>
 
-        </section>
-
-        {/* ========================================================================= */}
-        {/* STATS BAR (TOTAL EVENTS | STAGE EVENTS | OFF-STAGE)                       */}
-        {/* ========================================================================= */}
-        <section className="bg-white rounded-2xl border border-slate-200/90 p-4 shadow-2xs flex items-center justify-around divide-x divide-slate-100">
-          {/* Total Events */}
-          <div className="flex items-center gap-3 px-2 flex-1 justify-center">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <Calendar className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
-                {stats.total_programs}
-              </span>
-              <span className="text-[11px] font-medium text-slate-500 block">
-                Total Events
-              </span>
-            </div>
-          </div>
-
-          {/* Stage Events */}
-          <div className="flex items-center gap-3 px-2 flex-1 justify-center">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <Layers className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
-                {stats.stage_count}
-              </span>
-              <span className="text-[11px] font-medium text-slate-500 block">
-                Stage Events
-              </span>
-            </div>
-          </div>
-
-          {/* Off-Stage Events */}
-          <div className="flex items-center gap-3 px-2 flex-1 justify-center">
-            <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <Flag className="w-4 h-4" />
-            </div>
-            <div>
-              <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
-                {stats.offstage_count}
-              </span>
-              <span className="text-[11px] font-medium text-slate-500 block">
-                Off-Stage
-              </span>
-            </div>
-          </div>
-        </section>
-
-        {/* ========================================================================= */}
-        {/* TAB BUTTONS (Programs (X) | Digital QR Pass)                              */}
-        {/* ========================================================================= */}
-        <div className="flex items-center gap-2 pt-1 print:hidden">
-          <button
-            onClick={() => setActiveTab('programs')}
-            className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'programs'
-                ? 'bg-[#1e1b4b] text-white shadow-sm'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80'
-            }`}
-          >
-            <Bookmark className="w-4 h-4" />
-            <span>Programs ({programs.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('qr')}
-            className={`flex-1 py-3 px-4 rounded-xl font-bold text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer ${
-              activeTab === 'qr'
-                ? 'bg-[#1e1b4b] text-white shadow-sm'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200/80'
-            }`}
-          >
-            <QrCode className="w-4 h-4" />
-            <span>Digital QR Pass</span>
-          </button>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* TAB CONTENT 1: REGISTERED PROGRAMS LIST                                   */}
-        {/* ========================================================================= */}
-        {(activeTab === 'programs' || window.matchMedia?.('print').matches) && (
-          <section className="space-y-2.5 pt-1">
-            <div className="flex items-center justify-between px-1">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                REGISTERED PROGRAMS
-              </h3>
-              <span className="text-xs font-semibold text-slate-400">
-                {programs.length} total
-              </span>
-            </div>
-
-            {programs.length > 0 ? (
-              <div className="space-y-2.5">
-                {programs.map((prog, idx) => (
-                  <div
-                    key={prog.id || idx}
-                    className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-2xs space-y-3 hover:shadow-xs transition-shadow"
-                  >
-                    {/* Top Row: #01, Name, Status Badge */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="px-2 py-0.5 rounded-lg text-xs font-black bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
-                          #{String(idx + 1).padStart(2, '0')}
+              <div className="px-6 pt-3 pb-0 flex-1 flex flex-col justify-between">
+                <div>
+                  {/* Top Row: Institution Name & OFFICIAL Pill */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <div className="w-1.5 h-7 rounded-full bg-indigo-600 shrink-0 mt-0.5" />
+                      <div className="truncate">
+                        <h2 className="text-sm sm:text-base font-bold text-slate-900 leading-tight truncate">
+                          {school.name || 'Institution'}
+                        </h2>
+                        <span className="text-[9px] font-extrabold tracking-[0.2em] text-slate-400 uppercase block mt-0.5">
+                          INSTITUTION
                         </span>
-                        <h4 className="text-sm sm:text-base font-bold text-slate-900 truncate">
-                          {prog.name}
-                        </h4>
                       </div>
+                    </div>
 
-                      {/* Status badge */}
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                        {prog.status === 'Participated' ? 'Participated' : prog.status === 'Completed' ? 'Completed' : 'Scheduled'}
+                    {/* Official Verified Pill */}
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 shadow-2xs">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>OFFICIAL</span>
+                    </span>
+                  </div>
+
+                  {/* Festival / Event Section */}
+                  <div className="flex items-end justify-between mt-4 pb-3 border-b border-slate-100">
+                    <div className="min-w-0">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                        FESTIVAL / EVENT
+                      </span>
+                      <h3 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight mt-0.5 truncate">
+                        {event.title}
+                      </h3>
+                    </div>
+
+                    {event.start_date && (
+                      <div className="text-right shrink-0 pb-0.5">
+                        <span className="text-xs font-semibold text-slate-500 flex items-center justify-end gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{formatDate(event.start_date)}</span>
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Avatar & Participant Identity */}
+                  <div className="text-center pt-4">
+                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-indigo-600/70 bg-indigo-50/70 flex items-center justify-center mx-auto shadow-xs">
+                      {participant.name ? (
+                        <span className="text-3xl sm:text-4xl font-black text-indigo-700">
+                          {participant.name.charAt(0).toUpperCase()}
+                        </span>
+                      ) : (
+                        <User className="w-10 h-10 text-indigo-400" />
+                      )}
+                    </div>
+
+                    {/* Participant Name */}
+                    <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase mt-3">
+                      {participant.name}
+                    </h1>
+
+                    {/* CHEST NO #1000 Hero Pill */}
+                    <div className="mt-3 inline-flex items-center rounded-full bg-[#1e1b4b] text-white px-5 py-2 shadow-sm">
+                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-200/90">
+                        CHEST NO
+                      </span>
+                      <span className="h-3.5 w-px bg-white/20 mx-2.5" />
+                      <span className="text-base sm:text-lg font-black text-white tracking-wider">
+                        #{participant.chest_number || 'N/A'}
                       </span>
                     </div>
 
-                    {/* Bottom Row: Tags (Stage, Group, Venue) & Awards */}
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 text-xs">
-                      <div className="flex flex-wrap items-center gap-1.5 text-slate-600">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium text-[11px]">
-                          {prog.type_label || (prog.is_stage ? 'Stage' : 'Off-Stage')}
+                    {/* Metadata Badges: Team, Category, Grade */}
+                    <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 text-xs">
+                      {participant.team_name && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold">
+                          <Users className="w-3.5 h-3.5 text-slate-500" />
+                          <span>{participant.team_name}</span>
                         </span>
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium text-[11px]">
-                          {prog.mode_label || (prog.is_team_based ? 'Group' : 'Individual')}
-                        </span>
-                        {prog.stage_name && (
-                          <span className="flex items-center gap-1 text-slate-500 text-xs ml-1">
-                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                            <span className="truncate max-w-[130px]">{prog.stage_name}</span>
-                          </span>
-                        )}
-                      </div>
+                      )}
 
-                      {/* Award / Result */}
-                      {prog.position ? (
-                        <span className="font-bold text-amber-600 flex items-center gap-1 text-xs shrink-0">
-                          <Trophy className="w-3.5 h-3.5 text-amber-500" />
+                      {participant.category && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold uppercase">
+                          <Layers className="w-3.5 h-3.5 text-slate-500" />
+                          <span>{participant.category}</span>
+                        </span>
+                      )}
+
+                      {(participant.grade || participant.student_id) && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold">
+                          <Hash className="w-3.5 h-3.5 text-slate-500" />
                           <span>
-                            {prog.position === 1 ? '1st Place' : prog.position === 2 ? '2nd Place' : prog.position === 3 ? '3rd Place' : `Rank #${prog.position}`}
+                            {participant.grade ? `Grade ${participant.grade}` : `ID: ${participant.student_id}`}
+                            {participant.section ? ` - ${participant.section}` : ''}
                           </span>
                         </span>
-                      ) : prog.grade && prog.grade !== '-' ? (
-                        <span className="font-bold text-indigo-600 text-xs shrink-0">
-                          Grade {prog.grade}
-                        </span>
-                      ) : null}
+                      )}
                     </div>
                   </div>
-                ))}
+                </div>
+
+                {/* Flip Card Interactive Pill Hint */}
+                <div className="pt-3 pb-1 flex justify-center">
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all shadow-2xs border border-indigo-200/60 group">
+                    <RotateCw className="w-3.5 h-3.5 transition-transform group-hover:rotate-180 duration-500 text-indigo-600" />
+                    <span>Tap card to view schedule & stats</span>
+                  </div>
+                </div>
               </div>
-            ) : (
-              <div className="bg-white rounded-2xl p-8 text-center text-xs text-slate-400 border border-slate-200/80 shadow-2xs">
-                No programs assigned to this participant yet.
+
+              {/* Bottom Dual-Tone Wave Graphic in Eventloo Indigo */}
+              <div className="w-full overflow-hidden leading-none select-none pointer-events-none">
+                <svg
+                  viewBox="0 0 400 55"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-full h-14 block object-cover"
+                  preserveAspectRatio="none"
+                >
+                  <path
+                    d="M0 32C80 12 160 45 240 22C310 3 360 16 400 12V55H0V32Z"
+                    fill="url(#badgeWaveLightFront)"
+                    opacity="0.35"
+                  />
+                  <path
+                    d="M0 42C100 22 190 52 280 30C335 15 375 28 400 24V55H0V42Z"
+                    fill="url(#badgeWaveDarkFront)"
+                  />
+                  <defs>
+                    <linearGradient id="badgeWaveLightFront" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#818CF8" />
+                      <stop offset="100%" stopColor="#4F46E5" />
+                    </linearGradient>
+                    <linearGradient id="badgeWaveDarkFront" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#4338CA" />
+                      <stop offset="100%" stopColor="#1E1B4B" />
+                    </linearGradient>
+                  </defs>
+                </svg>
               </div>
-            )}
-          </section>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TAB CONTENT 2: DIGITAL QR PASS (SCANNABLE VERIFICATION CARD)              */}
-        {/* ========================================================================= */}
-        {activeTab === 'qr' && (
-          <section className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-2xs text-center space-y-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-900">Official Digital QR Pass</h3>
-              <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-                Scan with any smartphone camera to verify participant credentials and live results.
-              </p>
             </div>
 
-            {/* High-Resolution QR Frame */}
-            <div className="mx-auto w-56 h-56 bg-white p-3 rounded-2xl shadow-xs flex items-center justify-center border border-slate-200">
-              <QRCodeSVG
-                svgString={qr_code_svg}
-                eventId={event.id}
-                studentId={participant.id}
-                value={publicUrl}
-                size={210}
-                className="w-full h-full"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <div className="text-xs font-mono font-bold text-slate-800">
-                Participant Chest #{participant.chest_number || 'N/A'}
+            {/* --------------------------------------------------------------------- */}
+            {/* BACK FACE: SCHEDULE, 3 STATS BAR & REGISTERED PROGRAMS                */}
+            {/* --------------------------------------------------------------------- */}
+            <div
+              className="absolute inset-0 w-full h-full bg-white rounded-[32px] border border-slate-200/80 shadow-xl shadow-slate-200/60 overflow-hidden backface-hidden rotate-y-180 min-h-[580px] sm:min-h-[600px] flex flex-col justify-between"
+            >
+              {/* Lanyard Hole Cutout Slot in Card (matching front) */}
+              <div className="pt-4 flex justify-center print:hidden">
+                <div className="w-16 h-3 bg-slate-200/90 rounded-full border border-slate-300/60 shadow-inner" />
               </div>
-              <p className="text-[11px] text-slate-400 break-all px-2 font-mono">
-                {publicUrl}
-              </p>
+
+              <div className="px-5 pt-2 pb-0 flex-1 flex flex-col justify-between min-h-0">
+                <div>
+                  {/* Top Bar on Reverse Side */}
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-1.5 h-6 rounded-full bg-indigo-600 shrink-0" />
+                      <div className="truncate">
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block truncate">
+                          {school.name || 'Institution'}
+                        </span>
+                        <span className="text-[9px] font-extrabold tracking-widest text-slate-400 uppercase">
+                          SCHEDULE & STATS
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Flip back button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsFlipped(false);
+                      }}
+                      title="Flip to front"
+                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/70 transition-colors shadow-2xs cursor-pointer shrink-0"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Flip Front</span>
+                    </button>
+                  </div>
+
+                  {/* Participant quick recap */}
+                  <div className="flex items-center justify-between py-2 text-xs font-semibold text-slate-600">
+                    <span className="truncate uppercase font-bold text-slate-800">
+                      {participant.name}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-[#1e1b4b] text-white text-[10px] font-black tracking-wider shrink-0">
+                      #{participant.chest_number || 'N/A'}
+                    </span>
+                  </div>
+
+                  {/* ================================================================= */}
+                  {/* 3 STATS CARDS: Total Events | Stage Events | Off-Stage Events      */}
+                  {/* ================================================================= */}
+                  <div className="grid grid-cols-3 gap-2 my-1">
+                    {/* Total Events */}
+                    <div className="bg-slate-50/90 rounded-2xl p-2.5 border border-slate-200/60 text-center">
+                      <div className="w-7 h-7 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-1">
+                        <Calendar className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
+                        {stats.total_programs}
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-500 block">
+                        Total Events
+                      </span>
+                    </div>
+
+                    {/* Stage Events */}
+                    <div className="bg-slate-50/90 rounded-2xl p-2.5 border border-slate-200/60 text-center">
+                      <div className="w-7 h-7 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-1">
+                        <Layers className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
+                        {stats.stage_count}
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-500 block">
+                        Stage Events
+                      </span>
+                    </div>
+
+                    {/* Off-Stage Events */}
+                    <div className="bg-slate-50/90 rounded-2xl p-2.5 border border-slate-200/60 text-center">
+                      <div className="w-7 h-7 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-1">
+                        <Flag className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
+                        {stats.offstage_count}
+                      </span>
+                      <span className="text-[10px] font-semibold text-slate-500 block">
+                        Off-Stage
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Sub-tab Switcher: Programs | Digital QR */}
+                  <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl my-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setBackTab('programs');
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        backTab === 'programs'
+                          ? 'bg-white text-indigo-700 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Bookmark className="w-3.5 h-3.5" />
+                      <span>Programs ({programs.length})</span>
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setBackTab('qr');
+                      }}
+                      className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                        backTab === 'qr'
+                          ? 'bg-white text-indigo-700 shadow-2xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <QrCode className="w-3.5 h-3.5" />
+                      <span>QR Pass</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* TAB 1: REGISTERED PROGRAMS (Scrollable inside card) */}
+                {backTab === 'programs' && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="max-h-[200px] sm:max-h-[225px] overflow-y-auto badge-scrollbar space-y-2 pr-1 my-1"
+                  >
+                    {programs.length > 0 ? (
+                      programs.map((prog, idx) => (
+                        <div
+                          key={prog.id || idx}
+                          className="bg-slate-50/90 rounded-xl p-2.5 border border-slate-200/70 text-xs space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-indigo-100 text-indigo-700 shrink-0">
+                                #{String(idx + 1).padStart(2, '0')}
+                              </span>
+                              <h4 className="font-bold text-slate-900 truncate text-xs sm:text-sm">
+                                {prog.name}
+                              </h4>
+                            </div>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                              {prog.status || 'Scheduled'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px] text-slate-500 pt-0.5 border-t border-slate-200/50">
+                            <div className="flex items-center gap-1.5 truncate">
+                              <span className="px-1.5 py-0.5 rounded bg-white font-medium text-slate-600 border border-slate-200/60 text-[10px]">
+                                {prog.type_label || (prog.is_stage ? 'Stage' : 'Off-Stage')}
+                              </span>
+                              {prog.stage_name && (
+                                <span className="flex items-center gap-1 truncate text-slate-500">
+                                  <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                  <span className="truncate max-w-[110px]">{prog.stage_name}</span>
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Position or Grade Award */}
+                            {prog.position ? (
+                              <span className="font-bold text-amber-600 flex items-center gap-1 text-[11px] shrink-0">
+                                <Trophy className="w-3 h-3 text-amber-500" />
+                                <span>{prog.position === 1 ? '1st' : prog.position === 2 ? '2nd' : prog.position === 3 ? '3rd' : `#${prog.position}`}</span>
+                              </span>
+                            ) : prog.grade && prog.grade !== '-' ? (
+                              <span className="font-bold text-indigo-600 text-[11px] shrink-0">
+                                Gr: {prog.grade}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-6 text-center text-xs text-slate-400 bg-slate-50 rounded-xl border border-slate-200/60">
+                        No registered programs found.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 2: DIGITAL QR PASS (Inside card) */}
+                {backTab === 'qr' && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="p-3 bg-slate-50 rounded-2xl border border-slate-200/70 text-center space-y-2 my-1"
+                  >
+                    <div className="mx-auto w-32 h-32 bg-white p-2 rounded-xl shadow-xs flex items-center justify-center border border-slate-200">
+                      <QRCodeSVG
+                        svgString={qr_code_svg}
+                        eventId={event.id}
+                        studentId={participant.id}
+                        value={publicUrl}
+                        size={120}
+                        className="w-full h-full"
+                      />
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-500">
+                      Scan with camera to view live results
+                    </div>
+                    <button
+                      onClick={handleCopyLink}
+                      className="w-full py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copied ? 'Link Copied!' : 'Copy Badge Pass Link'}</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Tap to flip hint */}
+                <div
+                  onClick={() => setIsFlipped(false)}
+                  className="py-1 text-center cursor-pointer"
+                >
+                  <span className="text-[10px] font-semibold text-slate-400 hover:text-indigo-600 transition-colors inline-flex items-center gap-1">
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Tap anywhere to flip back to front</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Bottom Dual-Tone Wave Graphic on Reverse */}
+              <div className="w-full overflow-hidden leading-none select-none pointer-events-none">
+                <svg
+                  viewBox="0 0 400 55"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="w-full h-14 block object-cover"
+                  preserveAspectRatio="none"
+                >
+                  <path
+                    d="M0 32C80 12 160 45 240 22C310 3 360 16 400 12V55H0V32Z"
+                    fill="url(#badgeWaveLightBack)"
+                    opacity="0.35"
+                  />
+                  <path
+                    d="M0 42C100 22 190 52 280 30C335 15 375 28 400 24V55H0V42Z"
+                    fill="url(#badgeWaveDarkBack)"
+                  />
+                  <defs>
+                    <linearGradient id="badgeWaveLightBack" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#818CF8" />
+                      <stop offset="100%" stopColor="#4F46E5" />
+                    </linearGradient>
+                    <linearGradient id="badgeWaveDarkBack" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" stopColor="#4338CA" />
+                      <stop offset="100%" stopColor="#1E1B4B" />
+                    </linearGradient>
+                  </defs>
+                </svg>
+              </div>
             </div>
 
-            <div className="pt-2">
-              <button
-                onClick={handleCopyLink}
-                className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors shadow-xs flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {copied ? <Check className="w-4 h-4 text-white" /> : <Copy className="w-4 h-4 text-white" />}
-                <span>{copied ? 'Link Copied to Clipboard!' : 'Copy Verification Link'}</span>
-              </button>
-            </div>
-          </section>
-        )}
+          </div>
+        </div>
 
         {/* ========================================================================= */}
         {/* FOOTER                                                                    */}
