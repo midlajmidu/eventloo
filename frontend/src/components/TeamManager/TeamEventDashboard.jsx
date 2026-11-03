@@ -120,10 +120,17 @@ const TeamEventDashboard = () => {
       });
     } catch (err) {
       console.error('Error fetching schedule PDF:', err);
-      setPdfError(
-        err.response?.data?.error ||
-        'The schedule is not accessible or has not been published to Team Managers yet.'
-      );
+      let msg = 'The schedule is not accessible or has not been published to Team Managers yet.';
+      if (err?.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const json = JSON.parse(text);
+          msg = json.detail || json.error || text || msg;
+        } catch (_) {}
+      } else if (err?.response?.data?.error) {
+        msg = err.response.data.error;
+      }
+      setPdfError(msg);
     } finally {
       setLoadingPdf(false);
     }
@@ -144,7 +151,17 @@ const TeamEventDashboard = () => {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Download schedule failed:', err);
-      alert('Unable to download schedule PDF. Please check if the schedule is published.');
+      let msg = 'Unable to download schedule PDF. Please check if the schedule is published.';
+      if (err?.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const json = JSON.parse(text);
+          msg = json.detail || json.error || text || msg;
+        } catch (_) {}
+      } else if (err?.response?.data?.error) {
+        msg = err.response.data.error;
+      }
+      alert(msg);
     } finally {
       setDownloadingPdf(false);
     }

@@ -9,7 +9,7 @@ const destinationFor = (role) => ({
   team_manager: '/team-manager/dashboard',
 }[role] || '/login');
 
-const ProtectedRoute = ({ children, requiredRole = null }) => {
+const ProtectedRoute = ({ children, requiredRole = null, allowedRoles = null }) => {
   const [state, setState] = useState({ loading: true, role: null, valid: false });
 
   useEffect(() => {
@@ -17,7 +17,8 @@ const ProtectedRoute = ({ children, requiredRole = null }) => {
     const verify = async () => {
       try {
         let role;
-        if (requiredRole === 'team_manager' && localStorage.getItem('team_data')) {
+        const isTeamManagerExpected = requiredRole === 'team_manager' || (allowedRoles && allowedRoles.includes('team_manager'));
+        if (isTeamManagerExpected && localStorage.getItem('team_data')) {
           const team = JSON.parse(localStorage.getItem('team_data'));
           await teamManagerAPI.getTeamProfile(team.id);
           role = 'team_manager';
@@ -32,13 +33,16 @@ const ProtectedRoute = ({ children, requiredRole = null }) => {
     };
     verify();
     return () => { active = false; };
-  }, [requiredRole]);
+  }, [requiredRole, allowedRoles]);
 
   if (state.loading) {
     return <div className="min-h-screen bg-slate-50" aria-busy="true" />;
   }
   if (!state.valid) {
     return <Navigate to={requiredRole === 'super_admin' ? '/super-admin/login' : '/login'} replace />;
+  }
+  if (allowedRoles && !allowedRoles.includes(state.role)) {
+    return <Navigate to={destinationFor(state.role)} replace />;
   }
   if (requiredRole && state.role !== requiredRole) {
     return <Navigate to={destinationFor(state.role)} replace />;

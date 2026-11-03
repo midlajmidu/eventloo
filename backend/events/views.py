@@ -178,7 +178,7 @@ class EventViewSet(viewsets.ModelViewSet):
             )
         })
 
-    @action(detail=True, methods=['get'], url_path='schedule-export', throttle_classes=[ExportRateThrottle])
+    @action(detail=True, methods=['get'], url_path='schedule-export')
     def schedule_export(self, request, pk=None):
         """Export this tenant's program schedule as CSV or a print-ready PDF."""
         event = self.get_object()
@@ -206,7 +206,7 @@ class EventViewSet(viewsets.ModelViewSet):
             ])
             for program in programs:
                 writer.writerow([
-                    program.name, program.category,
+                    program.name, program.category or 'General',
                     'Group' if program.is_team_based else 'Individual',
                     program.schedule_entry_count,
                     'Groups' if program.is_team_based else 'Participants',
@@ -243,14 +243,21 @@ class EventViewSet(viewsets.ModelViewSet):
             'ScheduleMeta', parent=styles['Normal'], fontSize=8.5, leading=11,
             textColor=colors.HexColor('#475569'),
         )
+        school_name = escape(event.school.name.upper()) if (event.school and event.school.name) else 'EVENTLOO'
+        date_str = ''
+        if event.start_date and event.end_date:
+            date_str = f'{event.start_date.strftime("%d %b %Y")} – {event.end_date.strftime("%d %b %Y")}<br/>'
+        elif event.start_date:
+            date_str = f'{event.start_date.strftime("%d %b %Y")}<br/>'
+
         header = Table([[
             Paragraph(
-                f'<font size="10"><b>{escape(event.school.name.upper())}</b></font><br/>'
+                f'<font size="10"><b>{school_name}</b></font><br/>'
                 f'<font size="22"><b>PROGRAM SCHEDULE</b></font>', title_style,
             ),
             Paragraph(
                 f'<b>{escape(event.title)}</b><br/>'
-                f'{event.start_date.strftime("%d %b %Y")} – {event.end_date.strftime("%d %b %Y")}<br/>'
+                f'{date_str}'
                 f'Printed {timezone.localtime().strftime("%d/%m/%Y %I:%M %p")}',
                 ParagraphStyle('SchedulePrint', parent=meta_style, alignment=TA_RIGHT),
             ),
@@ -295,10 +302,11 @@ class EventViewSet(viewsets.ModelViewSet):
                     for program in sorted(stage_programs, key=lambda item: item.start_time):
                         start = timezone.localtime(program.start_time)
                         end = timezone.localtime(program.end_time) if program.end_time else None
+                        category_label = escape(program.category.upper()) if program.category else 'GENERAL'
                         rows.append([
                             f'{start.strftime("%I:%M %p")} – {end.strftime("%I:%M %p") if end else "—"}',
                             Paragraph(f'<b>{escape(program.name)}</b>', body_style),
-                            f'{"Group" if program.is_team_based else "Individual"} · {program.category.upper()}',
+                            f'{"Group" if program.is_team_based else "Individual"} · {category_label}',
                             f'{program.schedule_entry_count} {"groups" if program.is_team_based else "participants"}',
                             f'{program.duration_minutes_per_entry}m each · {program.scheduled_duration_minutes}m total',
                         ])
@@ -2236,22 +2244,32 @@ class EventAnnouncementViewSet(viewsets.ModelViewSet):
 
 class EventStageViewSet(viewsets.ModelViewSet):
     serializer_class = EventStageSerializer
-    permission_classes = [IsAdminOrEventManager]
+    authentication_classes = [TeamManagerAuthentication, SchoolJWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'number']
     ordering_fields = ['number', 'name', 'capacity', 'created_at']
     ordering = ['number', 'name']
     pagination_class = LargePagination
 
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [IsTeamManagerOrAdmin]
+        else:
+            permission_classes = [IsAdminOrEventManager]
+        return [permission() for permission in permission_classes]
+
     def get_queryset(self):
+        school_id = getattr(self.request.user, 'school_id', None)
         return EventStage.objects.filter(
             event_id=self.kwargs.get('event_pk'),
-            event__school_id=self.request.user.school_id,
+            event__school_id=school_id,
         ).select_related('event')
 
     def perform_create(self, serializer):
+        school_id = getattr(self.request.user, 'school_id', None)
         event = Event.objects.filter(
-            pk=self.kwargs.get('event_pk'), school_id=self.request.user.school_id
+            pk=self.kwargs.get('event_pk'), school_id=school_id
         ).first()
         if not event:
             raise ValidationError({'event': 'Event not found.'})

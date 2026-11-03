@@ -20,23 +20,41 @@ import { eventProgramsAPI, eventScheduleAPI, eventStagesAPI } from '../../servic
 
 const toLocalInput = (value) => {
   if (!value) return '';
-  const date = new Date(value);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  try {
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return '';
+    return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  } catch (_) {
+    return '';
+  }
 };
 
-const formatDateTime = (value) => value
-  ? new Intl.DateTimeFormat('en-IN', {
-    dateStyle: 'medium', timeStyle: 'short',
-  }).format(new Date(value))
-  : 'Not scheduled';
+const formatDateTime = (value) => {
+  if (!value) return 'Not scheduled';
+  try {
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return 'Not scheduled';
+    return new Intl.DateTimeFormat('en-IN', {
+      dateStyle: 'medium', timeStyle: 'short',
+    }).format(date);
+  } catch (_) {
+    return 'Not scheduled';
+  }
+};
 
 const getError = (error) => {
   const data = error?.response?.data;
-  if (!data) return 'The schedule could not be saved.';
+  if (!data) return error?.message || 'The schedule could not be saved.';
+  if (typeof data === 'string') return data;
   if (data.detail) return data.detail;
-  return Object.entries(data).map(([field, value]) => (
-    `${field.replaceAll('_', ' ')}: ${Array.isArray(value) ? value.join(' ') : value}`
-  )).join(' ');
+  if (data.error) return data.error;
+  try {
+    return Object.entries(data).map(([field, value]) => (
+      `${field.replaceAll('_', ' ')}: ${Array.isArray(value) ? value.join(' ') : value}`
+    )).join(' ');
+  } catch (_) {
+    return 'The schedule operation encountered an error.';
+  }
 };
 
 const EventSchedule = ({ event, eventId, onRefresh }) => {
@@ -121,7 +139,17 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
       });
     } catch (err) {
       console.error('Error loading PDF preview:', err);
-      setError('Unable to load live PDF schedule preview.');
+      let msg = 'Unable to load live PDF schedule preview.';
+      if (err?.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const json = JSON.parse(text);
+          msg = json.detail || json.error || text || msg;
+        } catch (_) {}
+      } else if (err?.response?.data) {
+        msg = getError(err);
+      }
+      setError(msg);
     } finally {
       setLoadingPdf(false);
     }
@@ -156,19 +184,30 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
 
   const calculateEndTime = (startTime, durationMinutes, program) => {
     if (!startTime) return '';
-    const slots = getSlots(program);
-    const duration = Number(durationMinutes || 5);
-    const totalMinutes = slots * duration;
-    const end = new Date(new Date(startTime).getTime() + totalMinutes * 60000);
-    return toLocalInput(end);
+    try {
+      const date = new Date(startTime);
+      if (isNaN(date.getTime())) return '';
+      const slots = getSlots(program);
+      const duration = Number(durationMinutes || 5);
+      const totalMinutes = slots * duration;
+      const end = new Date(date.getTime() + totalMinutes * 60000);
+      return toLocalInput(end);
+    } catch (_) {
+      return '';
+    }
   };
 
   const calculatedEnd = useMemo(() => {
-    if (form.end_time) return new Date(form.end_time);
+    if (form.end_time) {
+      const d = new Date(form.end_time);
+      return isNaN(d.getTime()) ? null : d;
+    }
     if (form.start_time) {
+      const d = new Date(form.start_time);
+      if (isNaN(d.getTime())) return null;
       const slots = getSlots(editing);
       const duration = Number(form.duration_minutes_per_entry || 5);
-      return new Date(new Date(form.start_time).getTime() + slots * duration * 60000);
+      return new Date(d.getTime() + slots * duration * 60000);
     }
     return null;
   }, [editing, form.duration_minutes_per_entry, form.end_time, form.start_time]);
@@ -176,12 +215,15 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
   const conflicts = useMemo(() => {
     if (!editing || !form.stage_id || !form.start_time || !calculatedEnd) return [];
     const start = new Date(form.start_time);
+    if (isNaN(start.getTime())) return [];
     return programs.filter((program) => {
       if (program.id === editing.id || String(program.stage?.id) !== String(form.stage_id) || !program.start_time) return false;
       const otherStart = new Date(program.start_time);
+      if (isNaN(otherStart.getTime())) return false;
       const otherEnd = program.end_time
         ? new Date(program.end_time)
         : new Date(otherStart.getTime() + Number(program.scheduled_duration_minutes || 0) * 60000);
+      if (isNaN(otherEnd.getTime())) return false;
       return otherStart < calculatedEnd && otherEnd > start;
     });
   }, [calculatedEnd, editing, form.stage_id, form.start_time, programs]);
@@ -228,17 +270,15 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
       const payloadEndTime = form.end_time ? form.end_time : (autoEnd || null);
 
       await eventScheduleAPI.update(eventId, editing.id, {
-        stage_id: Number(form.stage_id),
-        start_time: form.start_time,
-        end_time: payloadEndTime,
-        duration_minutes_per_entry: Number(form.duration_minutes_per_entry),
+        stage_id: form.stage_id ? Number(form.stage_id) : null,
+        start_time: form.start_time || null,
+        end_time: payloadEndTime || null,
+        duration_minutes_per_entry: Number(form.duration_minutes_per_entry || 5),
       });
       setEditing(null);
       await load();
-      if (andPreview) {
-        setActiveTab('preview');
-        await loadPdfPreview();
-      } else if (activeTab === 'preview') {
+      if (andPreview || activeTab === 'preview') {
+        if (andPreview) setActiveTab('preview');
         await loadPdfPreview();
       }
     } catch (requestError) {
@@ -252,7 +292,7 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
     if (!window.confirm(`Clear the schedule for ${editing.name}?`)) return;
     setSaving(true);
     try {
-      await eventScheduleAPI.update(eventId, editing.id, { start_time: null });
+      await eventScheduleAPI.update(eventId, editing.id, { start_time: null, end_time: null });
       setEditing(null);
       await load();
       if (activeTab === 'preview') {
@@ -268,7 +308,10 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
   const download = async (format) => {
     try {
       const response = await eventScheduleAPI.export(eventId, format);
-      const url = URL.createObjectURL(response.data);
+      const blob = new Blob([response.data], {
+        type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
       anchor.download = `${event?.title || 'event'}-schedule.${format}`;
@@ -277,7 +320,17 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
       anchor.remove();
       URL.revokeObjectURL(url);
     } catch (requestError) {
-      setError(getError(requestError));
+      let msg = 'Failed to export schedule.';
+      if (requestError?.response?.data instanceof Blob) {
+        try {
+          const text = await requestError.response.data.text();
+          const json = JSON.parse(text);
+          msg = json.detail || json.error || text || msg;
+        } catch (_) {}
+      } else {
+        msg = getError(requestError);
+      }
+      setError(msg);
     }
   };
 

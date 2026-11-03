@@ -36,8 +36,17 @@ reportApi.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url.includes('/token/refresh/')) {
+    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/token/refresh/')) {
       originalRequest._retry = true;
+      const isTeamManager = localStorage.getItem('user_role') === 'team_manager' || !!localStorage.getItem('team_data');
+      if (isTeamManager) {
+        localStorage.removeItem('team_data');
+        localStorage.removeItem('user_role');
+        if (window.location.pathname !== '/team-manager/login') {
+          window.location.href = '/team-manager/login';
+        }
+        return Promise.reject(error);
+      }
       try {
           await axios.post(
             `${API_BASE_URL}token/refresh/`, {}, {
@@ -88,6 +97,16 @@ api.interceptors.response.use(
       && !isAuthenticationRequest
     ) {
       originalRequest._retry = true;
+
+      const isTeamManager = localStorage.getItem('user_role') === 'team_manager' || !!localStorage.getItem('team_data');
+      if (isTeamManager) {
+        localStorage.removeItem('team_data');
+        localStorage.removeItem('user_role');
+        if (window.location.pathname !== '/team-manager/login') {
+          window.location.href = '/team-manager/login';
+        }
+        return Promise.reject(error);
+      }
       
       try {
           // Use a fresh axios instance to avoid interceptors
