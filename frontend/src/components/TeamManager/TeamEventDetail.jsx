@@ -24,8 +24,9 @@ import {
   ChevronUp
 } from 'lucide-react';
 
-const TeamEventDetail = () => {
-  const { eventId } = useParams();
+const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
+  const { eventId: paramEventId } = useParams();
+  const eventId = propEventId || paramEventId;
   const navigate = useNavigate();
   const [eventData, setEventData] = useState(null);
   const [programs, setPrograms] = useState([]);
@@ -673,50 +674,54 @@ const TeamEventDetail = () => {
   };
 
   return (
-    <main className="min-h-screen bg-[#f7f8fb] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
+    <div className={embedded ? 'p-3 sm:p-5' : 'min-h-screen bg-[#f7f8fb] px-4 py-6 sm:px-6 lg:px-8'}>
+      <div className={embedded ? 'w-full' : 'mx-auto max-w-7xl'}>
         {/* ========================================================================= */}
-        {/* 1. BACK NAVIGATION & HEADER */}
+        {/* 1. BACK NAVIGATION & HEADER (Only shown in non-embedded mode) */}
         {/* ========================================================================= */}
-        <div className="mb-4">
-          <button
-            onClick={() => navigate('/team-manager/events')}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            <span>Back to Events</span>
-          </button>
-        </div>
+        {!embedded && (
+          <>
+            <div className="mb-4">
+              <button
+                onClick={() => navigate('/team-manager/events')}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition-colors"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span>Back to Events</span>
+              </button>
+            </div>
 
-        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
-              Event Details & Roster
-            </p>
-            <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              {eventData.title}
-            </h1>
-            <p className="text-xs text-slate-400 mt-1 font-normal">
-              {eventData.description || 'Program items and allocated team roster.'}
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span
-              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium capitalize ${getStatusBadge(
-                eventData.status
-              )}`}
-            >
-              {eventData.status || 'Active'}
-            </span>
-            {selectedTeam && (
-              <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs">
-                <Users className="h-3.5 w-3.5 text-indigo-600" />
-                <span>{selectedTeam.name}</span>
+            <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
+                  Event Details & Roster
+                </p>
+                <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+                  {eventData.title}
+                </h1>
+                <p className="text-xs text-slate-400 mt-1 font-normal">
+                  {eventData.description || 'Program items and allocated team roster.'}
+                </p>
               </div>
-            )}
-          </div>
-        </header>
+
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span
+                  className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-medium capitalize ${getStatusBadge(
+                    eventData.status
+                  )}`}
+                >
+                  {eventData.status || 'Active'}
+                </span>
+                {selectedTeam && (
+                  <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 shadow-xs">
+                    <Users className="h-3.5 w-3.5 text-indigo-600" />
+                    <span>{selectedTeam.name}</span>
+                  </div>
+                )}
+              </div>
+            </header>
+          </>
+        )}
 
         {/* Notices */}
         {isDeadlinePassed && (
@@ -1864,7 +1869,7 @@ const TeamEventDetail = () => {
           </div>
         );
       })()}
-    </main>
+    </div>
   );
 };
 

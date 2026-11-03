@@ -90,6 +90,7 @@ class ProgramFilter(django_filters.FilterSet):
 class EventViewSet(viewsets.ModelViewSet):
     """ViewSet for Event management"""
     queryset = Event.objects.all()
+    authentication_classes = [TeamManagerAuthentication, SchoolJWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['event_type', 'status', 'is_team_based']
@@ -114,11 +115,13 @@ class EventViewSet(viewsets.ModelViewSet):
         """Set permissions based on action"""
         if self.action in [
             'create', 'update', 'partial_update', 'destroy',
-            'toggle_program_publish', 'publish_all_results',
+            'toggle_program_publish', 'publish_all_results', 'toggle_schedule_publish',
             'bulk_upload_programs', 'create_announcement',
             'chest_numbers', 'search_by_chest_number',
         ]:
             permission_classes = [IsAdminOrEventManager]
+        elif self.action in ['retrieve', 'list', 'points_teams', 'schedule_export', 'admin_programs']:
+            permission_classes = [IsTeamManagerOrAdmin]
         else:
             permission_classes = [IsAdminOrEventManager]
         return [permission() for permission in permission_classes]
@@ -147,10 +150,42 @@ class EventViewSet(viewsets.ModelViewSet):
             from .services import reconcile_event_official_points
             reconcile_event_official_points(event)
 
+    @action(detail=True, methods=['post'], permission_classes=[IsAdminOrEventManager])
+    def toggle_schedule_publish(self, request, pk=None):
+        """Toggle whether the final schedule is published to team managers"""
+        event = self.get_object()
+        desired = request.data.get('is_published')
+        if desired is None:
+            event.is_schedule_published = not event.is_schedule_published
+        elif isinstance(desired, str):
+            event.is_schedule_published = desired.strip().lower() in ('true', '1', 'yes')
+        else:
+            event.is_schedule_published = bool(desired)
+        event.save(update_fields=['is_schedule_published', 'updated_at'])
+        audit_security_event(
+            request, 'event_schedule_publish_state', 'success',
+            school_id=event.school_id, target=event.id,
+        )
+        return Response({
+            'status': 'success',
+            'is_schedule_published': event.is_schedule_published,
+            'message': (
+                'Final schedule is now published to all Team Managers.'
+                if event.is_schedule_published else
+                'Schedule has been unpublished from Team Managers.'
+            )
+        })
+
     @action(detail=True, methods=['get'], url_path='schedule-export', throttle_classes=[ExportRateThrottle])
     def schedule_export(self, request, pk=None):
         """Export this tenant's program schedule as CSV or a print-ready PDF."""
         event = self.get_object()
+        is_admin_or_em = getattr(request.user, 'role', None) in ['admin', 'event_manager', 'super_admin']
+        if not is_admin_or_em and not event.is_schedule_published:
+            return Response(
+                {'error': 'The event schedule has not been published to team managers yet.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
         export_format = request.query_params.get('export_format', 'pdf').lower()
         programs = list(
             event.programs.select_related('stage').prefetch_related('assignments')
@@ -2191,6 +2226,7 @@ class EventStageViewSet(viewsets.ModelViewSet):
 
 class ProgramViewSet(viewsets.ModelViewSet):
     serializer_class = ProgramSerializer
+    authentication_classes = [TeamManagerAuthentication, SchoolJWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_class = ProgramFilter
@@ -2206,6 +2242,8 @@ class ProgramViewSet(viewsets.ModelViewSet):
             'mark_finished', 'mark_unfinished', 'schedule',
         ]:
             permission_classes = [IsAdminOrEventManager]
+        elif self.action in ['retrieve', 'list', 'participants']:
+            permission_classes = [IsTeamManagerOrAdmin]
         else:
             permission_classes = [IsAdminOrEventManager]
         return [permission() for permission in permission_classes]
@@ -2413,6 +2451,7 @@ class ProgramViewSet(viewsets.ModelViewSet):
 
 class ProgramAssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = ProgramAssignmentSerializer
+    authentication_classes = [TeamManagerAuthentication, SchoolJWTAuthentication]
     permission_classes = [permissions.IsAuthenticated]
     pagination_class = LargePagination
 
@@ -2422,7 +2461,7 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
             'bulk_upload', 'assign_all_category', 'download_template',
         ):
             return [IsAdminOrEventManager()]
-        return [IsAdminOrEventManager()]
+        return [IsTeamManagerOrAdmin()]
     
     def get_queryset(self):
         program_id = self.kwargs.get('program_pk')
@@ -3245,16 +3284,18 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
 class ProgramResultViewSet(viewsets.ModelViewSet):
     """ViewSet for managing program results and marks"""
     serializer_class = ProgramResultSerializer
-    permission_classes = [IsAdminOrEventManager]
+    authentication_classes = [TeamManagerAuthentication, SchoolJWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
     pagination_class = SmallPagination
     
     def get_queryset(self):
         program_id = self.kwargs.get('program_pk')
+        qs = ProgramResult.objects.filter(program__event__school_id=self.request.user.school_id)
         if program_id:
-            return ProgramResult.objects.filter(
-                program_id=program_id, program__event__school_id=self.request.user.school_id
-            )
-        return ProgramResult.objects.filter(program__event__school_id=self.request.user.school_id)
+            qs = qs.filter(program_id=program_id)
+        if getattr(self.request.user, 'role', None) == 'team_manager':
+            qs = qs.filter(program__is_published=True)
+        return qs
     
     def get_serializer_class(self):
         if self.action == 'mark_entry':
@@ -3265,10 +3306,12 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
     
     def get_permissions(self):
         if self.action in [
-            'create', 'update', 'partial_update', 'destroy', 'mark_entry',
-            'bulk_mark_entry', 'results_summary', 'results_pdf',
+            'create', 'update', 'partial_update', 'destroy',
+            'bulk_mark_entry',
         ]:
             return [IsAdminOrEventManager()]
+        elif self.action in ['list', 'retrieve', 'results_summary', 'results_pdf', 'mark_entry']:
+            return [IsTeamManagerOrAdmin()]
         return [IsAdminOrEventManager()]
 
     def perform_create(self, serializer):

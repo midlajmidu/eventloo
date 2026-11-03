@@ -134,6 +134,10 @@ class Event(models.Model):
             "the participant's personal and top-scorer totals. Team points are always retained."
         ),
     )
+    is_schedule_published = models.BooleanField(
+        default=False,
+        help_text="Whether the event schedule is finalized and published for team managers to view",
+    )
 
     def get_effective_grading_rules(self):
         if self.grading_rules and isinstance(self.grading_rules, list) and len(self.grading_rules) > 0:

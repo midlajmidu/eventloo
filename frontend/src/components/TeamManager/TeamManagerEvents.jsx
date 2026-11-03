@@ -177,7 +177,7 @@ const TeamManagerEvents = () => {
   });
 
   const handleEventClick = (eventId) => {
-    navigate(`/team-manager/events/${eventId}`);
+    navigate(`/team-manager/events/${eventId}/portal`);
   };
 
   if (loading) {

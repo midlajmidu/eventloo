@@ -1226,6 +1226,7 @@ def team_manager_event_programs(request, team_id, event_id):
                         or timezone.now() <= event.registration_deadline
                     )
                 ),
+                'is_schedule_published': bool(getattr(event, 'is_schedule_published', False)),
             },
             'programs': program_data,
             'team_members': member_data,

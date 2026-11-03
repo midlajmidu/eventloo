@@ -31,6 +31,7 @@ import TeamManagerPoints from './components/TeamManager/TeamManagerPoints';
 import TeamEventDetail from './components/TeamManager/TeamEventDetail';
 import TeamStudents from './components/TeamManager/TeamStudents';
 import ProgramAssignmentPage from './components/TeamManager/ProgramAssignmentPage';
+import TeamEventDashboard from './components/TeamManager/TeamEventDashboard';
 
 import './index.css';
 
@@ -127,13 +128,23 @@ function App() {
             <Route index element={<TeamManagerDashboard />} />
             <Route path="students" element={<TeamStudents />} />
             <Route path="events" element={<TeamManagerEvents />} />
-            <Route path="events/:eventId" element={<TeamEventDetail />} />
+            <Route path="events/:eventId" element={<Navigate to="portal" replace />} />
             <Route path="events/:eventId/programs/:programId/assign" element={<ProgramAssignmentPage />} />
             <Route path="assignments" element={<Navigate to="/team-manager/events" replace />} />
             <Route path="points" element={<TeamManagerPoints />} />
             <Route path="profile" element={<Navigate to="/team-manager" replace />} />
             <Route path="settings" element={<Navigate to="/team-manager" replace />} />
           </Route>
+
+          {/* Dedicated Team Event Portal (Dedicated Separate Window Experience) */}
+          <Route 
+            path="/team-manager/events/:eventId/portal" 
+            element={
+              <ProtectedRoute requiredRole="team_manager">
+                <TeamEventDashboard />
+              </ProtectedRoute>
+            } 
+          />
 
           {/* Protected User Routes */}
           <Route 

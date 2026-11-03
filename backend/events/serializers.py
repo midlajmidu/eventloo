@@ -30,7 +30,7 @@ class EventListSerializer(serializers.ModelSerializer):
             'venue', 'max_participants', 'is_team_based',
             'current_participants', 'current_teams',
             'is_registration_open', 'created_by', 'created_at',
-            'image', 'registration_deadline'
+            'image', 'registration_deadline', 'is_schedule_published'
         ]
     
     def to_representation(self, instance):
@@ -55,6 +55,7 @@ class EventListSerializer(serializers.ModelSerializer):
                 'current_participants': getattr(instance, 'current_participants', 0),
                 'current_teams': getattr(instance, 'current_teams', 0),
                 'is_registration_open': getattr(instance, 'is_registration_open', False),
+                'is_schedule_published': getattr(instance, 'is_schedule_published', False),
                 'created_by': {
                     'id': instance.created_by.id if instance.created_by else None,
                     'name': instance.created_by.get_full_name() if instance.created_by else '',
@@ -90,6 +91,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'mix_ind_first', 'mix_ind_second', 'mix_ind_third',
             'mix_group_first', 'mix_group_second', 'mix_group_third',
             'count_general_individual_points_for_students',
+            'is_schedule_published',
             'current_participants', 'current_teams', 'is_registration_open',
             'created_by', 'created_at', 'updated_at', 'image'
         ]
@@ -113,6 +115,7 @@ class EventCreateUpdateSerializer(serializers.ModelSerializer):
             'mix_ind_first', 'mix_ind_second', 'mix_ind_third',
             'mix_group_first', 'mix_group_second', 'mix_group_third',
             'count_general_individual_points_for_students',
+            'is_schedule_published',
             'image'
         ]
     

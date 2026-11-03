@@ -11,7 +11,10 @@ import {
   ExternalLink,
   Calendar,
   FileText,
-  Maximize2
+  Maximize2,
+  CheckCircle,
+  Globe,
+  Lock
 } from 'lucide-react';
 import { eventProgramsAPI, eventScheduleAPI, eventStagesAPI } from '../../services/api';
 
@@ -36,7 +39,7 @@ const getError = (error) => {
   )).join(' ');
 };
 
-const EventSchedule = ({ event, eventId }) => {
+const EventSchedule = ({ event, eventId, onRefresh }) => {
   const [programs, setPrograms] = useState([]);
   const [stages, setStages] = useState([]);
   const [query, setQuery] = useState('');
@@ -47,6 +50,31 @@ const EventSchedule = ({ event, eventId }) => {
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Schedule Publication State (Final confirmation for Team Managers)
+  const [isSchedulePublished, setIsSchedulePublished] = useState(Boolean(event?.is_schedule_published));
+  const [publishing, setPublishing] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  useEffect(() => {
+    setIsSchedulePublished(Boolean(event?.is_schedule_published));
+  }, [event?.is_schedule_published]);
+
+  const handleToggleSchedulePublish = async (newStatus) => {
+    setPublishing(true);
+    setError('');
+    try {
+      await eventScheduleAPI.togglePublish(eventId, newStatus);
+      setIsSchedulePublished(newStatus);
+      setShowConfirmModal(false);
+      onRefresh?.();
+    } catch (err) {
+      console.error('Error toggling schedule publication:', err);
+      setError('Failed to update schedule publication status for team managers.');
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   // Top Tabs & Live PDF Preview States
   const [activeTab, setActiveTab] = useState('table'); // 'table' | 'preview'
@@ -265,6 +293,33 @@ const EventSchedule = ({ event, eventId }) => {
           <p className="mt-1 text-sm text-slate-500">Assign every program to a stage, date, and start time.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Final Schedule Confirmation Toggle */}
+          {isSchedulePublished ? (
+            <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-emerald-800 shadow-2xs">
+              <CheckCircle className="h-4 w-4 text-emerald-600" />
+              <span>Published to Team Managers</span>
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(true)}
+                disabled={publishing}
+                className="ml-1 text-[11px] font-bold text-emerald-700 underline hover:text-emerald-900 cursor-pointer"
+                title="Revoke team manager visibility"
+              >
+                Unpublish
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowConfirmModal(true)}
+              disabled={publishing}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-600 bg-emerald-600 px-3.5 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
+            >
+              <Globe className="h-4 w-4" />
+              <span>Publish Final Schedule</span>
+            </button>
+          )}
+
           {activeTab === 'preview' && (
             <button
               onClick={loadPdfPreview}
@@ -666,6 +721,60 @@ const EventSchedule = ({ event, eventId }) => {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Publication Confirmation Modal */}
+      {showConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-start gap-4">
+              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                isSchedulePublished ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                {isSchedulePublished ? <Lock className="h-5 w-5" /> : <Globe className="h-5 w-5" />}
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {isSchedulePublished
+                    ? 'Unpublish Schedule from Team Managers?'
+                    : 'Publish Official Schedule to Team Managers?'}
+                </h3>
+                <p className="mt-2 text-xs text-slate-600 leading-relaxed">
+                  {isSchedulePublished
+                    ? 'Team Managers will no longer be able to view program stages, timings, or download the official schedule PDF in their portal until you publish again.'
+                    : 'Once published, all Team Managers will be able to see the finalized schedule, stage allocations, and download the official schedule PDF in their portal.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowConfirmModal(false)}
+                disabled={publishing}
+                className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleSchedulePublish(!isSchedulePublished)}
+                disabled={publishing}
+                className={`rounded-xl px-4 py-2 text-xs font-bold text-white shadow-sm transition-colors ${
+                  isSchedulePublished
+                    ? 'bg-amber-600 hover:bg-amber-700'
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                } disabled:opacity-50`}
+              >
+                {publishing
+                  ? 'Saving...'
+                  : isSchedulePublished
+                    ? 'Yes, Unpublish Schedule'
+                    : 'Yes, Publish Final Schedule'}
+              </button>
             </div>
           </div>
         </div>

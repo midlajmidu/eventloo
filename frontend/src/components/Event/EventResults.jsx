@@ -30,8 +30,9 @@ const addCompetitionRanks = (rows) => {
   });
 };
 
-const EventResults = ({ categories: dynamicCategories = [] }) => {
-  const { eventId } = useParams();
+const EventResults = ({ categories: dynamicCategories = [], readOnly = false, eventId: propEventId }) => {
+  const { eventId: paramEventId } = useParams();
+  const eventId = propEventId || paramEventId;
 
   // Programs & Filtering
   const [programs, setPrograms] = useState([]);
@@ -71,8 +72,10 @@ const EventResults = ({ categories: dynamicCategories = [] }) => {
     try {
       // Get all programs for this event
       const progsRes = await eventProgramsAPI.getPrograms(eventId, 'page_size=500');
-      const allProgs = Array.isArray(progsRes.data) ? progsRes.data : (progsRes.data.results || []);
-      
+      let allProgs = Array.isArray(progsRes.data) ? progsRes.data : (progsRes.data.results || []);
+      if (readOnly) {
+        allProgs = allProgs.filter((p) => p.is_published);
+      }
       setPrograms(allProgs);
     } catch (error) {
       console.error('Error loading programs for results:', error);
@@ -250,12 +253,12 @@ const EventResults = ({ categories: dynamicCategories = [] }) => {
     <div className="space-y-6 max-w-7xl mx-auto py-2">
       {/* Header Card Box */}
       <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Results & Standings</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Manage and reorder competition results, and view team points
-          </p>
-        </div>
+          <div>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Results & Standings</h1>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {readOnly ? 'Official competition results and team points standings' : 'Manage and reorder competition results, and view team points'}
+            </p>
+          </div>
 
         <div className="flex items-center space-x-2 self-start sm:self-auto">
           <button
@@ -347,13 +350,15 @@ const EventResults = ({ categories: dynamicCategories = [] }) => {
                   ))}
                 </select>
 
-                <button
-                  onClick={handlePublishAll}
-                  className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl shadow-2xs inline-flex items-center space-x-1.5 transition-colors"
-                >
-                  <Globe className="w-3.5 h-3.5 text-gray-500" />
-                  <span>Publish All</span>
-                </button>
+                {!readOnly && (
+                  <button
+                    onClick={handlePublishAll}
+                    className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl shadow-2xs inline-flex items-center space-x-1.5 transition-colors"
+                  >
+                    <Globe className="w-3.5 h-3.5 text-gray-500" />
+                    <span>Publish All</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -425,53 +430,65 @@ const EventResults = ({ categories: dynamicCategories = [] }) => {
 
                           {/* Actions Column */}
                           <td className="px-4 py-3 text-right">
-                            <div className="relative inline-block text-left">
+                            {readOnly ? (
                               <button
-                                onClick={() => setOpenMenuId(openMenuId === prog.id ? null : prog.id)}
-                                className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                type="button"
+                                onClick={() => handleOpenDrawer(prog)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 transition-colors shadow-2xs cursor-pointer"
+                                title="View detailed results"
                               >
-                                <MoreVertical className="w-4 h-4" />
+                                <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>View Results</span>
                               </button>
+                            ) : (
+                              <div className="relative inline-block text-left">
+                                <button
+                                  onClick={() => setOpenMenuId(openMenuId === prog.id ? null : prog.id)}
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                  <MoreVertical className="w-4 h-4" />
+                                </button>
 
-                              {/* Dropdown Action Menu */}
-                              {openMenuId === prog.id && (
-                                <div className="origin-top-right absolute right-0 mt-1 w-48 rounded-xl bg-white border border-gray-200 shadow-lg z-20 py-1 font-medium text-xs divide-y divide-gray-100">
-                                  <button
-                                    onClick={() => handleOpenDrawer(prog)}
-                                    className="w-full text-left px-3.5 py-2 text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
-                                  >
-                                    <Eye className="w-3.5 h-3.5 text-indigo-600" />
-                                    <span>View Result</span>
-                                  </button>
+                                {/* Dropdown Action Menu */}
+                                {openMenuId === prog.id && (
+                                  <div className="origin-top-right absolute right-0 mt-1 w-48 rounded-xl bg-white border border-gray-200 shadow-lg z-20 py-1 font-medium text-xs divide-y divide-gray-100">
+                                    <button
+                                      onClick={() => handleOpenDrawer(prog)}
+                                      className="w-full text-left px-3.5 py-2 text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
+                                    >
+                                      <Eye className="w-3.5 h-3.5 text-indigo-600" />
+                                      <span>View Result</span>
+                                    </button>
 
-                                  <button
-                                    onClick={() => {
-                                      if (!canPublish) {
-                                        setMessage(`Cannot publish "${prog.name}": Mark entry has not been completed.`);
-                                        setTimeout(() => setMessage(''), 4000);
-                                        setOpenMenuId(null);
-                                        return;
-                                      }
-                                      handleTogglePublish(prog);
-                                    }}
-                                    className={`w-full text-left px-3.5 py-2 flex items-center space-x-2 transition-colors ${
-                                      canPublish
-                                        ? 'text-gray-700 hover:bg-gray-50'
-                                        : 'text-gray-400 bg-gray-50/50 cursor-not-allowed'
-                                    }`}
-                                    title={!canPublish ? "Mark entry has not been completed for this competition" : ""}
-                                  >
-                                    <Globe className={`w-3.5 h-3.5 ${isPublished ? 'text-amber-600' : canPublish ? 'text-emerald-600' : 'text-gray-400'}`} />
-                                    <div className="flex flex-col">
-                                      <span>{isPublished ? 'Unpublish Result' : 'Publish Result'}</span>
-                                      {!canPublish && (
-                                        <span className="text-[10px] text-amber-600 font-semibold">Marks not entered</span>
-                                      )}
-                                    </div>
-                                  </button>
-                                </div>
-                              )}
-                            </div>
+                                    <button
+                                      onClick={() => {
+                                        if (!canPublish) {
+                                          setMessage(`Cannot publish "${prog.name}": Mark entry has not been completed.`);
+                                          setTimeout(() => setMessage(''), 4000);
+                                          setOpenMenuId(null);
+                                          return;
+                                        }
+                                        handleTogglePublish(prog);
+                                      }}
+                                      className={`w-full text-left px-3.5 py-2 flex items-center space-x-2 transition-colors ${
+                                        canPublish
+                                          ? 'text-gray-700 hover:bg-gray-50'
+                                          : 'text-gray-400 bg-gray-50/50 cursor-not-allowed'
+                                      }`}
+                                      title={!canPublish ? "Mark entry has not been completed for this competition" : ""}
+                                    >
+                                      <Globe className={`w-3.5 h-3.5 ${isPublished ? 'text-amber-600' : canPublish ? 'text-emerald-600' : 'text-gray-400'}`} />
+                                      <div className="flex flex-col">
+                                        <span>{isPublished ? 'Unpublish Result' : 'Publish Result'}</span>
+                                        {!canPublish && (
+                                          <span className="text-[10px] text-amber-600 font-semibold">Marks not entered</span>
+                                        )}
+                                      </div>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );

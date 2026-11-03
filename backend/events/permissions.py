@@ -178,18 +178,22 @@ class IsTeamManagerOrAdmin(permissions.BasePermission):
                 and (not event_id or Event.objects.filter(id=event_id, school_id=school_id).exists())
                 and (not program_id or Program.objects.filter(id=program_id, event__school_id=school_id).exists())
             )
+        is_team_view = getattr(view, 'basename', None) == 'team' or 'teams' in getattr(request, 'path', '')
+        route_team_id = view.kwargs.get('team_id') or (view.kwargs.get('pk') if is_team_view else None)
         token_team_id = getattr(request.user, 'team_id', None)
-        route_team_id = view.kwargs.get('team_id') or view.kwargs.get('pk')
+
+        if route_team_id is not None and token_team_id is not None:
+            if str(token_team_id) != str(route_team_id):
+                return False
+
         allowed = (
             getattr(request.user, 'role', None) == 'team_manager'
-            and token_team_id is not None
             and getattr(request.user, 'school_id', None) is not None
-            and (route_team_id is None or str(token_team_id) == str(route_team_id))
         )
         if not allowed:
             return False
         from .models import Event, Program
-        event_id = view.kwargs.get('event_id') or view.kwargs.get('event_pk')
+        event_id = view.kwargs.get('event_id') or view.kwargs.get('event_pk') or (view.kwargs.get('pk') if not is_team_view else None)
         program_id = view.kwargs.get('program_id') or view.kwargs.get('program_pk')
         if event_id and not Event.objects.filter(id=event_id, school_id=request.user.school_id).exists():
             return False
@@ -198,16 +202,29 @@ class IsTeamManagerOrAdmin(permissions.BasePermission):
         return True
     
     def has_object_permission(self, request, view, obj):
-        # Admins can do everything
-        if request.user.role == 'admin':
+        # Admins and event managers can do everything in their school
+        if getattr(request.user, 'role', None) in ['admin', 'event_manager', 'super_admin']:
             return True
             
-        # Team managers can manage their assigned teams
-        if request.user.role == 'team_manager':
+        # Team managers can access objects belonging to their school
+        if getattr(request.user, 'role', None) == 'team_manager':
+            school_id = getattr(request.user, 'school_id', None)
+            from .models import Event, Program, Team
+            if isinstance(obj, Event):
+                return obj.school_id == school_id
+            if isinstance(obj, Program):
+                return obj.event.school_id == school_id
+            if isinstance(obj, Team):
+                token_team_id = getattr(request.user, 'team_id', None)
+                if token_team_id:
+                    return obj.id == token_team_id and obj.school_id == school_id
+                return (obj.team_manager == request.user or getattr(request.user, 'school_id', None) == obj.school_id)
             if hasattr(obj, 'team_manager'):
                 return obj.team_manager == request.user
-            elif hasattr(obj, 'managed_teams'):
-                return obj.managed_teams.filter(team_manager=request.user).exists()
+            if hasattr(obj, 'school_id'):
+                return obj.school_id == school_id
+            if hasattr(obj, 'event'):
+                return obj.event.school_id == school_id
             
         return False
 

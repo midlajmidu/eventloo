@@ -321,6 +321,10 @@ export const eventsAPI = {
 
   // Get chest numbers / assigned participants for an event
   getChestNumbers: (eventId) => api.get(`events/${eventId}/chest_numbers/`),
+
+  // Toggle schedule publish status for team managers
+  toggleSchedulePublish: (eventId, isPublished) =>
+    api.post(`events/${eventId}/toggle_schedule_publish/`, isPublished !== undefined ? { is_published: isPublished } : {}),
 };
 
 // Programs API
@@ -628,6 +632,9 @@ export const eventScheduleAPI = {
   ),
   export: (eventId, format) => api.get(
     `events/${eventId}/schedule-export/`, { params: { export_format: format }, responseType: 'blob' }
+  ),
+  togglePublish: (eventId, isPublished) => api.post(
+    `events/${eventId}/toggle_schedule_publish/`, isPublished !== undefined ? { is_published: isPublished } : {}
   ),
 };
 

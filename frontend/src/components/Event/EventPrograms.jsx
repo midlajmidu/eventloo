@@ -35,7 +35,7 @@ const toDateTimeLocal = (value) => {
   return new Date(date.getTime() - offset).toISOString().slice(0, 16);
 };
 
-const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
+const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = false }) => {
   const [programs, setPrograms] = useState([]);
   const [stages, setStages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -504,25 +504,28 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-gray-900">Event Programs</h1>
             <p className="text-xs text-gray-500 mt-0.5">
-              Manage programs for <span className="font-semibold text-gray-700">{event?.title}</span>
+              {readOnly ? 'Explore programs and assigned participants for ' : 'Manage programs for '}
+              <span className="font-semibold text-gray-700">{event?.title}</span>
             </p>
           </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setShowProgramBulkUpload(true)}
-              className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm"
-            >
-              <Upload className="h-3.5 w-3.5" />
-              <span>Bulk Upload</span>
-            </button>
-            <button
-              onClick={() => {setShowAddModal(true); setEditingProgram(null); resetForm();}}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span>Add Program</span>
-            </button>
-          </div>
+          {!readOnly && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowProgramBulkUpload(true)}
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                <span>Bulk Upload</span>
+              </button>
+              <button
+                onClick={() => {setShowAddModal(true); setEditingProgram(null); resetForm();}}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors shadow-sm"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>Add Program</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Minimal 1-Line Filters Bar */}
@@ -733,54 +736,66 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
 
                       {/* Actions */}
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="relative inline-block text-left">
+                        {readOnly ? (
                           <button
-                            onClick={() => setOpenMenuId(openMenuId === program.id ? null : program.id)}
-                            className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Program Actions"
+                            type="button"
+                            onClick={() => handleOpenViewProgram(program)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 transition-colors shadow-2xs cursor-pointer"
+                            title="View program details & participants"
                           >
-                            <MoreVertical className="h-4 w-4" />
+                            <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                            <span>Participants</span>
                           </button>
+                        ) : (
+                          <div className="relative inline-block text-left">
+                            <button
+                              onClick={() => setOpenMenuId(openMenuId === program.id ? null : program.id)}
+                              className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                              title="Program Actions"
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </button>
 
-                          {openMenuId === program.id && (
-                            <div className={`absolute right-0 w-48 rounded-xl bg-white border border-gray-200 shadow-xl z-50 py-1 font-medium text-xs divide-y divide-gray-100 text-left animate-in fade-in duration-100 ${
-                              isLastRows ? 'bottom-full mb-1 origin-bottom-right' : 'top-full mt-1 origin-top-right'
-                            }`}>
-                              <button
-                                onClick={() => handleOpenViewProgram(program)}
-                                className="w-full text-left px-3.5 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
-                              >
-                                <Eye className="h-3.5 w-3.5 text-indigo-600" />
-                                <span>Open Program</span>
-                              </button>
+                            {openMenuId === program.id && (
+                              <div className={`absolute right-0 w-48 rounded-xl bg-white border border-gray-200 shadow-xl z-50 py-1 font-medium text-xs divide-y divide-gray-100 text-left animate-in fade-in duration-100 ${
+                                isLastRows ? 'bottom-full mb-1 origin-bottom-right' : 'top-full mt-1 origin-top-right'
+                              }`}>
+                                <button
+                                  onClick={() => handleOpenViewProgram(program)}
+                                  className="w-full text-left px-3.5 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
+                                >
+                                  <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                                  <span>Open Program</span>
+                                </button>
 
-                              <button
-                                onClick={() => { setOpenMenuId(null); handleEdit(program); }}
-                                className="w-full text-left px-3.5 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
-                              >
-                                <Edit className="h-3.5 w-3.5 text-indigo-600" />
-                                <span>Edit Program</span>
-                              </button>
+                                <button
+                                  onClick={() => { setOpenMenuId(null); handleEdit(program); }}
+                                  className="w-full text-left px-3.5 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
+                                >
+                                  <Edit className="h-3.5 w-3.5 text-indigo-600" />
+                                  <span>Edit Program</span>
+                                </button>
 
-                              <button
-                                onClick={() => { setOpenMenuId(null); handleMarkFinished(program.id, !program.is_finished); }}
-                                className="w-full text-left px-3.5 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
-                              >
-                                {program.is_finished ? (
-                                  <>
-                                    <XCircle className="h-3.5 w-3.5 text-amber-600" />
-                                    <span>Mark as Not Complete</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
-                                    <span>Mark Event Complete</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                                <button
+                                  onClick={() => { setOpenMenuId(null); handleMarkFinished(program.id, !program.is_finished); }}
+                                  className="w-full text-left px-3.5 py-2.5 text-gray-700 hover:bg-gray-50 flex items-center space-x-2"
+                                >
+                                  {program.is_finished ? (
+                                    <>
+                                      <XCircle className="h-3.5 w-3.5 text-amber-600" />
+                                      <span>Mark as Not Complete</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+                                      <span>Mark Event Complete</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -962,7 +977,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
         )}
 
         {/* Add/Edit Program Right-Side Slide-Over Drawer */}
-        {showAddModal && (
+        {!readOnly && showAddModal && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-xs flex justify-end z-50 overflow-hidden">
             <div className="w-full max-w-xl bg-white h-full shadow-2xl overflow-y-auto flex flex-col transition-transform duration-300 transform translate-x-0">
               
