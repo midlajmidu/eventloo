@@ -431,15 +431,23 @@ class StudentCreateUpdateSerializer(serializers.ModelSerializer):
         return data
 
 class SchoolSettingsSerializer(serializers.ModelSerializer):
+    school_code = serializers.CharField(source='school.code', read_only=True)
+    school_id = serializers.IntegerField(source='school.id', read_only=True)
+
     class Meta:
         model = SchoolSettings
         fields = [
-            'id', 'school', 'school_name', 'school_logo', 'school_address',
+            'id', 'school', 'school_code', 'school_id', 'school_name', 'school_logo', 'school_address',
             'school_phone', 'school_email', 'allow_self_registration',
             'default_event_duration', 'primary_color', 'secondary_color',
             'max_team_size', 'min_team_size', 'created_at', 'updated_at',
+            'first_place_points', 'second_place_points', 'third_place_points', 'participation_points',
+            'std_ind_first', 'std_ind_second', 'std_ind_third',
+            'std_group_first', 'std_group_second', 'std_group_third',
+            'mix_ind_first', 'mix_ind_second', 'mix_ind_third',
+            'mix_group_first', 'mix_group_second', 'mix_group_third',
         ]
-        read_only_fields = ['school']
+        read_only_fields = ['school', 'school_code', 'school_id']
 
 
 class SchoolSerializer(serializers.ModelSerializer):

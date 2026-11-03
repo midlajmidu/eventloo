@@ -2931,15 +2931,131 @@ class SchoolSettingsViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
 
+    def retrieve(self, request, *args, **kwargs):
+        instance = self.get_object()
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data)
+
     def update(self, request, *args, **kwargs):
         instance = self.get_object()
         serializer = self.get_serializer(instance, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        settings_obj = serializer.save()
+        if 'school_name' in serializer.validated_data and instance.school:
+            instance.school.name = serializer.validated_data['school_name']
+            instance.school.save(update_fields=['name'])
         return Response(serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
-        return self.update(request, *args, **kwargs) 
+        return self.update(request, *args, **kwargs)
+
+    @action(detail=False, methods=['get'])
+    def export_backup(self, request):
+        from django.http import HttpResponse
+        import json
+        school = request.user.school
+        settings_obj = SchoolSettings.get_settings(school)
+        classes = StudentClass.objects.filter(school=school)
+        categories = StudentCategory.objects.filter(school=school)
+
+        backup_data = {
+            'app': 'eventloo',
+            'version': '1.0',
+            'exported_at': datetime.now().isoformat(),
+            'school': {
+                'id': school.id,
+                'name': school.name,
+                'code': school.code,
+                'email': school.email or '',
+                'phone': school.phone or '',
+                'address': school.address or '',
+            },
+            'settings': {
+                'school_name': settings_obj.school_name,
+                'school_address': settings_obj.school_address,
+                'school_phone': settings_obj.school_phone,
+                'school_email': settings_obj.school_email,
+                'primary_color': settings_obj.primary_color,
+                'secondary_color': settings_obj.secondary_color,
+            },
+            'classes': [{'name': c.name, 'code': c.code} for c in classes],
+            'categories': [{
+                'name': cat.name,
+                'code': cat.code,
+                'is_mixing': cat.is_mixing,
+                'class_codes': list(cat.classes.values_list('code', flat=True)),
+                'mixed_category_codes': list(cat.mixed_categories.values_list('code', flat=True)),
+            } for cat in categories],
+        }
+
+        response = HttpResponse(
+            json.dumps(backup_data, indent=2, default=str),
+            content_type='application/json'
+        )
+        safe_code = school.code or 'school'
+        date_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+        response['Content-Disposition'] = f'attachment; filename="Eventloo_Backup_{safe_code}_{date_str}.json"'
+        return response
+
+    @action(detail=False, methods=['post'])
+    def import_backup(self, request):
+        import json
+        backup_file = request.FILES.get('backup_file')
+        if not backup_file:
+            return Response({'error': 'No backup file uploaded.'}, status=400)
+
+        try:
+            content = json.loads(backup_file.read().decode('utf-8'))
+        except Exception:
+            return Response({'error': 'Invalid JSON format in backup file.'}, status=400)
+
+        school = request.user.school
+
+        # Restore settings
+        if 'settings' in content and isinstance(content['settings'], dict):
+            s_data = content['settings']
+            settings_obj = SchoolSettings.get_settings(school)
+            for field in ['school_address', 'school_phone', 'school_email', 'primary_color', 'secondary_color']:
+                if field in s_data and s_data[field]:
+                    setattr(settings_obj, field, s_data[field])
+            settings_obj.save()
+
+        # Restore classes
+        classes_added = 0
+        if 'classes' in content and isinstance(content['classes'], list):
+            for c_data in content['classes']:
+                if c_data.get('code'):
+                    _, created = StudentClass.objects.get_or_create(
+                        school=school,
+                        code=c_data['code'],
+                        defaults={'name': c_data.get('name', c_data['code'])}
+                    )
+                    if created:
+                        classes_added += 1
+
+        # Restore categories
+        categories_added = 0
+        if 'categories' in content and isinstance(content['categories'], list):
+            for cat_data in content['categories']:
+                if cat_data.get('code'):
+                    cat, created = StudentCategory.objects.get_or_create(
+                        school=school,
+                        code=cat_data['code'],
+                        defaults={
+                            'name': cat_data.get('name', cat_data['code']),
+                            'is_mixing': cat_data.get('is_mixing', False),
+                        }
+                    )
+                    if created:
+                        categories_added += 1
+                    class_codes = cat_data.get('class_codes', [])
+                    if class_codes:
+                        assigned = StudentClass.objects.filter(school=school, code__in=class_codes)
+                        assigned.update(category=cat)
+
+        return Response({
+            'message': f'Backup successfully restored ({classes_added} new classes, {categories_added} new categories).'
+        }) 
 
 class StudentCategoryViewSet(viewsets.ModelViewSet):
     queryset = StudentCategory.objects.all()

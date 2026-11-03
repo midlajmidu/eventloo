@@ -791,6 +791,10 @@ export const schoolSettingsAPI = {
     }
     return api.put('schoolsettings/1/', data);
   },
+  exportBackup: () => api.get('schoolsettings/export_backup/', { responseType: 'blob' }),
+  importBackup: (formData) => api.post('schoolsettings/import_backup/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  }),
 };
 
 // Categories API
