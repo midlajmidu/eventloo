@@ -74,6 +74,45 @@ class EventDetailSerializer(serializers.ModelSerializer):
     current_teams = serializers.ReadOnlyField()
     is_registration_open = serializers.ReadOnlyField()
     created_by = UserBasicSerializer(read_only=True)
+    school_name = serializers.SerializerMethodField()
+    school_logo = serializers.SerializerMethodField()
+
+    def get_school_name(self, obj):
+        if not obj.school:
+            return 'School'
+        try:
+            from accounts.models import SchoolSettings
+            settings_obj = SchoolSettings.get_settings(obj.school)
+            if settings_obj and settings_obj.school_name:
+                return settings_obj.school_name
+        except Exception:
+            pass
+        return obj.school.name
+
+    def get_school_logo(self, obj):
+        if not obj.school:
+            return None
+        request = self.context.get('request')
+        try:
+            from accounts.models import SchoolSettings
+            settings_obj = SchoolSettings.get_settings(obj.school)
+            if settings_obj and settings_obj.school_logo:
+                if request:
+                    try:
+                        return request.build_absolute_uri(settings_obj.school_logo.url)
+                    except Exception:
+                        pass
+                return getattr(settings_obj.school_logo, 'url', None)
+        except Exception:
+            pass
+        if obj.school.logo:
+            if request:
+                try:
+                    return request.build_absolute_uri(obj.school.logo.url)
+                except Exception:
+                    pass
+            return getattr(obj.school.logo, 'url', None)
+        return None
     
     class Meta:
         model = Event
@@ -92,6 +131,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'mix_group_first', 'mix_group_second', 'mix_group_third',
             'count_general_individual_points_for_students',
             'is_schedule_published',
+            'school_name', 'school_logo',
             'current_participants', 'current_teams', 'is_registration_open',
             'created_by', 'created_at', 'updated_at', 'image'
         ]

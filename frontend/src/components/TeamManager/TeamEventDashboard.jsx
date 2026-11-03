@@ -451,7 +451,7 @@ const TeamEventDashboard = () => {
       <div className="sticky top-0 z-40 bg-white border-b border-slate-200/90 shadow-2xs backdrop-blur-md bg-white/95">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            {/* Left: Back button + Event Title & Metadata */}
+            {/* Left: Back button + School Logo + Event Title & Metadata */}
             <div className="flex items-center gap-3 min-w-0">
               <button
                 onClick={() => navigate('/team-manager/events')}
@@ -461,10 +461,18 @@ const TeamEventDashboard = () => {
                 <ArrowLeft className="h-4 w-4" />
               </button>
 
+              {event.school_logo && (
+                <img
+                  src={event.school_logo}
+                  alt={event.school_name || 'School Logo'}
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain bg-slate-50 border border-slate-200/80 p-0.5 shrink-0 shadow-2xs"
+                />
+              )}
+
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-600">
-                    Team Event Portal
+                  <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-indigo-600 truncate">
+                    {event.school_name || 'Team Event Portal'}
                   </span>
                   <span className="text-slate-300">·</span>
                   <span
@@ -498,8 +506,8 @@ const TeamEventDashboard = () => {
               </div>
             </div>
 
-            {/* Right: Team Name Badge & Schedule Status Badge */}
-            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto shrink-0">
+            {/* Right: Team Name Badge & Schedule Status Badge & Eventloo Logo */}
+            <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto shrink-0">
               {teamData?.name && (
                 <div className="inline-flex items-center gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3.5 py-1.5 text-xs font-bold text-indigo-900 shadow-2xs">
                   <Users className="h-3.5 w-3.5 text-indigo-600" />
@@ -517,6 +525,20 @@ const TeamEventDashboard = () => {
                   <span>Schedule Draft</span>
                 </span>
               )}
+
+              <div className="h-5 w-px bg-slate-200 hidden sm:block" />
+
+              <a
+                href="/"
+                title="Eventloo"
+                className="hidden sm:flex items-center hover:opacity-90 transition-opacity pl-0.5 shrink-0"
+              >
+                <img
+                  src="/eventloo-loop-logo.svg"
+                  alt="Eventloo"
+                  className="h-5 sm:h-6 w-auto object-contain"
+                />
+              </a>
             </div>
           </div>
         </div>

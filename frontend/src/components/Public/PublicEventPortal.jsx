@@ -151,40 +151,68 @@ const PublicEventPortal = () => {
     <div className="min-h-screen bg-[#f7f8fb] text-slate-800 flex flex-col">
       
       {/* ========================================================================= */}
-      {/* 1. TOP BRANDING & EVENT HEADER (ALL-WHITE MINIMAL)                        */}
+      {/* 1. TOP BRANDING & EVENT HEADER (SCHOOL LOGO + EVENT NAME + EVENTLOO)      */}
       {/* ========================================================================= */}
       <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-2xs">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white font-black text-sm flex items-center justify-center shrink-0">
-              E
-            </div>
-            <div className="truncate">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block truncate">
-                {event.school_name || 'Event Results Portal'}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
+          {/* Top Left: School Logo & Event Name */}
+          <div className="flex items-center gap-3 min-w-0">
+            {event.school_logo ? (
+              <img
+                src={event.school_logo}
+                alt={event.school_name || 'School Logo'}
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain bg-slate-50 border border-slate-200/80 p-0.5 shrink-0 shadow-2xs"
+              />
+            ) : (
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-700 font-bold text-sm sm:text-base flex items-center justify-center shrink-0 shadow-2xs">
+                {(event.school_name || 'E').charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="min-w-0">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 block truncate leading-tight">
+                {event.school_name || 'Campus Event'}
               </span>
-              <h1 className="text-sm sm:text-base font-bold text-slate-900 truncate">
+              <h1 className="text-sm sm:text-base md:text-lg font-bold text-slate-900 truncate leading-snug">
                 {event.title}
               </h1>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => setShowQrModal(true)}
-              className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200/70 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-              title="Show QR Code"
+          {/* Right Side: QR Pass, Share Button & Eventloo Brand Logo */}
+          <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <button
+                onClick={() => setShowQrModal(true)}
+                className="p-1.5 sm:px-2.5 sm:py-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200/70 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+                title="Show QR Code"
+              >
+                <QrCode className="w-4 h-4 text-slate-600" />
+                <span className="hidden md:inline">QR Pass</span>
+              </button>
+              <button
+                onClick={handleCopy}
+                className="px-2.5 sm:px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Copy share link"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span className="hidden sm:inline">{copied ? 'Copied' : 'Share'}</span>
+              </button>
+            </div>
+
+            <div className="h-5 w-px bg-slate-200 hidden sm:block" />
+
+            {/* Eventloo Logo on the right */}
+            <a
+              href="/"
+              title="Powered by Eventloo"
+              className="flex items-center hover:opacity-90 transition-opacity pl-0.5 shrink-0"
             >
-              <QrCode className="w-4 h-4 text-slate-600" />
-              <span className="hidden sm:inline">QR Pass</span>
-            </button>
-            <button
-              onClick={handleCopy}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs"
-            >
-              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Link Copied' : 'Share'}</span>
-            </button>
+              <img
+                src="/eventloo-loop-logo.svg"
+                alt="Eventloo"
+                className="h-5 sm:h-6 w-auto object-contain"
+              />
+            </a>
           </div>
         </div>
       </header>

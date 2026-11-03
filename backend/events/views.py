@@ -8298,6 +8298,30 @@ def get_public_event_portal(request, event_id):
     except Event.DoesNotExist:
         return Response({'error': 'Event not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    # School branding from System Settings
+    school_name = event.school.name if event.school else 'School'
+    school_logo_url = None
+    if event.school:
+        try:
+            from accounts.models import SchoolSettings
+            settings_obj = SchoolSettings.get_settings(event.school)
+            if settings_obj:
+                if settings_obj.school_name:
+                    school_name = settings_obj.school_name
+                if settings_obj.school_logo:
+                    try:
+                        school_logo_url = request.build_absolute_uri(settings_obj.school_logo.url)
+                    except Exception:
+                        school_logo_url = getattr(settings_obj.school_logo, 'url', None)
+        except Exception:
+            pass
+
+        if not school_logo_url and event.school.logo:
+            try:
+                school_logo_url = request.build_absolute_uri(event.school.logo.url)
+            except Exception:
+                school_logo_url = getattr(event.school.logo, 'url', None)
+
     # Resolve origin and public URL
     origin = request.headers.get('Origin') or request.META.get('HTTP_ORIGIN') or ''
     if origin:
@@ -8425,8 +8449,8 @@ def get_public_event_portal(request, event_id):
             'end_date': event.end_date.isoformat() if event.end_date else None,
             'status': event.status or 'published',
             'is_schedule_published': event.is_schedule_published,
-            'school_name': event.school.name if event.school else 'School',
-            'school_logo': event.school.logo.url if (event.school and getattr(event.school, 'logo', None)) else None,
+            'school_name': school_name,
+            'school_logo': school_logo_url,
         },
         'categories': categories,
         'programs': programs_data,
