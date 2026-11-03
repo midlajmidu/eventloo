@@ -8002,7 +8002,13 @@ def generate_certificates(request, event_id):
 
         category_suffix = f'_{slugify(category)}' if (category and category != 'all') else ''
         filename_prefix = 'Badges' if is_badge_only else 'Certificates'
-        pdf_buffer = render_certificates_pdf(event, templates, recipients, quality)
+        origin = request.headers.get('Origin') or request.META.get('HTTP_ORIGIN') or ''
+        if not origin:
+            try:
+                origin = request.build_absolute_uri('/').rstrip('/')
+            except Exception:
+                origin = ''
+        pdf_buffer = render_certificates_pdf(event, templates, recipients, quality, base_url=origin)
         response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
         response['Content-Disposition'] = (
             f'attachment; filename="{filename_prefix}_{slugify(event.title) or event.id}{team_suffix}{category_suffix}.pdf"'

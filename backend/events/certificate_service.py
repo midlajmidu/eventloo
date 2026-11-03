@@ -1,13 +1,19 @@
+import logging
 from dataclasses import dataclass
 from io import BytesIO
 
 from django.core.exceptions import ValidationError
 from PIL import Image
+from reportlab.graphics.barcode.qr import QrCodeWidget
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics import renderPDF
 from reportlab.lib.colors import HexColor
 from reportlab.lib.pagesizes import A4, landscape, portrait
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
+
+logger = logging.getLogger(__name__)
 
 from accounts.models import StudentCategory
 
@@ -250,7 +256,7 @@ def _draw_field(pdf, field, value, box_x=0, box_y=None, box_width=None, box_heig
         text_object.textLine(line)
         pdf.drawText(text_object)
 
-def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None):
+def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None, base_url=None):
     """
     Renders a single high-quality participant paper badge (1 of 9 per A4 sheet)
     matching the official Eventloo physical credential model reference:
@@ -262,6 +268,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
       - Divider
       - Left: PROGRAMS bullet list
       - Right: Stats columns (Total Events, Stage Events, Off-Stage Events)
+      - Bottom Right: Official verification QR code to participant digital badge
       - Bottom: Smooth dual-tone wave graphic in Eventloo Indigo
     """
     student = recipient.student
@@ -542,10 +549,55 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pdf.drawCentredString(c3_cx, y_stat_num - 7, 'Off-Stage')
     pdf.drawCentredString(c3_cx, y_stat_num - 12, 'Events')
 
+    # 10. Official Verification QR Code in Bottom Right
+    qr_box_w = 46.0
+    qr_box_h = 52.0
+    qr_box_x = card_x + card_w - qr_box_w - 9.0
+    qr_box_y = card_y + 8.0
+
+    # Clean white container badge with rounded corners and subtle border
+    pdf.setFillColor(HexColor('#FFFFFF'))
+    pdf.setStrokeColor(HexColor('#CBD5E1'))
+    pdf.setLineWidth(0.6)
+    pdf.roundRect(qr_box_x, qr_box_y, qr_box_w, qr_box_h, radius=5, stroke=1, fill=1)
+
+    # Resolve target URL for public digital badge
+    effective_base = base_url
+    if not effective_base:
+        from django.conf import settings
+        origins = getattr(settings, 'CORS_ALLOWED_ORIGINS', [])
+        prod_origins = [o for o in origins if 'eventloo' in o and o.startswith('https')]
+        if prod_origins:
+            effective_base = prod_origins[0]
+        elif origins:
+            effective_base = origins[0]
+        else:
+            effective_base = ''
+    qr_target_url = f"{effective_base.rstrip('/')}/events/{event.id}/badge/{student.id}" if effective_base else f"/events/{event.id}/badge/{student.id}"
+
+    qr_size = 36.0
+    try:
+        qr = QrCodeWidget(qr_target_url)
+        qr.barWidth = qr_size
+        qr.barHeight = qr_size
+        qr.barBorder = 0
+        d = Drawing(qr_size, qr_size)
+        d.add(qr)
+        qr_draw_x = qr_box_x + (qr_box_w - qr_size) / 2.0
+        qr_draw_y = qr_box_y + 11.5
+        renderPDF.draw(d, pdf, qr_draw_x, qr_draw_y)
+    except Exception as qr_err:
+        logger.warning("Badge QR generation failed: %s", qr_err)
+
+    # Micro label below QR
+    pdf.setFont('Helvetica-Bold', 4.2)
+    pdf.setFillColor(HexColor('#312E81'))
+    pdf.drawCentredString(qr_box_x + qr_box_w / 2.0, qr_box_y + 4.0, 'SCAN TO VERIFY')
+
     pdf.restoreState()
 
 
-def render_certificates_pdf(event, templates_by_type, recipients, quality='standard'):
+def render_certificates_pdf(event, templates_by_type, recipients, quality='standard', base_url=None):
     if quality not in ('screen', 'standard', 'print'):
         raise ValidationError('Unsupported certificate quality.')
     if not recipients:
@@ -628,7 +680,7 @@ def render_certificates_pdf(event, templates_by_type, recipients, quality='stand
 
                 _draw_paper_badge(
                     pdf, cell_x, cell_y, badge_width, badge_height,
-                    recipient, event, category_names
+                    recipient, event, category_names, base_url=base_url
                 )
 
             pdf.showPage()
