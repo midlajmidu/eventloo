@@ -15,7 +15,14 @@ import {
   QrCode,
   Layers,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ArrowRight,
+  GraduationCap,
+  Target,
+  BarChart3,
+  Rocket,
+  ShieldCheck,
+  Flame
 } from 'lucide-react';
 import { publicEventAPI } from '../../services/api';
 
@@ -122,6 +129,20 @@ const PublicEventPortal = () => {
     }
   };
 
+  const publishedCount = useMemo(() => {
+    return programs.filter((p) => p.is_published).length;
+  }, [programs]);
+
+  const scrollToSection = (tabName) => {
+    setActiveTab(tabName);
+    setTimeout(() => {
+      const el = document.getElementById('live-results-center');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 50);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#f7f8fb] flex items-center justify-center p-4">
@@ -151,9 +172,9 @@ const PublicEventPortal = () => {
     <div className="min-h-screen bg-[#f7f8fb] text-slate-800 flex flex-col">
       
       {/* ========================================================================= */}
-      {/* 1. TOP BRANDING & EVENT HEADER (SCHOOL LOGO + EVENT NAME + EVENTLOO)      */}
+      {/* 1. TOP BRANDING HEADER (SCHOOL LOGO + EVENT NAME + EVENTLOO LOGO ONLY)    */}
       {/* ========================================================================= */}
-      <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-2xs">
+      <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-30 shadow-2xs">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           {/* Top Left: School Logo & Event Name */}
           <div className="flex items-center gap-3 min-w-0">
@@ -178,127 +199,269 @@ const PublicEventPortal = () => {
             </div>
           </div>
 
-          {/* Right Side: QR Pass, Share Button & Eventloo Brand Logo */}
-          <div className="flex items-center gap-2.5 sm:gap-3.5 shrink-0">
-            <div className="flex items-center gap-1.5 sm:gap-2">
-              <button
-                onClick={() => setShowQrModal(true)}
-                className="p-1.5 sm:px-2.5 sm:py-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200/70 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-                title="Show QR Code"
-              >
-                <QrCode className="w-4 h-4 text-slate-600" />
-                <span className="hidden md:inline">QR Pass</span>
-              </button>
-              <button
-                onClick={handleCopy}
-                className="px-2.5 sm:px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors text-xs font-semibold flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                title="Copy share link"
-              >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                <span className="hidden sm:inline">{copied ? 'Copied' : 'Share'}</span>
-              </button>
-            </div>
-
-            <div className="h-5 w-px bg-slate-200 hidden sm:block" />
-
-            {/* Eventloo Logo on the right */}
-            <a
-              href="/"
-              title="Powered by Eventloo"
-              className="flex items-center hover:opacity-90 transition-opacity pl-0.5 shrink-0"
-            >
-              <img
-                src="/eventloo-loop-logo.svg"
-                alt="Eventloo"
-                className="h-5 sm:h-6 w-auto object-contain"
-              />
-            </a>
-          </div>
+          {/* Right Side: Eventloo Brand Logo ONLY (Share & QR removed from header as requested) */}
+          <a
+            href="/"
+            title="Powered by Eventloo"
+            className="flex items-center hover:opacity-90 transition-opacity pl-0.5 shrink-0"
+          >
+            <img
+              src="/eventloo-loop-logo.svg"
+              alt="Eventloo"
+              className="h-5 sm:h-6 w-auto object-contain"
+            />
+          </a>
         </div>
       </header>
 
-      {/* Main Content Container */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 flex-1 w-full space-y-5">
+      {/* ========================================================================= */}
+      {/* 2. HERO LANDING SECTION (SKY/CLOUD AESTHETIC, BIG TITLE, PILL BUTTONS)    */}
+      {/* ========================================================================= */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-[#c6e2ff] via-[#e5f1ff] to-[#f8fafc] pt-14 pb-16 sm:pt-20 sm:pb-24 px-4 sm:px-6">
+        {/* Atmospheric soft clouds / light diffusion */}
+        <div className="absolute inset-0 pointer-events-none opacity-50">
+          <div className="absolute -top-20 left-1/4 w-96 h-96 bg-white/70 rounded-full blur-3xl" />
+          <div className="absolute top-1/3 -right-20 w-80 h-80 bg-white/60 rounded-full blur-2xl" />
+          <div className="absolute -bottom-10 left-1/3 w-[500px] h-48 bg-white/80 rounded-full blur-3xl" />
+        </div>
 
-        {/* ========================================================================= */}
-        {/* 2. EVENT SUMMARY CARD                                                     */}
-        {/* ========================================================================= */}
-        <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Official Live Portal
-              </span>
-              <span className="text-[10px] text-slate-400">·</span>
-              <span className="text-xs text-slate-500 font-medium">
-                {programs.filter(p => p.is_published).length} of {programs.length} Results Published
-              </span>
-            </div>
-            <h2 className="text-lg sm:text-xl font-bold text-slate-900">{event.title}</h2>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 pt-0.5">
-              <span className="flex items-center gap-1.5">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                <span>{formatDate(event.start_date)} {event.end_date && event.end_date !== event.start_date ? `– ${formatDate(event.end_date)}` : ''}</span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                <span>{event.venue}</span>
-              </span>
-            </div>
+        <div className="relative max-w-4xl mx-auto text-center space-y-5">
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/85 backdrop-blur-md border border-white/80 text-indigo-700 text-xs font-semibold shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Official Live Event Portal</span>
+            <span className="text-slate-300">·</span>
+            <span className="text-slate-600">{event.school_name || 'Campus Fest'}</span>
           </div>
 
-          {/* Clean Quick Stats */}
-          <div className="flex items-center gap-3 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-            <div className="text-center px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100">
-              <span className="text-base font-bold text-slate-900 block leading-tight">{programs.length}</span>
-              <span className="text-[10px] text-slate-500 font-normal">Programs</span>
+          {/* Headline with Gold Trophy Motif */}
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-[1.14]">
+            {event.title} <span className="inline-block hover:scale-110 transition-transform">🏆</span>
+          </h1>
+
+          {/* Subtitle / Description */}
+          <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto font-normal leading-relaxed">
+            {event.description ||
+              `A grand grassroots gathering celebrating student talent, literary arts, and cultural competition connecting units across campus stages.`}
+          </p>
+
+          {/* Metadata Pills (College name, Date, Venue) */}
+          <div className="flex flex-wrap items-center justify-center gap-2.5 sm:gap-3 text-xs text-slate-700 font-medium pt-1">
+            <div className="flex items-center gap-1.5 bg-white/80 backdrop-blur-xs px-3.5 py-1.5 rounded-full border border-white/70 shadow-2xs">
+              <GraduationCap className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span className="font-semibold text-slate-900">{event.school_name || 'Campus'}</span>
             </div>
-            <div className="text-center px-3 py-1.5 rounded-lg bg-slate-50 border border-slate-100">
-              <span className="text-base font-bold text-slate-900 block leading-tight">{teamStandings.length}</span>
-              <span className="text-[10px] text-slate-500 font-normal">Teams</span>
+            <div className="flex items-center gap-1.5 bg-white/80 backdrop-blur-xs px-3.5 py-1.5 rounded-full border border-white/70 shadow-2xs">
+              <Calendar className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+              <span>{formatDate(event.start_date)} {event.end_date && event.end_date !== event.start_date ? `– ${formatDate(event.end_date)}` : ''}</span>
             </div>
+            {event.venue && (
+              <div className="flex items-center gap-1.5 bg-white/80 backdrop-blur-xs px-3.5 py-1.5 rounded-full border border-white/70 shadow-2xs">
+                <MapPin className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                <span>{event.venue}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Hero Action Buttons (Pill buttons matching Image 1) */}
+          <div className="pt-3 flex flex-wrap items-center justify-center gap-3">
+            {/* Primary Pill Button */}
+            <button
+              onClick={() => scrollToSection('results')}
+              className="px-6 py-3 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold text-xs sm:text-sm shadow-md shadow-blue-500/25 hover:shadow-lg hover:shadow-blue-500/35 transition-all flex items-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <span>Explore Results & Standings</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+
+            {/* Secondary Pill Button */}
+            <button
+              onClick={() => scrollToSection('schedule')}
+              className="px-5 py-3 rounded-full bg-white/95 hover:bg-white text-slate-800 font-semibold text-xs sm:text-sm border border-slate-200/80 shadow-xs hover:shadow-sm transition-all flex items-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Clock className="w-4 h-4 text-indigo-600" />
+              <span>Stage Schedule</span>
+            </button>
+
+            {/* Tertiary Pill Button */}
+            <button
+              onClick={() => scrollToSection('points')}
+              className="px-5 py-3 rounded-full bg-white/95 hover:bg-white text-slate-800 font-semibold text-xs sm:text-sm border border-slate-200/80 shadow-xs hover:shadow-sm transition-all flex items-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Award className="w-4 h-4 text-amber-500" />
+              <span>Team Leaderboard</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 3. IMPACT METRICS & ABOUT SECTION (OUR MISSION & ABOUT EVENTLOO VALUES)   */}
+      {/* ========================================================================= */}
+      <section className="max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
+        {/* Centered Pill */}
+        <div className="text-center">
+          <span className="inline-block px-4 py-1 rounded-full bg-slate-100 text-slate-700 text-xs font-semibold tracking-wide">
+            Our Impact
+          </span>
+        </div>
+
+        {/* Horizontal Stat Metrics Separated by Dots (Matches Image 2) */}
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 sm:gap-x-10 gap-y-3 text-center">
+          <div className="text-slate-900 font-bold text-sm sm:text-lg">
+            <span>{programs.length}+ Competitions</span>
+          </div>
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-300 hidden sm:inline-block" />
+          <div className="text-slate-900 font-bold text-sm sm:text-lg">
+            <span>{teamStandings.length} Registered Teams</span>
+          </div>
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-300 hidden sm:inline-block" />
+          <div className="text-slate-900 font-bold text-sm sm:text-lg">
+            <span>{stages.length || 'Campus'} Festival Stages</span>
+          </div>
+          <span className="w-1.5 h-1.5 rounded-full bg-slate-300 hidden sm:inline-block" />
+          <div className="text-slate-900 font-bold text-sm sm:text-lg">
+            <span>{publishedCount} Published Results</span>
           </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* 3. NAVIGATION TABS (RESULTS | POINTS TABLE | SCHEDULE)                    */}
-        {/* ========================================================================= */}
-        <div className="flex items-center border-b border-slate-200/80 bg-white rounded-xl px-2 shadow-2xs">
-          <button
-            onClick={() => setActiveTab('results')}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'results'
-                ? 'border-indigo-600 text-indigo-700'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Trophy className="w-4 h-4" />
-            <span>Program Results</span>
-          </button>
+        {/* Two-Column Grid: Our Mission vs About Eventloo (Matches Image 2) */}
+        <div className="mt-14 sm:mt-16 grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-16 items-start">
+          {/* Left Column: Our Mission */}
+          <div className="space-y-4">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              Our mission
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed font-normal">
+              {event.description ||
+                `To discover, nurture, and elevate creative talent through a structured grassroots festival ecosystem that empowers students in literature, arts, media, culture, and leadership, providing opportunities for progression from campus stages to state and national platforms.`}
+            </p>
+            <div className="pt-2 flex flex-col gap-2 text-xs text-slate-500">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Organized by <strong className="text-slate-800">{event.school_name || 'Organizing Institution'}</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-indigo-600 shrink-0" />
+                <span>Venue: <strong className="text-slate-800">{event.venue || 'Campus Main Ground'}</strong></span>
+              </div>
+            </div>
+          </div>
 
-          <button
-            onClick={() => setActiveTab('points')}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'points'
-                ? 'border-indigo-600 text-indigo-700'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Award className="w-4 h-4" />
-            <span>Points Table</span>
-          </button>
+          {/* Right Column: About Eventloo / Our Values */}
+          <div className="space-y-4">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+              Our values
+            </h2>
 
-          <button
-            onClick={() => setActiveTab('schedule')}
-            className={`py-3 px-4 text-xs font-semibold border-b-2 transition-all flex items-center gap-2 cursor-pointer ${
-              activeTab === 'schedule'
-                ? 'border-indigo-600 text-indigo-700'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
-            }`}
-          >
-            <Clock className="w-4 h-4" />
-            <span>Schedule</span>
-          </button>
+            <div className="space-y-4 pt-1">
+              {/* Value 1 */}
+              <div className="flex items-start gap-3.5">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                  <Target className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                    Grassroots Literary & Arts Ecosystem
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                    To build a modern digital fest ecosystem where every participant's voice and talent has the opportunity to grow from campus to global platforms.
+                  </p>
+                </div>
+              </div>
+
+              {/* Value 2 */}
+              <div className="flex items-start gap-3.5">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                  <BarChart3 className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                    Fair, Real-Time Live Scoring
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                    To preserve transparency and intellectual excellence by empowering communities with verified multi-judge mark conversions and live points standings.
+                  </p>
+                </div>
+              </div>
+
+              {/* Value 3 */}
+              <div className="flex items-start gap-3.5">
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0 mt-0.5">
+                  <Rocket className="w-4 h-4 text-indigo-600" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                    Instant Stage Scheduling & Verified Credentials
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                    To create a seamless fest operation with automated stage management, chest number allocations, and verified digital certificates.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 4. LIVE RESULTS & STANDINGS CENTER                                        */}
+      {/* ========================================================================= */}
+      <main id="live-results-center" className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12 flex-1 w-full space-y-6">
+        
+        {/* Section Header */}
+        <div className="text-center space-y-1.5">
+          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-semibold">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Live Results & Timetable</span>
+          </div>
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            Festival Results & Leaderboard
+          </h2>
+          <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto">
+            Browse verified program winners, live house points standings, and stage schedules below.
+          </p>
+        </div>
+
+        {/* Modern Pill Switcher Tabs */}
+        <div className="flex items-center justify-center">
+          <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200/80 shadow-2xs">
+            <button
+              onClick={() => setActiveTab('results')}
+              className={`py-2 px-4 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'results'
+                  ? 'bg-white text-indigo-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Trophy className="w-3.5 h-3.5" />
+              <span>Program Results</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('points')}
+              className={`py-2 px-4 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'points'
+                  ? 'bg-white text-indigo-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>Points Table</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('schedule')}
+              className={`py-2 px-4 rounded-lg text-xs font-semibold transition-all flex items-center gap-2 cursor-pointer ${
+                activeTab === 'schedule'
+                  ? 'bg-white text-indigo-700 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Schedule</span>
+            </button>
+          </div>
         </div>
 
         {/* ========================================================================= */}
@@ -777,8 +940,35 @@ const PublicEventPortal = () => {
       )}
 
       {/* Footer */}
-      <footer className="py-4 text-center text-xs text-slate-400 border-t border-slate-200/80 bg-white">
-        Powered by Eventloo · Live Event Management
+      <footer className="py-8 px-4 text-xs text-slate-500 border-t border-slate-200/80 bg-white">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5">
+            <img
+              src="/eventloo-loop-logo.svg"
+              alt="Eventloo"
+              className="h-5 w-auto object-contain"
+            />
+            <span className="text-slate-300">·</span>
+            <span className="text-slate-500">The Modern Festival & Arts Management OS</span>
+          </div>
+
+          <div className="flex items-center gap-4 text-xs font-semibold text-slate-600">
+            <button
+              onClick={() => setShowQrModal(true)}
+              className="hover:text-indigo-600 flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              <span>QR Mobile Pass</span>
+            </button>
+            <button
+              onClick={handleCopy}
+              className="hover:text-indigo-600 flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5" />}
+              <span>{copied ? 'Link Copied!' : 'Share Event'}</span>
+            </button>
+          </div>
+        </div>
       </footer>
 
     </div>
