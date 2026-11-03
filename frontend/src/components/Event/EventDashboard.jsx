@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { eventsAPI } from '../../services/api';
+import EventOverview from './EventOverview';
 import EventPrograms from './EventPrograms';
 import EventAssignments from './EventAssignments';
 import EventParticipants from './EventParticipants';
@@ -14,6 +15,7 @@ import EventTopScorers from './EventTopScorers';
 import EventStages from './EventStages';
 import EventSchedule from './EventSchedule';
 import {
+  LayoutDashboard,
   BookOpen,
   Users,
   UserCheck,
@@ -33,7 +35,7 @@ const EventDashboard = () => {
   const { eventId } = useParams();
   const navigate = useNavigate();
   const [event, setEvent] = useState(null);
-  const [activeTab, setActiveTab] = useState('programs');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState([]);
 
@@ -79,6 +81,7 @@ const EventDashboard = () => {
   };
 
   const tabs = [
+    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, description: 'Event overview and key metrics' },
     { id: 'programs', name: 'Programs', icon: BookOpen, description: 'Manage event programs' },
     { id: 'stages', name: 'Stages', icon: MapPinned, description: 'Manage stages and locations' },
     { id: 'schedule', name: 'Schedule', icon: CalendarClock, description: 'Schedule programs by stage and time' },
@@ -98,6 +101,8 @@ const EventDashboard = () => {
     const props = { event, eventId, onRefresh: fetchEvent, categories };
 
     switch (activeTab) {
+      case 'dashboard':
+        return <EventOverview {...props} setActiveTab={setActiveTab} />;
       case 'programs':
         return <EventPrograms {...props} />;
       case 'stages':
@@ -123,7 +128,7 @@ const EventDashboard = () => {
       case 'settings':
         return <EventSettings {...props} />;
       default:
-        return <EventPrograms {...props} />;
+        return <EventOverview {...props} setActiveTab={setActiveTab} />;
     }
   };
 
@@ -225,7 +230,43 @@ const EventDashboard = () => {
 
         <div className="flex flex-col lg:flex-row gap-5">
           {/* Desktop Sidebar Navigation */}
-          <div className="sticky top-6 hidden max-h-[calc(100vh-5rem)] w-60 shrink-0 self-start overflow-y-auto lg:block">
+          <div className="sticky top-6 hidden max-h-[calc(100vh-5rem)] w-60 shrink-0 self-start overflow-y-auto lg:block space-y-3">
+            {/* Small Minimal Dashboard Pulse on top of Event Navigation */}
+            <div className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-2xs">
+              <div className="flex items-center justify-between mb-2 px-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Event Pulse</span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-center">
+                <button
+                  onClick={() => setActiveTab('programs')}
+                  className="bg-indigo-50/70 hover:bg-indigo-100/70 transition-colors rounded-lg p-2 border border-indigo-100/60 cursor-pointer text-left"
+                >
+                  <span className="text-base font-black text-indigo-700 block leading-tight">
+                    {event.programs?.length || event.programs_count || 0}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium block">Programs</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('participants')}
+                  className="bg-emerald-50/70 hover:bg-emerald-100/70 transition-colors rounded-lg p-2 border border-emerald-100/60 cursor-pointer text-left"
+                >
+                  <span className="text-base font-black text-emerald-700 block leading-tight">
+                    {event.current_participants || 0}
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-medium block">Registered</span>
+                </button>
+              </div>
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] px-1 text-slate-500">
+                <span>Teams: <strong className="text-slate-800">{event.current_teams || 0}</strong></span>
+                <span>Cap: <strong className="text-slate-800">{event.max_participants || '∞'}</strong></span>
+              </div>
+            </div>
+
+            {/* Event Navigation */}
             <div className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-2xs">
               <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5 px-2">Event Navigation</h3>
               <nav className="space-y-0.5">
@@ -236,7 +277,7 @@ const EventDashboard = () => {
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`w-full flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-colors ${isActive
+                      className={`w-full flex items-center px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${isActive
                           ? 'bg-indigo-50 text-indigo-700 font-semibold'
                           : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                         }`}
@@ -248,25 +289,6 @@ const EventDashboard = () => {
                   );
                 })}
               </nav>
-            </div>
-
-            {/* Quick Stats */}
-            <div className="bg-white rounded-xl border border-slate-200/80 p-3 mt-4 shadow-2xs">
-              <h4 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2.5 px-1">Quick Overview</h4>
-              <div className="space-y-2 px-1 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Participants</span>
-                  <span className="font-bold text-slate-900">{event.current_participants || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Teams</span>
-                  <span className="font-bold text-slate-900">{event.current_teams || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Max Capacity</span>
-                  <span className="font-bold text-slate-900">{event.max_participants || 'Unlimited'}</span>
-                </div>
-              </div>
             </div>
           </div>
 

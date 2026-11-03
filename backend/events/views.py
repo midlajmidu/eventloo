@@ -121,7 +121,7 @@ class EventViewSet(viewsets.ModelViewSet):
             permission_classes = [IsAdminOrEventManager]
         elif self.action in [
             'retrieve', 'list', 'points_teams', 'schedule_export', 'admin_programs',
-            'chest_numbers', 'search_by_chest_number',
+            'chest_numbers', 'search_by_chest_number', 'analytics',
         ]:
             permission_classes = [IsTeamManagerOrAdmin]
         else:
