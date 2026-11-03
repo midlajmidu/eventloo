@@ -2260,8 +2260,22 @@ class ProgramViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         program = self.get_object()
         previous_grading_points = dict(program.grading_points or {})
+        prev_custom = (
+            program.has_custom_points,
+            program.first_place_points,
+            program.second_place_points,
+            program.third_place_points,
+            program.participation_points,
+        )
         updated_program = serializer.save()
-        if previous_grading_points != (updated_program.grading_points or {}):
+        new_custom = (
+            updated_program.has_custom_points,
+            updated_program.first_place_points,
+            updated_program.second_place_points,
+            updated_program.third_place_points,
+            updated_program.participation_points,
+        )
+        if previous_grading_points != (updated_program.grading_points or {}) or prev_custom != new_custom:
             from .services import recalculate_program_results
             recalculate_program_results(updated_program)
 

@@ -455,6 +455,20 @@ def set_subteam_leader(*, user, team, program, student_id, sub_team_number=1):
 def _position_points(program, position):
     event = getattr(program, 'event', None)
 
+    # 1. Custom program placement points override
+    if getattr(program, 'has_custom_points', False):
+        if position == 1 and getattr(program, 'first_place_points', None) is not None:
+            return int(program.first_place_points)
+        elif position == 2 and getattr(program, 'second_place_points', None) is not None:
+            return int(program.second_place_points)
+        elif position == 3 and getattr(program, 'third_place_points', None) is not None:
+            return int(program.third_place_points)
+        elif position not in (1, 2, 3):
+            if getattr(program, 'participation_points', None) is not None:
+                return int(program.participation_points)
+            return int(getattr(event, 'participation_points', 0) or 0)
+
+    # 2. Standard event placement points matrix
     if position not in (1, 2, 3):
         return int(getattr(event, 'participation_points', 0) or 0)
 

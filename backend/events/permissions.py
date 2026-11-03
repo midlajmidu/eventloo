@@ -164,10 +164,14 @@ class IsTeamManagerOrAdmin(permissions.BasePermission):
             return False
         if getattr(request.user, 'role', None) in ['admin', 'event_manager']:
             school_id = getattr(request.user, 'school_id', None)
-            route_team_id = view.kwargs.get('team_id') or view.kwargs.get('pk')
+            route_team_id = view.kwargs.get('team_id')
             from .models import Event, Program, Team
             event_id = view.kwargs.get('event_id') or view.kwargs.get('event_pk')
+            if event_id and not str(event_id).isdigit():
+                event_id = None
             program_id = view.kwargs.get('program_id') or view.kwargs.get('program_pk')
+            if program_id and not str(program_id).isdigit():
+                program_id = None
             return bool(
                 school_id is not None
                 and (not route_team_id or Team.objects.filter(id=route_team_id, school_id=school_id).exists())

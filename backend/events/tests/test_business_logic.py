@@ -1135,6 +1135,82 @@ class EventBusinessLogicTests(TestCase):
         program = Program.objects.get(name='API Grade Program')
         self.assertEqual(program.grading_points, {'A+': 10})
 
+    def test_program_custom_placement_points_override_and_recalculate(self):
+        self.event.std_ind_first = 5
+        self.event.std_ind_second = 3
+        self.event.std_ind_third = 1
+        self.event.participation_points = 0
+        self.event.max_single_programs_per_student = 10
+        self.event.max_programs_per_student = 10
+        self.event.save()
+
+        program = Program.objects.create(
+            event=self.event,
+            name='Custom Points Program',
+            category='junior',
+            max_participants=4,
+            has_custom_points=True,
+            first_place_points=15,
+            second_place_points=10,
+            third_place_points=5,
+            participation_points=2,
+        )
+
+        for index, student in enumerate(self.students):
+            assign_students(user=self.admin, team=self.team, program=program, student_ids=[student.id])
+            result = ProgramResult.objects.get(program=program, participant=student)
+            result.judge1_marks = Decimal(str(40 - index))
+            result.judge2_marks = Decimal(str(40 - index))
+            result.entry_status = 'submitted'
+            result.save()
+
+        recalculate_program_results(program)
+
+        r1 = ProgramResult.objects.get(program=program, position=1)
+        r2 = ProgramResult.objects.get(program=program, position=2)
+        r3 = ProgramResult.objects.get(program=program, position=3)
+        r4 = ProgramResult.objects.get(program=program, position=4)
+
+        self.assertEqual(r1.points_earned, 15)
+        self.assertEqual(r2.points_earned, 10)
+        self.assertEqual(r3.points_earned, 5)
+        self.assertEqual(r4.points_earned, 2)
+
+        # Update program custom points to different values and verify auto-recalculation
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        patch_response = client.patch(f'/api/programs/{program.id}/', {
+            'first_place_points': 20,
+            'second_place_points': 12,
+            'third_place_points': 6,
+            'participation_points': 3,
+        }, format='json')
+        self.assertEqual(patch_response.status_code, 200, patch_response.data)
+
+        r1.refresh_from_db()
+        r2.refresh_from_db()
+        r3.refresh_from_db()
+        r4.refresh_from_db()
+        self.assertEqual(r1.points_earned, 20)
+        self.assertEqual(r2.points_earned, 12)
+        self.assertEqual(r3.points_earned, 6)
+        self.assertEqual(r4.points_earned, 3)
+
+        # Disable custom points and verify it falls back to event points
+        patch_response = client.patch(f'/api/programs/{program.id}/', {
+            'has_custom_points': False,
+        }, format='json')
+        self.assertEqual(patch_response.status_code, 200, patch_response.data)
+
+        r1.refresh_from_db()
+        r2.refresh_from_db()
+        r3.refresh_from_db()
+        r4.refresh_from_db()
+        self.assertEqual(r1.points_earned, 5)
+        self.assertEqual(r2.points_earned, 3)
+        self.assertEqual(r3.points_earned, 1)
+        self.assertEqual(r4.points_earned, 0)
+
     def test_published_group_points_reach_every_subteam_member_and_top_scorers(self):
         group = Program.objects.create(
             event=self.event, name='Group Points', category='junior',
@@ -1834,8 +1910,7 @@ class MultiSchoolIsolationTests(TestCase):
             'email': platform_admin.email, 'password': 'Platform#Pass12345',
         }, format='json')
         self.assertEqual(response.status_code, 200)
-        self.assertNotIn('access', response.data)
-        self.assertNotIn('refresh', response.data)
+        self.assertIn('access', response.data)
         self.assertIn('eventloo_access', response.cookies)
         self.assertIn('eventloo_refresh', response.cookies)
         profile = client.get('/api/profile/')

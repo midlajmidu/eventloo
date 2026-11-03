@@ -532,6 +532,7 @@ class ProgramSerializer(serializers.ModelSerializer):
             'participants_count', 'assigned_students', 'assignments_per_team', 'created_at', 'updated_at',
             'program_type', 'grading_points', 'total_max_participants', 'limit_description', 'total_teams',
             'num_judges', 'effective_num_judges',
+            'has_custom_points', 'first_place_points', 'second_place_points', 'third_place_points', 'participation_points',
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at', 'status', 'is_published',
@@ -547,6 +548,9 @@ class ProgramSerializer(serializers.ModelSerializer):
             data['end_time'] = None
         if 'start_time' in data and data['start_time'] == '':
             data['start_time'] = None
+        for pt_field in ('first_place_points', 'second_place_points', 'third_place_points', 'participation_points'):
+            if pt_field in data and data[pt_field] == '':
+                data[pt_field] = None
         return super().to_internal_value(data)
 
     def get_schedule_entry_type(self, obj):

@@ -725,6 +725,32 @@ class Program(models.Model):
         ),
     )
     
+    # Program-specific placement points override
+    has_custom_points = models.BooleanField(
+        default=False,
+        help_text="Override event placement points for this specific program",
+    )
+    first_place_points = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Custom 1st place points for this program",
+    )
+    second_place_points = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Custom 2nd place points for this program",
+    )
+    third_place_points = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Custom 3rd place points for this program",
+    )
+    participation_points = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Custom participation points for positions after 3rd place for this program",
+    )
+    
     # Scheduling
     stage = models.ForeignKey(
         EventStage, on_delete=models.SET_NULL, null=True, blank=True,

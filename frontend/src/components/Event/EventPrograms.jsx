@@ -16,7 +16,8 @@ import {
   Eye,
   MoreVertical,
   X,
-  Award
+  Award,
+  Sparkles
 } from 'lucide-react';
 import Pagination from '../common/Pagination';
 
@@ -84,6 +85,11 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
     program_type: 'stage', // new field
     grading_points: {},
     num_judges: event?.num_judges ? String(event.num_judges) : '3',
+    has_custom_points: false,
+    first_place_points: '',
+    second_place_points: '',
+    third_place_points: '',
+    participation_points: '',
   });
   const activeGradeRules = Array.isArray(event?.grading_rules) && event.grading_rules.length > 0
     ? event.grading_rules
@@ -216,6 +222,11 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
         start_time: formData.start_time || null,
         duration_minutes_per_entry: parseInt(formData.duration_minutes_per_entry, 10),
         program_type: formData.program_type || 'stage',
+        has_custom_points: Boolean(formData.has_custom_points),
+        first_place_points: formData.has_custom_points && formData.first_place_points !== '' ? parseInt(formData.first_place_points, 10) : null,
+        second_place_points: formData.has_custom_points && formData.second_place_points !== '' ? parseInt(formData.second_place_points, 10) : null,
+        third_place_points: formData.has_custom_points && formData.third_place_points !== '' ? parseInt(formData.third_place_points, 10) : null,
+        participation_points: formData.has_custom_points && formData.participation_points !== '' ? parseInt(formData.participation_points, 10) : null,
         grading_points: Object.fromEntries(
           Object.entries(formData.grading_points || {})
             .filter(([grade]) => activeGradeRules.some((rule) => rule.name === grade))
@@ -263,6 +274,11 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
       start_time: toDateTimeLocal(program.start_time),
       duration_minutes_per_entry: program.duration_minutes_per_entry || '5',
       program_type: program.program_type || 'stage',
+      has_custom_points: Boolean(program.has_custom_points),
+      first_place_points: program.first_place_points !== null && program.first_place_points !== undefined ? String(program.first_place_points) : '',
+      second_place_points: program.second_place_points !== null && program.second_place_points !== undefined ? String(program.second_place_points) : '',
+      third_place_points: program.third_place_points !== null && program.third_place_points !== undefined ? String(program.third_place_points) : '',
+      participation_points: program.participation_points !== null && program.participation_points !== undefined ? String(program.participation_points) : '',
       grading_points: program.grading_points || {},
       num_judges: String(program.num_judges || program.effective_num_judges || event?.num_judges || 3),
     });
@@ -308,19 +324,45 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
   // Team-based is now available for all categories
   const isTeamBasedDisabled = false;
 
-  // Get points system description based on category and team-based status
-  const getPointsSystemDescription = (category, isTeamBased) => {
-    if (isTeamBased) {
-      return "Points: 10, 6, 3 (Team-based)";
-    }
+  // Get event-configured default placement points for a category and format
+  const getDefaultPlacementPoints = (category, isTeamBased) => {
     const cat = categories.find(c => c.code === category);
-    if (cat && cat.is_mixing) {
-      return "Points: 10, 6, 3 (Individual)";
+    const isMixing = cat?.is_mixing || ['general', 'gen', 'gn', 'open'].includes((category || '').toLowerCase());
+    if (isMixing) {
+      if (isTeamBased) {
+        return {
+          first: event?.mix_group_first ?? 10,
+          second: event?.mix_group_second ?? 6,
+          third: event?.mix_group_third ?? 3,
+        };
+      }
+      return {
+        first: event?.mix_ind_first ?? 10,
+        second: event?.mix_ind_second ?? 6,
+        third: event?.mix_ind_third ?? 3,
+      };
     }
-    if (category === 'general') {
-      return "Points: 10, 6, 3 (Individual)";
+    if (isTeamBased) {
+      return {
+        first: event?.std_group_first ?? 10,
+        second: event?.std_group_second ?? 6,
+        third: event?.std_group_third ?? 3,
+      };
     }
-    return "Points: 5, 3, 1 (Individual)";
+    return {
+      first: event?.std_ind_first ?? 5,
+      second: event?.std_ind_second ?? 3,
+      third: event?.std_ind_third ?? 1,
+    };
+  };
+
+  // Get points system description based on category, team-based status, and custom override
+  const getPointsSystemDescription = (category, isTeamBased, hasCustomPoints, custom1st, custom2nd, custom3rd) => {
+    if (hasCustomPoints) {
+      return `Custom Points: ${custom1st ?? 0}, ${custom2nd ?? 0}, ${custom3rd ?? 0} (Program Override)`;
+    }
+    const pts = getDefaultPlacementPoints(category, isTeamBased);
+    return `Points: ${pts.first}, ${pts.second}, ${pts.third} (${isTeamBased ? 'Team-based' : 'Individual'})`;
   };
 
   const handleDelete = async (programId) => {
@@ -366,6 +408,11 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
       program_type: 'stage',
       grading_points: {},
       num_judges: event?.num_judges ? String(event.num_judges) : '3',
+      has_custom_points: false,
+      first_place_points: '',
+      second_place_points: '',
+      third_place_points: '',
+      participation_points: '',
     });
   };
 
@@ -617,8 +664,19 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
                       {/* Program Name & Description */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div>
-                          <div className="text-sm font-semibold text-gray-900">
-                            {program.name}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm font-semibold text-gray-900">
+                              {program.name}
+                            </span>
+                            {program.has_custom_points && (
+                              <span
+                                className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-800 border border-amber-200/80 shadow-2xs"
+                                title={`Custom Points: 1st: ${program.first_place_points ?? 0}, 2nd: ${program.second_place_points ?? 0}, 3rd: ${program.third_place_points ?? 0}${program.participation_points ? `, Part: ${program.participation_points}` : ''}`}
+                              >
+                                <Award className="h-2.5 w-2.5 text-amber-600" />
+                                <span>Points: {program.first_place_points ?? 0}, {program.second_place_points ?? 0}, {program.third_place_points ?? 0}</span>
+                              </span>
+                            )}
                           </div>
                           {program.description && (
                             <div className="text-xs text-gray-500 truncate max-w-xs mt-0.5">
@@ -816,6 +874,23 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
                     </p>
                   </div>
                   <div className="col-span-2 pt-2 border-t border-gray-200/60">
+                    <span className="text-gray-500 font-medium">Placement Points System</span>
+                    {selectedViewProgram.has_custom_points ? (
+                      <p className="font-bold text-amber-700 mt-0.5 flex items-center space-x-1.5 flex-wrap">
+                        <Award className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                        <span>Custom Program Points: 1st: {selectedViewProgram.first_place_points ?? 0} pts, 2nd: {selectedViewProgram.second_place_points ?? 0} pts, 3rd: {selectedViewProgram.third_place_points ?? 0} pts</span>
+                        {selectedViewProgram.participation_points !== null && selectedViewProgram.participation_points !== undefined && (
+                          <span className="text-gray-500 font-normal"> (Beyond 3rd: {selectedViewProgram.participation_points} pts)</span>
+                        )}
+                      </p>
+                    ) : (
+                      <p className="font-bold text-gray-900 mt-0.5 flex items-center space-x-1.5">
+                        <Award className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                        <span>Event Default ({getPointsSystemDescription(selectedViewProgram.category, selectedViewProgram.is_team_based)})</span>
+                      </p>
+                    )}
+                  </div>
+                  <div className="col-span-2 pt-2 border-t border-gray-200/60">
                     <span className="text-gray-500 font-medium">Schedule</span>
                     <p className="font-bold text-gray-900 mt-0.5 flex items-center space-x-1.5">
                       <Clock className="h-3.5 w-3.5 text-gray-400" />
@@ -932,7 +1007,14 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
                       ))}
                     </select>
                     <p className="text-[11px] text-gray-500 mt-1">
-                      {getPointsSystemDescription(formData.category, formData.is_team_based)}
+                      {getPointsSystemDescription(
+                        formData.category,
+                        formData.is_team_based,
+                        formData.has_custom_points,
+                        formData.first_place_points,
+                        formData.second_place_points,
+                        formData.third_place_points
+                      )}
                     </p>
                   </div>
 
@@ -1075,7 +1157,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
                       <label htmlFor="is_team_based" className="ml-2 block text-xs text-gray-900 font-medium">
                         Team-based program
                         <span className="block text-[11px] text-gray-500 mt-0.5">
-                          (Team-based programs use 10, 6, 3 points system)
+                          (Team-based programs use {event?.std_group_first ?? 10}, {event?.std_group_second ?? 6}, {event?.std_group_third ?? 3} points system by default)
                         </span>
                       </label>
                     </div>
@@ -1114,6 +1196,109 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [] }) => {
                       </div>
                     </div>
                   )}
+
+                  {/* Custom Placement Points Override Section */}
+                  <div className="md:col-span-2 rounded-xl border border-gray-200 bg-gray-50/70 p-4 space-y-3">
+                    <div className="flex items-start">
+                      <input
+                        type="checkbox"
+                        id="has_custom_points"
+                        checked={formData.has_custom_points}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          const defaults = getDefaultPlacementPoints(formData.category, formData.is_team_based);
+                          setFormData({
+                            ...formData,
+                            has_custom_points: checked,
+                            first_place_points: checked && (formData.first_place_points === '' || formData.first_place_points === null) ? String(defaults.first) : formData.first_place_points,
+                            second_place_points: checked && (formData.second_place_points === '' || formData.second_place_points === null) ? String(defaults.second) : formData.second_place_points,
+                            third_place_points: checked && (formData.third_place_points === '' || formData.third_place_points === null) ? String(defaults.third) : formData.third_place_points,
+                            participation_points: checked && (formData.participation_points === '' || formData.participation_points === null) ? String(event?.participation_points ?? 0) : formData.participation_points,
+                          });
+                        }}
+                        className="mt-0.5 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
+                      />
+                      <label htmlFor="has_custom_points" className="ml-2.5 block text-xs cursor-pointer select-none">
+                        <span className="font-bold text-gray-900">Customize placement points for this program</span>
+                        <span className="block text-[11px] text-gray-500 mt-0.5">
+                          Override the event's default placement points and specify custom 1st, 2nd, and 3rd place points for this program only.
+                        </span>
+                      </label>
+                    </div>
+
+                    {formData.has_custom_points && (
+                      <div className="pt-3 border-t border-gray-200 space-y-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-2xs">
+                            <label className="block text-[11px] font-bold text-amber-800 mb-1 flex items-center justify-between">
+                              <span>1st Place</span>
+                              <span className="text-[10px] text-amber-600 font-semibold">Gold</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              required={formData.has_custom_points}
+                              value={formData.first_place_points}
+                              onChange={(e) => setFormData({ ...formData, first_place_points: e.target.value })}
+                              placeholder={String(getDefaultPlacementPoints(formData.category, formData.is_team_based).first)}
+                              className="w-full px-2.5 py-1.5 text-xs font-bold text-gray-800 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="bg-white p-3 rounded-xl border border-slate-200 shadow-2xs">
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1 flex items-center justify-between">
+                              <span>2nd Place</span>
+                              <span className="text-[10px] text-slate-500 font-semibold">Silver</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              required={formData.has_custom_points}
+                              value={formData.second_place_points}
+                              onChange={(e) => setFormData({ ...formData, second_place_points: e.target.value })}
+                              placeholder={String(getDefaultPlacementPoints(formData.category, formData.is_team_based).second)}
+                              className="w-full px-2.5 py-1.5 text-xs font-bold text-gray-800 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="bg-white p-3 rounded-xl border border-orange-200 shadow-2xs">
+                            <label className="block text-[11px] font-bold text-orange-800 mb-1 flex items-center justify-between">
+                              <span>3rd Place</span>
+                              <span className="text-[10px] text-orange-600 font-semibold">Bronze</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              required={formData.has_custom_points}
+                              value={formData.third_place_points}
+                              onChange={(e) => setFormData({ ...formData, third_place_points: e.target.value })}
+                              placeholder={String(getDefaultPlacementPoints(formData.category, formData.is_team_based).third)}
+                              className="w-full px-2.5 py-1.5 text-xs font-bold text-gray-800 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            />
+                          </div>
+
+                          <div className="bg-white p-3 rounded-xl border border-emerald-200 shadow-2xs">
+                            <label className="block text-[11px] font-bold text-emerald-800 mb-1 flex items-center justify-between">
+                              <span>Beyond 3rd</span>
+                              <span className="text-[10px] text-emerald-600 font-semibold">Part.</span>
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={formData.participation_points}
+                              onChange={(e) => setFormData({ ...formData, participation_points: e.target.value })}
+                              placeholder={String(event?.participation_points ?? 0)}
+                              className="w-full px-2.5 py-1.5 text-xs font-bold text-gray-800 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                            />
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-indigo-700 font-medium bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100 flex items-center gap-1.5">
+                          <Sparkles className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+                          <span>Results for this program will award these custom points everywhere (leaderboards, team totals, certificates, reports).</span>
+                        </p>
+                      </div>
+                    )}
+                  </div>
 
                   {event?.enable_grading_system && activeGradeRules.length > 0 && (
                     <div className="md:col-span-2 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
