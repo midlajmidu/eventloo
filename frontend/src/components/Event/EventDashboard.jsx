@@ -234,35 +234,35 @@ const EventDashboard = () => {
             {/* Small Minimal Dashboard Pulse on top of Event Navigation */}
             <div className="bg-white rounded-xl border border-slate-200/80 p-3 shadow-2xs">
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Event Pulse</span>
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full border border-emerald-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Event Overview</span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   Live
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-1.5 text-center">
+              <div className="grid grid-cols-2 gap-2 text-center">
                 <button
                   onClick={() => setActiveTab('programs')}
-                  className="bg-indigo-50/70 hover:bg-indigo-100/70 transition-colors rounded-lg p-2 border border-indigo-100/60 cursor-pointer text-left"
+                  className="bg-slate-50 hover:bg-slate-100 transition-colors rounded-lg p-2 border border-slate-200/60 cursor-pointer text-left"
                 >
-                  <span className="text-base font-black text-indigo-700 block leading-tight">
+                  <span className="text-base font-bold text-slate-900 block leading-tight">
                     {event.programs?.length || event.programs_count || 0}
                   </span>
-                  <span className="text-[10px] text-slate-500 font-medium block">Programs</span>
+                  <span className="text-[10px] text-slate-500 font-normal block">Programs</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('participants')}
-                  className="bg-emerald-50/70 hover:bg-emerald-100/70 transition-colors rounded-lg p-2 border border-emerald-100/60 cursor-pointer text-left"
+                  className="bg-slate-50 hover:bg-slate-100 transition-colors rounded-lg p-2 border border-slate-200/60 cursor-pointer text-left"
                 >
-                  <span className="text-base font-black text-emerald-700 block leading-tight">
+                  <span className="text-base font-bold text-slate-900 block leading-tight">
                     {event.current_participants || 0}
                   </span>
-                  <span className="text-[10px] text-slate-500 font-medium block">Registered</span>
+                  <span className="text-[10px] text-slate-500 font-normal block">Registered</span>
                 </button>
               </div>
               <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] px-1 text-slate-500">
                 <span>Teams: <strong className="text-slate-800">{event.current_teams || 0}</strong></span>
-                <span>Cap: <strong className="text-slate-800">{event.max_participants || '∞'}</strong></span>
+                <span>Cap: <strong className="text-slate-800">{event.max_participants || 'Unlimited'}</strong></span>
               </div>
             </div>
 
