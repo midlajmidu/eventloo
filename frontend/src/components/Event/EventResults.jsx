@@ -44,7 +44,6 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
   const [teamPoints, setTeamPoints] = useState([]);
   const [loadingPoints, setLoadingPoints] = useState(false);
   const [pointsFilter, setPointsFilter] = useState('published'); // 'published' or 'all'
-  const [programWinnersMap, setProgramWinnersMap] = useState({});
 
   // Slide-over Drawer for Detailed View Result
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -75,6 +74,7 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
       const progsRes = await eventProgramsAPI.getPrograms(eventId, 'page_size=500');
       let allProgs = Array.isArray(progsRes.data) ? progsRes.data : (progsRes.data.results || []);
       if (readOnly) {
+        // Team managers ONLY see officially published results
         allProgs = allProgs.filter((p) => p.is_published);
       }
       setPrograms(allProgs);
@@ -89,35 +89,11 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
   const fetchTeamPoints = async () => {
     setLoadingPoints(true);
     try {
-      const isPublishedOnly = pointsFilter === 'published';
+      // Team managers only ever see published results. Admins can view both.
+      const isPublishedOnly = readOnly ? true : (pointsFilter === 'published');
       const pointsRes = await eventPointsAPI.getEventTeamPoints(eventId, isPublishedOnly);
       const pointsList = Array.isArray(pointsRes.data) ? pointsRes.data : (pointsRes.data.results || []);
       setTeamPoints(pointsList);
-
-      // Extract winners for each program from the pointsList breakdown!
-      const winnersMap = {};
-      pointsList.forEach((team) => {
-        const progResults = team.program_results || [];
-        progResults.forEach((pr) => {
-          if (!winnersMap[pr.program_id]) {
-            winnersMap[pr.program_id] = [];
-          }
-          winnersMap[pr.program_id].push({
-            position: pr.position,
-            participant_name: pr.participant_name,
-            team_name: team.team_name,
-            points_earned: pr.points_earned,
-            grade: pr.grade,
-          });
-        });
-      });
-
-      // Sort winners for each program by position ascending
-      Object.keys(winnersMap).forEach((pId) => {
-        winnersMap[pId].sort((a, b) => (a.position || 999) - (b.position || 999));
-      });
-
-      setProgramWinnersMap(winnersMap);
     } catch (error) {
       console.error('Error loading team points:', error);
     } finally {
@@ -317,29 +293,33 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
 
       {/* Top Stats Badges Bar */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex items-center bg-gray-100/90 text-gray-700 px-3.5 py-2 rounded-xl text-xs font-bold border border-gray-200">
-          <span>Pending</span>
-          <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-gray-900">
-            {statsCounts.pending}
-          </span>
-        </div>
+        {!readOnly && (
+          <>
+            <div className="flex items-center bg-gray-100/90 text-gray-700 px-3.5 py-2 rounded-xl text-xs font-bold border border-gray-200">
+              <span>Pending</span>
+              <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-gray-900">
+                {statsCounts.pending}
+              </span>
+            </div>
 
-        <div className="flex items-center bg-indigo-50 text-indigo-700 px-3.5 py-2 rounded-xl text-xs font-bold border border-indigo-100">
-          <span>In Progress</span>
-          <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-indigo-900">
-            {statsCounts.in_progress}
-          </span>
-        </div>
+            <div className="flex items-center bg-indigo-50 text-indigo-700 px-3.5 py-2 rounded-xl text-xs font-bold border border-indigo-100">
+              <span>In Progress</span>
+              <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-indigo-900">
+                {statsCounts.in_progress}
+              </span>
+            </div>
 
-        <div className="flex items-center bg-amber-50 text-amber-800 px-3.5 py-2 rounded-xl text-xs font-bold border border-amber-100">
-          <span>Submitted</span>
-          <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-amber-900">
-            {statsCounts.submitted}
-          </span>
-        </div>
+            <div className="flex items-center bg-amber-50 text-amber-800 px-3.5 py-2 rounded-xl text-xs font-bold border border-amber-100">
+              <span>Submitted</span>
+              <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-amber-900">
+                {statsCounts.submitted}
+              </span>
+            </div>
+          </>
+        )}
 
         <div className="flex items-center bg-emerald-50 text-emerald-800 px-3.5 py-2 rounded-xl text-xs font-bold border border-emerald-200">
-          <span>Published</span>
+          <span>{readOnly ? 'Published Competitions' : 'Published'}</span>
           <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-emerald-900">
             {statsCounts.published}
           </span>
@@ -425,13 +405,17 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                       const canPublish = isPublished || status === 'submitted';
                       
                       return (
-                        <tr key={prog.id} className="hover:bg-gray-50/70 transition-colors">
+                        <tr
+                          key={prog.id}
+                          onClick={() => handleOpenDrawer(prog)}
+                          className="hover:bg-gray-50/70 transition-colors cursor-pointer"
+                        >
                           {/* Index # */}
                           <td className="px-4 py-3 text-center text-gray-400 font-semibold">
                             #{idx + 1}
                           </td>
 
-                          {/* Competition Name, Category & Live Winners */}
+                          {/* Competition Name & Category */}
                           <td className="px-4 py-3">
                             <div className="font-bold text-gray-900 text-xs flex items-center gap-2">
                               <span>{prog.name}</span>
@@ -444,40 +428,6 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                             <div className="text-[11px] text-gray-400 font-medium mt-0.5">
                               {getCategoryName(prog.category)}
                             </div>
-
-                            {/* Live Published Winners Display */}
-                            {programWinnersMap[prog.id] && programWinnersMap[prog.id].length > 0 ? (
-                              <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                                {programWinnersMap[prog.id].map((w, wIdx) => (
-                                  <span
-                                    key={wIdx}
-                                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border ${
-                                      w.position === 1
-                                        ? 'bg-amber-50 text-amber-900 border-amber-200 shadow-2xs'
-                                        : w.position === 2
-                                          ? 'bg-slate-50 text-slate-800 border-slate-200 shadow-2xs'
-                                          : 'bg-orange-50 text-orange-900 border-orange-200 shadow-2xs'
-                                    }`}
-                                  >
-                                    <span className="font-bold">
-                                      {w.position === 1 ? '🥇 1st' : w.position === 2 ? '🥈 2nd' : '🥉 3rd'}:
-                                    </span>
-                                    <span className="font-bold text-gray-900">{w.participant_name}</span>
-                                    <span className="text-[10px] text-slate-500 font-medium">({w.team_name})</span>
-                                    <span className="font-extrabold text-indigo-600">+{w.points_earned} pts</span>
-                                    {w.grade && (
-                                      <span className="ml-0.5 px-1 rounded bg-white text-[10px] font-extrabold border border-slate-200">
-                                        {w.grade}
-                                      </span>
-                                    )}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : isPublished ? (
-                              <div className="mt-1.5 text-[11px] text-slate-400 italic">
-                                Results published · click View Results for full rankings
-                              </div>
-                            ) : null}
                           </td>
 
                           {/* Status Badge */}
@@ -509,7 +459,10 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                             {readOnly ? (
                               <button
                                 type="button"
-                                onClick={() => handleOpenDrawer(prog)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenDrawer(prog);
+                                }}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 transition-colors shadow-2xs cursor-pointer"
                                 title="View detailed results"
                               >
@@ -517,10 +470,13 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                                 <span>View Results</span>
                               </button>
                             ) : (
-                              <div className="relative inline-block text-left">
+                              <div
+                                className="relative inline-block text-left"
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <button
                                   onClick={() => setOpenMenuId(openMenuId === prog.id ? null : prog.id)}
-                                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                                  className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                                 >
                                   <MoreVertical className="w-4 h-4" />
                                 </button>
@@ -588,21 +544,27 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
             
             {/* Header & Filter Controls */}
             <div className="flex items-center justify-between gap-2">
-              <div className="relative">
-                <select
-                  value={pointsFilter}
-                  onChange={(e) => setPointsFilter(e.target.value)}
-                  className="px-3 py-2 text-xs font-bold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none cursor-pointer pr-8 appearance-none"
-                >
-                  <option value="published">Published Results</option>
-                  <option value="all">All Results (Total)</option>
-                </select>
-                <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
+              {readOnly ? (
+                <div className="px-3 py-2 text-xs font-bold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl">
+                  Official Team Standings
+                </div>
+              ) : (
+                <div className="relative">
+                  <select
+                    value={pointsFilter}
+                    onChange={(e) => setPointsFilter(e.target.value)}
+                    className="px-3 py-2 text-xs font-bold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none cursor-pointer pr-8 appearance-none"
+                  >
+                    <option value="all">All Results (Total)</option>
+                    <option value="published">Published Results</option>
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              )}
 
               <button
                 onClick={fetchTeamPoints}
-                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-2xs inline-flex items-center space-x-1.5 transition-colors"
+                className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-2xs inline-flex items-center space-x-1.5 transition-colors cursor-pointer"
               >
                 <span>Refresh Points</span>
               </button>

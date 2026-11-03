@@ -3358,6 +3358,12 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        if getattr(request.user, 'role', None) == 'team_manager' and not program.is_published:
+            return Response(
+                {'error': 'Results for this program have not been published yet.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         # Get all assignments for this program
         assignments = ProgramAssignment.objects.filter(program=program)
         
@@ -3602,6 +3608,12 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': 'Program not found'}, 
                 status=status.HTTP_404_NOT_FOUND
+            )
+        
+        if getattr(request.user, 'role', None) == 'team_manager' and not program.is_published:
+            return Response(
+                {'error': 'Results for this program have not been published yet.'},
+                status=status.HTTP_403_FORBIDDEN
             )
         
         # For team-based programs, group results by team
