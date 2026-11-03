@@ -390,42 +390,63 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
 
     # 7. Metadata Badges Row: [ TEAM ] [ CATEGORY ] [ GRADE / SECTION ]
     y_badges = card_top - 124
-    badge_item_w = 48.0
-    badge_item_h = 14.0
+    badge_item_w = 50.0
+    badge_item_h = 15.0
 
     # Team
     team_name = assignment.team.name if assignment.team else (
-        student.team_memberships.first().name if hasattr(student, 'team_memberships') and student.team_memberships.exists() else 'Individual'
+        student.team_memberships.first().name if hasattr(student, 'team_memberships') and student.team_memberships.exists() else 'INDIVIDUAL'
     )
-    b1_x = card_x + 12
-    pdf.setFillColor(HexColor('#F1F5F9'))
-    pdf.setStrokeColor(HexColor('#E2E8F0'))
-    pdf.setLineWidth(0.4)
-    pdf.roundRect(b1_x, y_badges, badge_item_w, badge_item_h, radius=4, stroke=1, fill=1)
-    pdf.setFont('Helvetica-Bold', 5.5)
-    pdf.setFillColor(HexColor('#334155'))
-    pdf.drawCentredString(b1_x + badge_item_w / 2.0, y_badges + 4.5, team_name[:12])
 
-    # Category
-    cat_code = student.category or (assignment.program.category if assignment.program else '')
-    category_display = cat_code.upper() if cat_code else 'GENERAL'
-    b2_x = card_center_x - badge_item_w / 2.0
-    pdf.roundRect(b2_x, y_badges, badge_item_w, badge_item_h, radius=4, stroke=1, fill=1)
-    pdf.drawCentredString(b2_x + badge_item_w / 2.0, y_badges + 4.5, category_display[:10])
+    # Category (prefer clean category code e.g. LP, UP, HS matching reference model)
+    cat_code = (student.category or (assignment.program.category if assignment and assignment.program else '') or '').strip()
+    if cat_code and len(cat_code) <= 5:
+        category_display = cat_code.upper()
+    else:
+        cat_name = category_names.get(cat_code) or category_names.get(cat_code.lower()) or category_names.get(cat_code.upper()) or cat_code
+        if cat_name and len(cat_name) <= 10:
+            category_display = cat_name.upper()
+        elif cat_code:
+            category_display = cat_code.upper()
+        else:
+            category_display = 'GENERAL'
 
     # Grade / Section
-    grade_sec = ''
-    if getattr(student, 'grade', None):
-        grade_sec = f"Grade {student.grade}"
-        if getattr(student, 'section', None):
-            grade_sec += f" - {student.section}"
+    grade = getattr(student, 'grade', '') or ''
+    section = getattr(student, 'section', '') or ''
+    if grade and section:
+        grade_sec = f"Grade {grade} - {section}"
+    elif grade:
+        grade_sec = f"Grade {grade}"
     elif getattr(student, 'student_id', None):
         grade_sec = f"ID: {student.student_id}"
     else:
         grade_sec = getattr(student, 'gender', 'Student').title()
-    b3_x = card_x + card_w - 12 - badge_item_w
-    pdf.roundRect(b3_x, y_badges, badge_item_w, badge_item_h, radius=4, stroke=1, fill=1)
-    pdf.drawCentredString(b3_x + badge_item_w / 2.0, y_badges + 4.5, grade_sec[:12])
+
+    pills_data = [
+        (card_x + 10.0, team_name.upper()),
+        (card_x + 65.0, category_display),
+        (card_x + 120.0, grade_sec)
+    ]
+
+    for px, ptext in pills_data:
+        # 1. Background pill with crisp light background and border
+        pdf.setFillColor(HexColor('#F8FAFC'))
+        pdf.setStrokeColor(HexColor('#CBD5E1'))
+        pdf.setLineWidth(0.5)
+        pdf.roundRect(px, y_badges, badge_item_w, badge_item_h, radius=4, stroke=1, fill=1)
+
+        # 2. Text in clear dark slate
+        pdf.setFont('Helvetica-Bold', 5.5)
+        pdf.setFillColor(HexColor('#0F172A'))
+
+        clean_text = str(ptext).strip()
+        t_w = stringWidth(clean_text, 'Helvetica-Bold', 5.5)
+        if t_w > badge_item_w - 4:
+            while clean_text and stringWidth(clean_text + '…', 'Helvetica-Bold', 5.5) > badge_item_w - 4:
+                clean_text = clean_text[:-1]
+            clean_text = clean_text + '…'
+        pdf.drawCentredString(px + badge_item_w / 2.0, y_badges + 4.5, clean_text)
 
     # 8. Divider Line
     y_div = card_top - 138
