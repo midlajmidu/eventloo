@@ -93,8 +93,15 @@ const EventParticipants = ({
     }
 
     // Team filter
-    if (teamId) {
-      const itemTeam = (item.team || '').toString();
+    if (isTeamManager) {
+      // Backend already strictly isolates to this manager's team; ensure safe matching
+      if (teamId && item.team && typeof item.team !== 'object') {
+        if (item.team.toString() !== teamId.toString()) {
+          return false;
+        }
+      }
+    } else if (teamId) {
+      const itemTeam = (typeof item.team === 'object' ? item.team?.id : item.team || '').toString();
       const itemTeamId = (item.team_id || '').toString();
       const targetTeam = teamId.toString();
       const itemTeamName = (item.team_name || '').toLowerCase();
@@ -102,7 +109,7 @@ const EventParticipants = ({
       const matchesStrict = itemTeam === targetTeam || itemTeamId === targetTeam || (targetTeamName && (itemTeamName === targetTeamName || itemTeamName.includes(targetTeamName)));
       if (!matchesStrict) return false;
     } else if (selectedTeam && selectedTeam !== 'all') {
-      const itemTeamId = (item.team || '').toString();
+      const itemTeamId = (typeof item.team === 'object' ? item.team?.id : item.team || '').toString();
       const itemTeamName = (item.team_name || '').toLowerCase();
       const targetTeam = selectedTeam.toLowerCase();
       const teamObj = (teams || []).find(t => (t.id || '').toString() === targetTeam);

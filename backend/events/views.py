@@ -117,10 +117,12 @@ class EventViewSet(viewsets.ModelViewSet):
             'create', 'update', 'partial_update', 'destroy',
             'toggle_program_publish', 'publish_all_results', 'toggle_schedule_publish',
             'bulk_upload_programs', 'create_announcement',
-            'chest_numbers', 'search_by_chest_number',
         ]:
             permission_classes = [IsAdminOrEventManager]
-        elif self.action in ['retrieve', 'list', 'points_teams', 'schedule_export', 'admin_programs']:
+        elif self.action in [
+            'retrieve', 'list', 'points_teams', 'schedule_export', 'admin_programs',
+            'chest_numbers', 'search_by_chest_number',
+        ]:
             permission_classes = [IsTeamManagerOrAdmin]
         else:
             permission_classes = [IsAdminOrEventManager]
@@ -1152,12 +1154,18 @@ class EventViewSet(viewsets.ModelViewSet):
         """Get participants who are assigned to at least one program in this event and have a chest number"""
         event = self.get_object()
 
-        # If team_id query parameter is passed or user is team manager, filter strictly to that team
+        # Determine team scope: if user is team manager, strictly enforce their team
         team_id = request.query_params.get('team_id') or request.query_params.get('team')
-        if not team_id and getattr(request.user, 'role', '') == 'team_manager':
-            managed_team = getattr(request.user, 'managed_team', None) or getattr(request.user, 'team', None)
-            if managed_team:
-                team_id = managed_team.id
+        if getattr(request.user, 'role', '') == 'team_manager':
+            user_team_id = getattr(request.user, 'team_id', None)
+            if not user_team_id and hasattr(request.user, 'team') and request.user.team:
+                user_team_id = getattr(request.user.team, 'id', None)
+            if not user_team_id and hasattr(request.user, 'managed_teams'):
+                managed = request.user.managed_teams.filter(school_id=request.user.school_id).first()
+                if managed:
+                    user_team_id = managed.id
+            if user_team_id:
+                team_id = user_team_id
 
         assigned_query = ProgramAssignment.objects.filter(
             program__event=event,
@@ -1166,14 +1174,35 @@ class EventViewSet(viewsets.ModelViewSet):
         if team_id:
             assigned_query = assigned_query.filter(team_id=team_id)
 
-        assigned_student_ids = assigned_query.values_list('student_id', flat=True).distinct()
+        assigned_student_ids = list(assigned_query.values_list('student_id', flat=True).distinct())
+
+        # Ensure any assigned students who don't yet have a chest number record get one created
+        existing_cn_student_ids = set(
+            ChestNumber.objects.filter(
+                event=event,
+                student_id__in=assigned_student_ids,
+            ).values_list('student_id', flat=True)
+        )
+        missing_student_ids = set(assigned_student_ids) - existing_cn_student_ids
+        for s_id in missing_student_ids:
+            pa = assigned_query.filter(student_id=s_id).first()
+            pa_team = pa.team if pa else None
+            try:
+                ChestNumber.objects.create(
+                    event=event,
+                    student_id=s_id,
+                    team=pa_team,
+                )
+            except Exception as e:
+                logger.warning(f"Could not auto-create ChestNumber for student {s_id}: {e}")
+
         chest_numbers = ChestNumber.objects.filter(
             event=event,
             student_id__in=assigned_student_ids,
             chest_number__isnull=False,
         )
         if team_id:
-            chest_numbers = chest_numbers.filter(team_id=team_id)
+            chest_numbers = chest_numbers.filter(models.Q(team_id=team_id) | models.Q(team__isnull=True))
 
         chest_numbers = chest_numbers.select_related('student', 'team')
 

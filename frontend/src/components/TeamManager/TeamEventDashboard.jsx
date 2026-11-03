@@ -31,7 +31,13 @@ const TeamEventDashboard = () => {
 
   const [event, setEvent] = useState(null);
   const [categories, setCategories] = useState([]);
-  const [teamData, setTeamData] = useState(null);
+  const [teamData, setTeamData] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('team_data') || '{}');
+    } catch {
+      return null;
+    }
+  });
   const [activeTab, setActiveTab] = useState('programs');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

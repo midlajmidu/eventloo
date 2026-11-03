@@ -1036,6 +1036,38 @@ class EventBusinessLogicTests(TestCase):
             ChestNumber.objects.get(event=self.event, student=self.students[0]).chest_number,
         )
 
+    def test_team_manager_can_access_event_chest_numbers_filtered_to_team(self):
+        program = Program.objects.create(
+            event=self.event,
+            name='Team Manager Chest Numbers',
+            category='junior',
+            max_participants=2,
+        )
+        client = APIClient()
+        login = client.post('/api/team-manager/login/', {
+            'team_username': self.team.team_username,
+            'team_password': self.team_password,
+            'school_code': self.school.code,
+        }, format='json')
+        self.assertEqual(login.status_code, 200)
+
+        # Assign student
+        client.post(
+            f'/api/team-manager/{self.team.id}/events/{self.event.id}/programs/{program.id}/assign/',
+            {'student_id': self.students[0].id},
+            format='json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        # Call chest_numbers action
+        res = client.get(f'/api/events/{self.event.id}/chest_numbers/')
+        self.assertEqual(res.status_code, 200)
+        self.assertGreaterEqual(len(res.data), 1)
+        # Verify student is in response and assigned to team
+        student_data = next((p for p in res.data if p['student'] == self.students[0].id), None)
+        self.assertIsNotNone(student_data)
+        self.assertEqual(student_data['team'], self.team.id)
+
     def test_participant_cannot_belong_to_two_teams(self):
         with self.assertRaises(ValidationError):
             self.other_team.members.add(self.students[0])
