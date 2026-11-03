@@ -5,8 +5,6 @@ import {
   MapPin, 
   User, 
   ShieldCheck, 
-  Share2, 
-  Printer, 
   CheckCircle2, 
   Clock, 
   Hash, 
@@ -60,10 +58,6 @@ const PublicParticipantBadge = () => {
     navigator.clipboard.writeText(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 2200);
-  };
-
-  const handlePrint = () => {
-    window.print();
   };
 
   // Helper formatting for date
@@ -130,36 +124,12 @@ const PublicParticipantBadge = () => {
     <div className="min-h-screen bg-[#f6f7fb] font-sans text-slate-800 flex flex-col items-center justify-start pb-12 print:bg-white print:p-0">
       
       {/* Main Container - Mobile Optimized */}
-      <main className="w-full max-w-md px-4 pt-4 space-y-3">
-        
-        {/* Top Minimal Navigation Bar */}
-        <header className="flex items-center justify-between px-1 py-1 print:hidden">
-          <div className="flex items-center space-x-2">
-            <EventlooLogo size="sm" theme="light" showSubtitle={false} />
-          </div>
-
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handleCopyLink}
-              title="Copy badge pass link"
-              className="w-9 h-9 rounded-full bg-slate-100/90 hover:bg-slate-200/90 text-slate-700 border border-slate-200/80 transition-colors shadow-2xs flex items-center justify-center cursor-pointer"
-            >
-              {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Share2 className="w-4 h-4" />}
-            </button>
-            <button
-              onClick={handlePrint}
-              title="Print badge pass"
-              className="w-9 h-9 rounded-full bg-slate-100/90 hover:bg-slate-200/90 text-slate-700 border border-slate-200/80 transition-colors shadow-2xs flex items-center justify-center cursor-pointer"
-            >
-              <Printer className="w-4 h-4" />
-            </button>
-          </div>
-        </header>
+      <main className="w-full max-w-md px-4 pt-4 sm:pt-6 space-y-3">
 
         {/* ========================================================================= */}
         {/* PHYSICAL LANYARD STRAP & CHROME BADGE CLAMP (EVENTLOO INDIGO COLOR)       */}
         {/* ========================================================================= */}
-        <div className="relative flex flex-col items-center pt-2 -mb-7 z-10 print:hidden select-none pointer-events-none">
+        <div className="relative flex flex-col items-center pt-1 -mb-7 z-10 print:hidden select-none pointer-events-none">
           {/* Lanyard Fabric Ribbon */}
           <div className="w-12 h-16 bg-gradient-to-r from-indigo-800 via-indigo-600 to-indigo-800 shadow-md relative overflow-hidden flex items-center justify-center">
             {/* Subtle woven fabric texture lines */}
@@ -533,10 +503,10 @@ const PublicParticipantBadge = () => {
         {/* ========================================================================= */}
         {/* FOOTER                                                                    */}
         {/* ========================================================================= */}
-        <footer className="pt-4 pb-2 text-center space-y-1 print:hidden">
-          <div className="inline-flex items-center gap-1.5 text-xs text-slate-500">
+        <footer className="pt-6 pb-4 text-center space-y-1.5 print:hidden">
+          <div className="inline-flex items-center gap-2 text-xs text-slate-500">
             <span>Powered by</span>
-            <span className="font-bold text-slate-800">Eventloo</span>
+            <EventlooLogo size="sm" theme="light" showSubtitle={false} />
           </div>
 
           <div className="text-[10px] text-slate-400">
