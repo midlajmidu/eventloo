@@ -8285,3 +8285,155 @@ def get_participant_qr_code(request, event_id, student_identifier):
     response['Cache-Control'] = 'public, max-age=3600'
     return response
 
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def get_public_event_portal(request, event_id):
+    """
+    Public endpoint providing event results, team points table, schedule,
+    and QR code for students, parents, and attendees without authentication.
+    """
+    try:
+        event = Event.objects.select_related('school').get(id=event_id)
+    except Event.DoesNotExist:
+        return Response({'error': 'Event not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Resolve origin and public URL
+    origin = request.headers.get('Origin') or request.META.get('HTTP_ORIGIN') or ''
+    if origin:
+        public_url = f"{origin.rstrip('/')}/events/{event_id}/public"
+    else:
+        try:
+            public_url = request.build_absolute_uri(f"/events/{event_id}/public")
+        except Exception:
+            public_url = f"/events/{event_id}/public"
+
+    qr_svg = generate_qr_svg_string(public_url, size=180)
+
+    # 1. Categories
+    from accounts.models import StudentCategory
+    categories = []
+    category_map = {}
+    if event.school:
+        for cat in StudentCategory.objects.filter(school=event.school).order_by('name'):
+            code = cat.code or cat.name
+            categories.append({'code': code, 'name': cat.name})
+            category_map[code] = cat.name
+
+    # 2. Programs and published results
+    programs_qs = Program.objects.filter(event=event, is_active=True).select_related('stage').order_by('category', 'name')
+    programs_data = []
+
+    # Map chest numbers for this event
+    chest_map = {}
+    for cn in ChestNumber.objects.filter(event=event).select_related('student', 'team'):
+        chest_map[cn.student_id] = {
+            'chest_number': cn.chest_number,
+            'team_name': cn.team.name if cn.team else None
+        }
+
+    # Fetch results for published programs
+    published_program_ids = [p.id for p in programs_qs if p.is_published]
+    results_qs = ProgramResult.objects.filter(
+        program_id__in=published_program_ids,
+        entry_status='submitted'
+    ).select_related('participant', 'team').order_by('program_id', 'position')
+
+    results_by_program = {}
+    for res in results_qs:
+        p_id = res.program_id
+        if p_id not in results_by_program:
+            results_by_program[p_id] = []
+
+        student = res.participant
+        chest_info = chest_map.get(student.id, {}) if student else {}
+        student_name = student.get_full_name() if student else (res.team.name if res.team else 'Participant')
+        team_name = res.team.name if res.team else chest_info.get('team_name', '-')
+        chest_number = chest_info.get('chest_number')
+
+        results_by_program[p_id].append({
+            'position': res.position,
+            'position_label': f"{res.position}st" if res.position == 1 else f"{res.position}nd" if res.position == 2 else f"{res.position}rd" if res.position == 3 else f"#{res.position}" if res.position else None,
+            'grade': res.grade or '-',
+            'points': res.points_earned or 0,
+            'student_name': student_name,
+            'chest_number': chest_number,
+            'team_name': team_name,
+        })
+
+    for prog in programs_qs:
+        programs_data.append({
+            'id': prog.id,
+            'name': prog.name,
+            'description': prog.description or '',
+            'category': prog.category,
+            'category_name': category_map.get(prog.category, prog.category),
+            'program_type': prog.program_type or ('stage' if prog.stage else 'off_stage'),
+            'is_stage': bool(prog.stage or prog.program_type == 'stage'),
+            'stage_name': prog.stage.name if prog.stage else None,
+            'venue': prog.venue or (prog.stage.name if prog.stage else None),
+            'start_time': prog.start_time.isoformat() if prog.start_time else None,
+            'end_time': prog.end_time.isoformat() if prog.end_time else None,
+            'is_published': prog.is_published,
+            'results': results_by_program.get(prog.id, []) if prog.is_published else [],
+        })
+
+    # 3. Team Standings (Points Table) from published results
+    team_points_map = {}
+    for res in ProgramResult.objects.filter(program__event=event, program__is_published=True, team__isnull=False):
+        t_id = res.team_id
+        if t_id not in team_points_map:
+            team_points_map[t_id] = {
+                'team_id': t_id,
+                'team_name': res.team.name,
+                'total_points': 0,
+                'programs_won': 0,
+                'first_places': 0,
+                'second_places': 0,
+                'third_places': 0,
+            }
+        team_points_map[t_id]['total_points'] += (res.points_earned or 0)
+        if res.position == 1:
+            team_points_map[t_id]['programs_won'] += 1
+            team_points_map[t_id]['first_places'] += 1
+        elif res.position == 2:
+            team_points_map[t_id]['second_places'] += 1
+        elif res.position == 3:
+            team_points_map[t_id]['third_places'] += 1
+
+    team_standings = sorted(team_points_map.values(), key=lambda x: x['total_points'], reverse=True)
+    for idx, item in enumerate(team_standings):
+        item['rank'] = idx + 1
+
+    # 4. Stages (if is_schedule_published)
+    stages_data = []
+    if event.is_schedule_published:
+        for stg in EventStage.objects.filter(event=event, is_active=True).order_by('order', 'name'):
+            stages_data.append({
+                'id': stg.id,
+                'name': stg.name,
+                'location': stg.location or stg.room or '',
+            })
+
+    return Response({
+        'event': {
+            'id': event.id,
+            'title': event.title,
+            'description': event.description or '',
+            'venue': event.venue or 'Campus Venue',
+            'start_date': event.start_date.isoformat() if event.start_date else None,
+            'end_date': event.end_date.isoformat() if event.end_date else None,
+            'status': event.status or 'published',
+            'is_schedule_published': event.is_schedule_published,
+            'school_name': event.school.name if event.school else 'School',
+            'school_logo': event.school.logo.url if (event.school and getattr(event.school, 'logo', None)) else None,
+        },
+        'categories': categories,
+        'programs': programs_data,
+        'team_standings': team_standings,
+        'stages': stages_data,
+        'public_url': public_url,
+        'qr_code_svg': qr_svg,
+    })
+
+

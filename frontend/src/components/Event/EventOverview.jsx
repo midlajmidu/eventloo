@@ -2,15 +2,23 @@ import React, { useState, useEffect } from 'react';
 import {
   RefreshCw,
   ArrowRight,
-  ChevronRight
+  ChevronRight,
+  QrCode,
+  ExternalLink,
+  Copy,
+  Check,
+  X
 } from 'lucide-react';
-import { eventReportsAPI, eventPointsAPI, eventStagesAPI } from '../../services/api';
+import { eventReportsAPI, eventPointsAPI, eventStagesAPI, publicEventAPI } from '../../services/api';
 
 const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTab }) => {
   const [analytics, setAnalytics] = useState(null);
   const [teamPoints, setTeamPoints] = useState([]);
   const [stages, setStages] = useState([]);
+  const [portalData, setPortalData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [showQrModal, setShowQrModal] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     fetchExtraData();
@@ -19,10 +27,11 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
 
   const fetchExtraData = async () => {
     try {
-      const [analyticsRes, pointsRes, stagesRes] = await Promise.allSettled([
+      const [analyticsRes, pointsRes, stagesRes, portalRes] = await Promise.allSettled([
         eventReportsAPI.getEventAnalytics(eventId),
         eventPointsAPI.getEventTeamPoints(eventId),
         eventStagesAPI.list(eventId),
+        publicEventAPI.getPublicPortal(eventId),
       ]);
 
       if (analyticsRes.status === 'fulfilled') {
@@ -36,9 +45,19 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
         const rawStages = stagesRes.value.data?.results || stagesRes.value.data || [];
         setStages(rawStages);
       }
+      if (portalRes.status === 'fulfilled') {
+        setPortalData(portalRes.value.data || null);
+      }
     } catch (err) {
       console.error('Error fetching event overview extra data:', err);
     }
+  };
+
+  const handleCopyPublicUrl = () => {
+    const url = portalData?.public_url || `${window.location.origin}/events/${eventId}/public`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleManualRefresh = async () => {
@@ -194,6 +213,56 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
           </div>
         </div>
 
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 2.5 PUBLIC LIVE RESULTS PORTAL & QR BANNER (ALL-WHITE MINIMAL)            */}
+      {/* ========================================================================= */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0">
+            <QrCode className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs font-bold text-slate-900">
+                Public Live Results & Schedule Portal
+              </h4>
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                Live URL
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+              Share with students, parents, and attendees to track published program results, live team points, and schedules.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+          <button
+            onClick={() => setShowQrModal(true)}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+          >
+            <QrCode className="w-3.5 h-3.5 text-slate-500" />
+            <span>Show QR Code</span>
+          </button>
+          <button
+            onClick={handleCopyPublicUrl}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+            <span>{copied ? 'Link Copied' : 'Copy Link'}</span>
+          </button>
+          <a
+            href={`/events/${eventId}/public`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+          >
+            <span>Open Portal</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
       </div>
 
       {/* ========================================================================= */}
@@ -412,6 +481,67 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
         </div>
 
       </div>
+
+      {/* ========================================================================= */}
+      {/* 4. MODAL: QR PASS FOR LIVE EVENT PORTAL                                  */}
+      {/* ========================================================================= */}
+      {showQrModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 max-w-sm w-full text-center space-y-4 shadow-xl">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-indigo-600">
+                Public Live QR Code
+              </span>
+              <button
+                onClick={() => setShowQrModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <h3 className="text-base font-bold text-slate-900">
+                Scan for Live Results
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Project or print this QR code at venues. Attendees can scan to view published results, leaderboard, and schedule on their mobile phone.
+              </p>
+            </div>
+
+            {/* QR SVG */}
+            <div className="w-44 h-44 mx-auto p-3 bg-white rounded-xl border border-slate-200 shadow-2xs flex items-center justify-center">
+              {portalData?.qr_code_svg ? (
+                <div
+                  dangerouslySetInnerHTML={{ __html: portalData.qr_code_svg }}
+                  className="w-full h-full flex items-center justify-center"
+                />
+              ) : (
+                <div className="text-xs text-slate-400">Loading QR Code...</div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleCopyPublicUrl}
+                className="flex-1 py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Link Copied' : 'Copy Page Link'}</span>
+              </button>
+              <a
+                href={`/events/${eventId}/public`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-2 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors flex items-center gap-1"
+              >
+                <span>Preview</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

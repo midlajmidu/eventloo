@@ -1810,6 +1810,36 @@ class EventBusinessLogicTests(TestCase):
         self.assertEqual(prog.end_time, expected_end)
         self.assertFalse(prog.schedule_end_is_manual)
 
+    def test_public_event_portal_endpoint(self):
+        # Create a program and published result
+        prog = Program.objects.create(
+            event=self.event, name='Classical Dance', category='junior',
+            is_team_based=False, is_published=True,
+        )
+        ProgramResult.objects.create(
+            program=prog, participant=self.students[0], team=self.team,
+            judge1_marks=Decimal('45.00'), judge2_marks=Decimal('48.00'),
+            position=1, grade='A+', points_earned=10, entry_status='submitted',
+        )
+
+        # Unauthenticated client calls public-portal
+        client = APIClient()
+        response = client.get(f'/api/events/{self.event.id}/public-portal/')
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn('event', data)
+        self.assertEqual(data['event']['title'], 'Integrity Test')
+        self.assertIn('programs', data)
+        self.assertEqual(len(data['programs']), 1)
+        self.assertTrue(data['programs'][0]['is_published'])
+        self.assertEqual(len(data['programs'][0]['results']), 1)
+        self.assertEqual(data['programs'][0]['results'][0]['position'], 1)
+        self.assertEqual(data['programs'][0]['results'][0]['student_name'], self.students[0].get_full_name())
+        self.assertIn('team_standings', data)
+        self.assertEqual(len(data['team_standings']), 1)
+        self.assertEqual(data['team_standings'][0]['total_points'], 10)
+        self.assertIn('qr_code_svg', data)
+
 
 class MultiSchoolIsolationTests(TestCase):
     def setUp(self):

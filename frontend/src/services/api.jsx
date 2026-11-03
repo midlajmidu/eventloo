@@ -859,5 +859,12 @@ export const classesAPI = {
   delete: (id) => api.delete(`classes/${id}/`),
 };
 
+// Public Event Portal API (Unauthenticated public endpoints)
+export const publicEventAPI = {
+  getPublicPortal: (eventId) => api.get(`events/${eventId}/public-portal/`),
+  getParticipantBadge: (eventId, studentIdentifier) =>
+    api.get(`events/${eventId}/participants/${studentIdentifier}/public-badge/`),
+};
+
 // Export default api instance for custom requests
 export default api; 

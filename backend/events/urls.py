@@ -69,4 +69,7 @@ urlpatterns = [
     # Public Participant Badge & QR endpoints (No auth required)
     path('events/<int:event_id>/participants/<str:student_identifier>/public-badge/', views.get_public_participant_badge, name='get_public_participant_badge'),
     path('events/<int:event_id>/participants/<str:student_identifier>/qr/', views.get_participant_qr_code, name='get_participant_qr_code'),
+    
+    # Public Event Portal (Results, Points Table, Schedule, QR) (No auth required)
+    path('events/<int:event_id>/public-portal/', views.get_public_event_portal, name='get_public_event_portal'),
 ]
