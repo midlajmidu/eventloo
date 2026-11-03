@@ -2586,7 +2586,8 @@ class StudentViewSet(viewsets.ModelViewSet):
 
 class PointsViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only access to points generated from published program results."""
-    permission_classes = [IsAdminOrEventManager]
+    authentication_classes = [TeamManagerAuthentication, SchoolJWTAuthentication]
+    permission_classes = [IsTeamManagerOrAdmin]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['point_type', 'team', 'student', 'event']
     ordering = ['-awarded_at']

@@ -61,5 +61,6 @@ urlpatterns = [
     path('team-manager/<int:team_id>/events/<int:event_id>/programs/<int:program_id>/set-leader/', team_manager_set_subteam_leader, name='team_manager_set_subteam_leader'),
     path('team-manager/<int:team_id>/events/<int:event_id>/programs/<int:program_id>/students/<int:student_id>/remove/', team_manager_remove_student_from_program, name='team_manager_remove_student_from_program'),
     path('team-manager/<int:team_id>/assignments/<int:assignment_id>/remove/', team_manager_remove_assignment, name='team_manager_remove_assignment'),
+    path('team-manager/leaderboard/', PointsViewSet.as_view({'get': 'leaderboard'}), name='team_manager_leaderboard'),
 ]
 urlpatterns += router.urls 
