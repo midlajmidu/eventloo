@@ -366,6 +366,10 @@ code {
 }
 
 /* Custom sleek slim scrollbar for badge back side */
+.badge-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #CBD5E1 #F1F5F9;
+}
 .badge-scrollbar::-webkit-scrollbar {
   width: 4px;
 }

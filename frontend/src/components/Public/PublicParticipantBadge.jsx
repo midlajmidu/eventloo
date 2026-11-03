@@ -157,9 +157,9 @@ const PublicParticipantBadge = () => {
         {/* ========================================================================= */}
         {/* 3D FLIP CARD CONTAINER (FRONT: ID BADGE | BACK: SCHEDULE, STATS & QR)     */}
         {/* ========================================================================= */}
-        <div className="w-full perspective-1200 print:perspective-none">
+        <div className="w-full h-[600px] sm:h-[620px] perspective-1200 print:perspective-none print:h-auto">
           <div
-            className={`relative w-full transition-transform duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] preserve-3d ${
+            className={`relative w-full h-full transition-transform duration-700 ease-[cubic-bezier(0.34,1.56,0.64,1)] preserve-3d ${
               isFlipped ? 'rotate-y-180' : 'rotate-y-0'
             }`}
           >
@@ -169,14 +169,14 @@ const PublicParticipantBadge = () => {
             <div
               onClick={() => setIsFlipped(true)}
               title="Click to flip badge"
-              className="w-full bg-white rounded-[32px] border border-slate-200/80 shadow-xl shadow-slate-200/60 overflow-hidden relative cursor-pointer backface-hidden min-h-[580px] sm:min-h-[600px] flex flex-col justify-between transition-shadow hover:shadow-2xl select-none"
+              className="w-full h-full bg-white rounded-[32px] border border-slate-200/80 shadow-xl shadow-slate-200/60 overflow-hidden relative cursor-pointer backface-hidden flex flex-col justify-between transition-shadow hover:shadow-2xl select-none"
             >
               {/* Lanyard Hole Cutout Slot in Card */}
-              <div className="pt-4 flex justify-center print:hidden">
+              <div className="pt-4 flex justify-center print:hidden shrink-0">
                 <div className="w-16 h-3 bg-slate-200/90 rounded-full border border-slate-300/60 shadow-inner" />
               </div>
 
-              <div className="px-6 pt-3 pb-0 flex-1 flex flex-col justify-between">
+              <div className="px-6 pt-2 pb-0 flex-1 flex flex-col justify-between min-h-0 overflow-hidden">
                 <div>
                   {/* Top Row: Institution Name & OFFICIAL Pill */}
                   <div className="flex items-start justify-between gap-3">
@@ -200,7 +200,7 @@ const PublicParticipantBadge = () => {
                   </div>
 
                   {/* Festival / Event Section */}
-                  <div className="flex items-end justify-between mt-4 pb-3 border-b border-slate-100">
+                  <div className="flex items-end justify-between mt-3 pb-2.5 border-b border-slate-100">
                     <div className="min-w-0">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                         FESTIVAL / EVENT
@@ -221,8 +221,8 @@ const PublicParticipantBadge = () => {
                   </div>
 
                   {/* Avatar & Participant Identity */}
-                  <div className="text-center pt-4">
-                    <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-full border-2 border-indigo-600/70 bg-indigo-50/70 flex items-center justify-center mx-auto shadow-xs">
+                  <div className="text-center pt-3 sm:pt-4">
+                    <div className="w-22 h-22 sm:w-26 sm:h-26 rounded-full border-2 border-indigo-600/70 bg-indigo-50/70 flex items-center justify-center mx-auto shadow-xs">
                       {participant.name ? (
                         <span className="text-3xl sm:text-4xl font-black text-indigo-700">
                           {participant.name.charAt(0).toUpperCase()}
@@ -233,12 +233,12 @@ const PublicParticipantBadge = () => {
                     </div>
 
                     {/* Participant Name */}
-                    <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase mt-3">
+                    <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight uppercase mt-2.5">
                       {participant.name}
                     </h1>
 
                     {/* CHEST NO #1000 Hero Pill */}
-                    <div className="mt-3 inline-flex items-center rounded-full bg-[#1e1b4b] text-white px-5 py-2 shadow-sm">
+                    <div className="mt-2.5 inline-flex items-center rounded-full bg-[#1e1b4b] text-white px-5 py-1.5 shadow-sm">
                       <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-200/90">
                         CHEST NO
                       </span>
@@ -249,7 +249,7 @@ const PublicParticipantBadge = () => {
                     </div>
 
                     {/* Metadata Badges: Team, Category, Grade */}
-                    <div className="mt-3.5 flex flex-wrap items-center justify-center gap-2 text-xs">
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
                       {participant.team_name && (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold">
                           <Users className="w-3.5 h-3.5 text-slate-500" />
@@ -278,7 +278,7 @@ const PublicParticipantBadge = () => {
                 </div>
 
                 {/* Flip Card Interactive Pill Hint */}
-                <div className="pt-3 pb-1 flex justify-center">
+                <div className="pt-2 pb-1 flex justify-center shrink-0">
                   <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all shadow-2xs border border-indigo-200/60 group">
                     <RotateCw className="w-3.5 h-3.5 transition-transform group-hover:rotate-180 duration-500 text-indigo-600" />
                     <span>Tap card to view schedule & stats</span>
@@ -287,7 +287,7 @@ const PublicParticipantBadge = () => {
               </div>
 
               {/* Bottom Dual-Tone Wave Graphic in Eventloo Indigo */}
-              <div className="w-full overflow-hidden leading-none select-none pointer-events-none">
+              <div className="w-full overflow-hidden leading-none select-none pointer-events-none shrink-0">
                 <svg
                   viewBox="0 0 400 55"
                   fill="none"
@@ -322,135 +322,134 @@ const PublicParticipantBadge = () => {
             {/* BACK FACE: SCHEDULE, 3 STATS BAR & REGISTERED PROGRAMS                */}
             {/* --------------------------------------------------------------------- */}
             <div
-              className="absolute inset-0 w-full h-full bg-white rounded-[32px] border border-slate-200/80 shadow-xl shadow-slate-200/60 overflow-hidden backface-hidden rotate-y-180 min-h-[580px] sm:min-h-[600px] flex flex-col justify-between"
+              className="absolute inset-0 w-full h-full bg-white rounded-[32px] border border-slate-200/80 shadow-xl shadow-slate-200/60 overflow-hidden backface-hidden rotate-y-180 flex flex-col justify-between"
             >
               {/* Lanyard Hole Cutout Slot in Card (matching front) */}
-              <div className="pt-4 flex justify-center print:hidden">
+              <div className="pt-4 flex justify-center print:hidden shrink-0">
                 <div className="w-16 h-3 bg-slate-200/90 rounded-full border border-slate-300/60 shadow-inner" />
               </div>
 
-              <div className="px-5 pt-2 pb-0 flex-1 flex flex-col justify-between min-h-0">
-                <div>
-                  {/* Top Bar on Reverse Side */}
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-1.5 h-6 rounded-full bg-indigo-600 shrink-0" />
-                      <div className="truncate">
-                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block truncate">
-                          {school.name || 'Institution'}
-                        </span>
-                        <span className="text-[9px] font-extrabold tracking-widest text-slate-400 uppercase">
-                          SCHEDULE & STATS
-                        </span>
-                      </div>
+              <div className="px-5 pt-1.5 pb-0 flex-1 flex flex-col min-h-0 overflow-hidden">
+                {/* Top Bar on Reverse Side (shrink-0) */}
+                <div className="shrink-0 flex items-center justify-between pb-1.5 border-b border-slate-100">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-1.5 h-6 rounded-full bg-indigo-600 shrink-0" />
+                    <div className="truncate">
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider block truncate">
+                        {school.name || 'Institution'}
+                      </span>
+                      <span className="text-[9px] font-extrabold tracking-widest text-slate-400 uppercase">
+                        SCHEDULE & STATS
+                      </span>
                     </div>
-
-                    {/* Flip back button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsFlipped(false);
-                      }}
-                      title="Flip to front"
-                      className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/70 transition-colors shadow-2xs cursor-pointer shrink-0"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>Flip Front</span>
-                    </button>
                   </div>
 
-                  {/* Participant quick recap */}
-                  <div className="flex items-center justify-between py-2 text-xs font-semibold text-slate-600">
-                    <span className="truncate uppercase font-bold text-slate-800">
-                      {participant.name}
+                  {/* Flip back button */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsFlipped(false);
+                    }}
+                    title="Flip to front"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/70 transition-colors shadow-2xs cursor-pointer shrink-0"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Flip Front</span>
+                  </button>
+                </div>
+
+                {/* Participant quick recap (shrink-0) */}
+                <div className="shrink-0 flex items-center justify-between py-1 text-xs font-semibold text-slate-600">
+                  <span className="truncate uppercase font-bold text-slate-800">
+                    {participant.name}
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-[#1e1b4b] text-white text-[10px] font-black tracking-wider shrink-0">
+                    #{participant.chest_number || 'N/A'}
+                  </span>
+                </div>
+
+                {/* ================================================================= */}
+                {/* 3 STATS CARDS: Total Events | Stage Events | Off-Stage Events      */}
+                {/* ================================================================= */}
+                <div className="shrink-0 grid grid-cols-3 gap-2 my-1">
+                  {/* Total Events */}
+                  <div className="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 text-center">
+                    <div className="w-6 h-6 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-0.5">
+                      <Calendar className="w-3 h-3" />
+                    </div>
+                    <span className="text-base font-black text-slate-900 block leading-tight">
+                      {stats.total_programs}
                     </span>
-                    <span className="px-2 py-0.5 rounded-full bg-[#1e1b4b] text-white text-[10px] font-black tracking-wider shrink-0">
-                      #{participant.chest_number || 'N/A'}
+                    <span className="text-[10px] font-semibold text-slate-500 block">
+                      Total Events
                     </span>
                   </div>
 
-                  {/* ================================================================= */}
-                  {/* 3 STATS CARDS: Total Events | Stage Events | Off-Stage Events      */}
-                  {/* ================================================================= */}
-                  <div className="grid grid-cols-3 gap-2 my-1">
-                    {/* Total Events */}
-                    <div className="bg-slate-50/90 rounded-2xl p-2.5 border border-slate-200/60 text-center">
-                      <div className="w-7 h-7 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-1">
-                        <Calendar className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
-                        {stats.total_programs}
-                      </span>
-                      <span className="text-[10px] font-semibold text-slate-500 block">
-                        Total Events
-                      </span>
+                  {/* Stage Events */}
+                  <div className="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 text-center">
+                    <div className="w-6 h-6 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-0.5">
+                      <Layers className="w-3 h-3" />
                     </div>
-
-                    {/* Stage Events */}
-                    <div className="bg-slate-50/90 rounded-2xl p-2.5 border border-slate-200/60 text-center">
-                      <div className="w-7 h-7 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-1">
-                        <Layers className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
-                        {stats.stage_count}
-                      </span>
-                      <span className="text-[10px] font-semibold text-slate-500 block">
-                        Stage Events
-                      </span>
-                    </div>
-
-                    {/* Off-Stage Events */}
-                    <div className="bg-slate-50/90 rounded-2xl p-2.5 border border-slate-200/60 text-center">
-                      <div className="w-7 h-7 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-1">
-                        <Flag className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-base sm:text-lg font-black text-slate-900 block leading-tight">
-                        {stats.offstage_count}
-                      </span>
-                      <span className="text-[10px] font-semibold text-slate-500 block">
-                        Off-Stage
-                      </span>
-                    </div>
+                    <span className="text-base font-black text-slate-900 block leading-tight">
+                      {stats.stage_count}
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-500 block">
+                      Stage Events
+                    </span>
                   </div>
 
-                  {/* Sub-tab Switcher: Programs | Digital QR */}
-                  <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl my-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setBackTab('programs');
-                      }}
-                      className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                        backTab === 'programs'
-                          ? 'bg-white text-indigo-700 shadow-2xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <Bookmark className="w-3.5 h-3.5" />
-                      <span>Programs ({programs.length})</span>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setBackTab('qr');
-                      }}
-                      className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                        backTab === 'qr'
-                          ? 'bg-white text-indigo-700 shadow-2xs'
-                          : 'text-slate-600 hover:text-slate-900'
-                      }`}
-                    >
-                      <QrCode className="w-3.5 h-3.5" />
-                      <span>QR Pass</span>
-                    </button>
+                  {/* Off-Stage Events */}
+                  <div className="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 text-center">
+                    <div className="w-6 h-6 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-0.5">
+                      <Flag className="w-3 h-3" />
+                    </div>
+                    <span className="text-base font-black text-slate-900 block leading-tight">
+                      {stats.offstage_count}
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-500 block">
+                      Off-Stage
+                    </span>
                   </div>
                 </div>
 
-                {/* TAB 1: REGISTERED PROGRAMS (Scrollable inside card) */}
+                {/* Sub-tab Switcher: Programs | Digital QR (shrink-0) */}
+                <div className="shrink-0 flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl my-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBackTab('programs');
+                    }}
+                    className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      backTab === 'programs'
+                        ? 'bg-white text-indigo-700 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Bookmark className="w-3.5 h-3.5" />
+                    <span>Programs ({programs.length})</span>
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBackTab('qr');
+                    }}
+                    className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      backTab === 'qr'
+                        ? 'bg-white text-indigo-700 shadow-2xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>QR Pass</span>
+                  </button>
+                </div>
+
+                {/* TAB 1: REGISTERED PROGRAMS (Scrollable inside card ONLY) */}
                 {backTab === 'programs' && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="max-h-[200px] sm:max-h-[225px] overflow-y-auto badge-scrollbar space-y-2 pr-1 my-1"
+                    onTouchStart={(e) => e.stopPropagation()}
+                    className="flex-1 min-h-0 overflow-y-auto badge-scrollbar space-y-2 pr-1.5 py-1"
                   >
                     {programs.length > 0 ? (
                       programs.map((prog, idx) => (
@@ -511,15 +510,15 @@ const PublicParticipantBadge = () => {
                 {backTab === 'qr' && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="p-3 bg-slate-50 rounded-2xl border border-slate-200/70 text-center space-y-2 my-1"
+                    className="flex-1 min-h-0 overflow-y-auto badge-scrollbar p-3 bg-slate-50 rounded-2xl border border-slate-200/70 text-center flex flex-col items-center justify-center space-y-2 my-1"
                   >
-                    <div className="mx-auto w-32 h-32 bg-white p-2 rounded-xl shadow-xs flex items-center justify-center border border-slate-200">
+                    <div className="mx-auto w-28 h-28 bg-white p-2 rounded-xl shadow-xs flex items-center justify-center border border-slate-200 shrink-0">
                       <QRCodeSVG
                         svgString={qr_code_svg}
                         eventId={event.id}
                         studentId={participant.id}
                         value={publicUrl}
-                        size={120}
+                        size={105}
                         className="w-full h-full"
                       />
                     </div>
@@ -528,7 +527,7 @@ const PublicParticipantBadge = () => {
                     </div>
                     <button
                       onClick={handleCopyLink}
-                      className="w-full py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                      className="w-full py-1.5 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs shrink-0"
                     >
                       {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                       <span>{copied ? 'Link Copied!' : 'Copy Badge Pass Link'}</span>
@@ -536,10 +535,10 @@ const PublicParticipantBadge = () => {
                   </div>
                 )}
 
-                {/* Tap to flip hint */}
+                {/* Tap to flip hint (shrink-0) */}
                 <div
                   onClick={() => setIsFlipped(false)}
-                  className="py-1 text-center cursor-pointer"
+                  className="shrink-0 py-1 text-center cursor-pointer"
                 >
                   <span className="text-[10px] font-semibold text-slate-400 hover:text-indigo-600 transition-colors inline-flex items-center gap-1">
                     <RotateCcw className="w-3 h-3" />
@@ -549,7 +548,7 @@ const PublicParticipantBadge = () => {
               </div>
 
               {/* Bottom Dual-Tone Wave Graphic on Reverse */}
-              <div className="w-full overflow-hidden leading-none select-none pointer-events-none">
+              <div className="w-full overflow-hidden leading-none select-none pointer-events-none shrink-0">
                 <svg
                   viewBox="0 0 400 55"
                   fill="none"
