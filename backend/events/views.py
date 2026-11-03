@@ -8403,7 +8403,30 @@ def get_public_event_portal(request, event_id):
         })
 
     # 3. Team Standings (Points Table) from published results
+    from events.models import Team, ProgramAssignment
+    school_teams = Team.objects.filter(school=event.school) if event.school else Team.objects.none()
     team_points_map = {}
+    for team in school_teams:
+        team_points_map[team.id] = {
+            'team_id': team.id,
+            'team_name': team.name,
+            'total_points': 0,
+            'programs_count': 0,
+            'programs_won': 0,
+            'first_places': 0,
+            'second_places': 0,
+            'third_places': 0,
+        }
+
+    # Distinct programs assigned per team in this event
+    team_assigned_progs = ProgramAssignment.objects.filter(
+        program__event=event, team__isnull=False
+    ).values('team_id').annotate(count=Count('program_id', distinct=True))
+    for item in team_assigned_progs:
+        t_id = item['team_id']
+        if t_id in team_points_map:
+            team_points_map[t_id]['programs_count'] = item['count']
+
     for res in ProgramResult.objects.filter(program__event=event, program__is_published=True, team__isnull=False):
         t_id = res.team_id
         if t_id not in team_points_map:
@@ -8411,6 +8434,7 @@ def get_public_event_portal(request, event_id):
                 'team_id': t_id,
                 'team_name': res.team.name,
                 'total_points': 0,
+                'programs_count': 1,
                 'programs_won': 0,
                 'first_places': 0,
                 'second_places': 0,
@@ -8425,7 +8449,10 @@ def get_public_event_portal(request, event_id):
         elif res.position == 3:
             team_points_map[t_id]['third_places'] += 1
 
-    team_standings = sorted(team_points_map.values(), key=lambda x: x['total_points'], reverse=True)
+    team_standings = [
+        item for item in sorted(team_points_map.values(), key=lambda x: (x['total_points'], x['first_places']), reverse=True)
+        if item.get('total_points', 0) > 0
+    ]
     for idx, item in enumerate(team_standings):
         item['rank'] = idx + 1
 
@@ -8438,6 +8465,12 @@ def get_public_event_portal(request, event_id):
                 'name': stg.name,
                 'location': stg.location or stg.room or '',
             })
+
+    stats = {
+        'total_programs': programs_qs.count(),
+        'total_teams': school_teams.count() if school_teams.exists() else len(team_standings),
+        'published_results_count': len(published_program_ids),
+    }
 
     return Response({
         'event': {
@@ -8452,6 +8485,7 @@ def get_public_event_portal(request, event_id):
             'school_name': school_name,
             'school_logo': school_logo_url,
         },
+        'stats': stats,
         'categories': categories,
         'programs': programs_data,
         'team_standings': team_standings,
