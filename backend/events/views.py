@@ -8459,11 +8459,12 @@ def get_public_event_portal(request, event_id):
     # 4. Stages (if is_schedule_published)
     stages_data = []
     if event.is_schedule_published:
-        for stg in EventStage.objects.filter(event=event, is_active=True).order_by('order', 'name'):
+        for stg in EventStage.objects.filter(event=event).order_by('number', 'name'):
             stages_data.append({
                 'id': stg.id,
-                'name': stg.name,
-                'location': stg.location or stg.room or '',
+                'name': stg.display_name,
+                'number': stg.number,
+                'map_link': stg.map_link or '',
             })
 
     stats = {
