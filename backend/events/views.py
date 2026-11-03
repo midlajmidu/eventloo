@@ -7851,7 +7851,7 @@ def certificate_preview_data(request, event_id):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminOrEventManager])
+@permission_classes([IsTeamManagerOrAdmin])
 @throttle_classes([ExportRateThrottle])
 def generate_certificates(request, event_id):
     from .certificate_config import CERTIFICATE_TYPES
@@ -7872,9 +7872,22 @@ def generate_certificates(request, event_id):
 
         is_badge_only = cert_types == ['badge']
 
+        # Enforce team manager scope
         team_id_raw = request.GET.get('team_id') or request.GET.get('team')
         team_id = None
-        if team_id_raw and team_id_raw != 'all':
+        if getattr(request.user, 'role', None) == 'team_manager':
+            if not is_badge_only:
+                return Response({'error': 'Team managers can only export participant badges.'}, status=403)
+            from .models import Team
+            manager_team = Team.objects.filter(team_manager=request.user, school_id=request.user.school_id).first()
+            if not manager_team:
+                token_team_id = getattr(request.user, 'team_id', None)
+                if token_team_id:
+                    manager_team = Team.objects.filter(id=token_team_id, school_id=request.user.school_id).first()
+            if not manager_team:
+                return Response({'error': 'No team assigned to this team manager.'}, status=403)
+            team_id = manager_team.id
+        elif team_id_raw and team_id_raw != 'all':
             try:
                 team_id = int(team_id_raw)
             except (TypeError, ValueError):
@@ -7891,7 +7904,7 @@ def generate_certificates(request, event_id):
         }
         missing_templates = [
             certificate_type for certificate_type in cert_types
-            if certificate_type not in templates or not templates[certificate_type].background_image
+            if certificate_type != 'badge' and (certificate_type not in templates or not templates[certificate_type].background_image)
         ]
         if missing_templates:
             return Response({

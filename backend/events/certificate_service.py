@@ -250,6 +250,279 @@ def _draw_field(pdf, field, value, box_x=0, box_y=None, box_width=None, box_heig
         text_object.textLine(line)
         pdf.drawText(text_object)
 
+def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None):
+    """
+    Renders a single high-quality participant paper badge (1 of 9 per A4 sheet)
+    matching the official Eventloo physical credential model reference:
+      - Top: —— Eventloo ——
+      - Festival: FESTIVAL : [EVENT NAME]
+      - Participant Name: [NAME]
+      - Hero Chest Pill: [ CHEST NO | #1000 ]
+      - Metadata: [ TEAM ] [ CATEGORY ] [ GRADE / SECTION ]
+      - Divider
+      - Left: PROGRAMS bullet list
+      - Right: Stats columns (Total Events, Stage Events, Off-Stage Events)
+      - Bottom: Smooth dual-tone wave graphic in Eventloo Indigo
+    """
+    student = recipient.student
+    assignment = recipient.assignment
+    category_names = category_names or {}
+
+    card_x = cell_x + 3.0
+    card_y = cell_y + 3.0
+    card_w = badge_width - 6.0    # 180.0 pt
+    card_h = badge_height - 6.0   # 260.0 pt
+    card_top = card_y + card_h
+    card_center_x = card_x + card_w / 2.0
+
+    pdf.saveState()
+
+    # 1. White Card Background
+    pdf.setFillColor(HexColor('#FFFFFF'))
+    pdf.setStrokeColor(HexColor('#E2E8F0'))
+    pdf.setLineWidth(0.6)
+    pdf.roundRect(card_x, card_y, card_w, card_h, radius=8, stroke=1, fill=1)
+
+    # 2. Dual-Tone Vector Wave Graphic at Bottom
+    # Light Wave (Indigo-200 / #C7D2FE)
+    p_wave1 = pdf.beginPath()
+    p_wave1.moveTo(card_x, card_y + 20)
+    p_wave1.curveTo(card_x + 50, card_y + 32, card_x + 110, card_y + 8, card_x + card_w, card_y + 22)
+    p_wave1.lineTo(card_x + card_w, card_y)
+    p_wave1.lineTo(card_x, card_y)
+    p_wave1.close()
+    pdf.setFillColor(HexColor('#C7D2FE'))
+    pdf.drawPath(p_wave1, stroke=0, fill=1)
+
+    # Foreground Dark Wave (Deep Indigo / #312E81)
+    p_wave2 = pdf.beginPath()
+    p_wave2.moveTo(card_x, card_y + 12)
+    p_wave2.curveTo(card_x + 65, card_y + 22, card_x + 120, card_y + 4, card_x + card_w, card_y + 30)
+    p_wave2.lineTo(card_x + card_w, card_y)
+    p_wave2.lineTo(card_x, card_y)
+    p_wave2.close()
+    pdf.setFillColor(HexColor('#312E81'))
+    pdf.drawPath(p_wave2, stroke=0, fill=1)
+
+    # Card border redraw to keep corners crisp over waves
+    pdf.setStrokeColor(HexColor('#CBD5E1'))
+    pdf.setLineWidth(0.5)
+    pdf.roundRect(card_x, card_y, card_w, card_h, radius=8, stroke=1, fill=0)
+
+    # 3. Top Header: —— Eventloo ——
+    y_logo = card_top - 20
+    pdf.setStrokeColor(HexColor('#CBD5E1'))
+    pdf.setLineWidth(0.5)
+    pdf.line(card_x + 16, y_logo + 3, card_x + 46, y_logo + 3)
+    pdf.line(card_x + card_w - 46, y_logo + 3, card_x + card_w - 16, y_logo + 3)
+
+    # Eventloo Logo Icon + Text
+    pdf.saveState()
+    # Mini loop mark
+    pdf.setStrokeColor(HexColor('#4F46E5'))
+    pdf.setLineWidth(1.1)
+    loop_cx = card_center_x - 30
+    loop_cy = y_logo + 3.5
+    pdf.circle(loop_cx - 3, loop_cy, 2.8, stroke=1, fill=0)
+    pdf.circle(loop_cx + 3, loop_cy, 2.8, stroke=1, fill=0)
+    pdf.restoreState()
+
+    pdf.setFont('Helvetica-Bold', 10.5)
+    pdf.setFillColor(HexColor('#0F172A'))
+    pdf.drawString(card_center_x - 18, y_logo, 'Eventloo')
+
+    # 4. Festival / Event Line: FESTIVAL : [EVENT NAME]
+    y_fest = card_top - 38
+    fest_lbl = 'FESTIVAL : '
+    lbl_w = stringWidth(fest_lbl, 'Helvetica', 6.5)
+    event_title = (event.title or 'FESTIVAL').upper()
+    title_w = stringWidth(event_title, 'Helvetica-Bold', 7.5)
+    start_fest_x = card_center_x - (lbl_w + title_w) / 2.0
+    
+    pdf.setFont('Helvetica', 6.5)
+    pdf.setFillColor(HexColor('#64748B'))
+    pdf.drawString(start_fest_x, y_fest, fest_lbl)
+
+    pdf.setFont('Helvetica-Bold', 7.5)
+    pdf.setFillColor(HexColor('#0F172A'))
+    pdf.drawString(start_fest_x + lbl_w, y_fest, event_title)
+
+    # 5. Participant Name
+    y_name = card_top - 68
+    name = (student.get_full_name() or student.display_name or 'Participant').strip()
+    name_len = len(name)
+    if name_len > 24:
+        f_size = 9.0
+    elif name_len > 18:
+        f_size = 10.5
+    else:
+        f_size = 13.0
+    pdf.setFont('Helvetica-Bold', f_size)
+    pdf.setFillColor(HexColor('#0F172A'))
+    pdf.drawCentredString(card_center_x, y_name, name.upper())
+
+    # 6. Hero Chest Number Pill: [ CHEST NO | #1000 ]
+    chest_number = assignment.chest_number
+    if not chest_number:
+        chest_number = ChestNumber.objects.filter(event=event, student=student).values_list(
+            'chest_number', flat=True
+        ).first()
+    chest_str = str(chest_number) if chest_number else 'N/A'
+
+    y_pill = card_top - 98
+    pill_w = 98.0
+    pill_h = 18.0
+    pill_x = card_center_x - pill_w / 2.0
+    pdf.setFillColor(HexColor('#1E1B4B'))
+    pdf.roundRect(pill_x, y_pill, pill_w, pill_h, radius=9, stroke=0, fill=1)
+
+    pdf.setFont('Helvetica-Bold', 5.5)
+    pdf.setFillColor(HexColor('#C7D2FE'))
+    pdf.drawString(pill_x + 10, y_pill + 5.5, 'CHEST NO')
+
+    pdf.setStrokeColor(HexColor('#4338CA'))
+    pdf.setLineWidth(0.6)
+    pdf.line(pill_x + 47, y_pill + 3.5, pill_x + 47, y_pill + 14.5)
+
+    pdf.setFont('Helvetica-Bold', 9)
+    pdf.setFillColor(HexColor('#FFFFFF'))
+    pdf.drawString(pill_x + 54, y_pill + 5, f'#{chest_str}')
+
+    # 7. Metadata Badges Row: [ TEAM ] [ CATEGORY ] [ GRADE / SECTION ]
+    y_badges = card_top - 124
+    badge_item_w = 48.0
+    badge_item_h = 14.0
+
+    # Team
+    team_name = assignment.team.name if assignment.team else (
+        student.team_memberships.first().name if hasattr(student, 'team_memberships') and student.team_memberships.exists() else 'Individual'
+    )
+    b1_x = card_x + 12
+    pdf.setFillColor(HexColor('#F1F5F9'))
+    pdf.setStrokeColor(HexColor('#E2E8F0'))
+    pdf.setLineWidth(0.4)
+    pdf.roundRect(b1_x, y_badges, badge_item_w, badge_item_h, radius=4, stroke=1, fill=1)
+    pdf.setFont('Helvetica-Bold', 5.5)
+    pdf.setFillColor(HexColor('#334155'))
+    pdf.drawCentredString(b1_x + badge_item_w / 2.0, y_badges + 4.5, team_name[:12])
+
+    # Category
+    cat_code = student.category or (assignment.program.category if assignment.program else '')
+    category_display = cat_code.upper() if cat_code else 'GENERAL'
+    b2_x = card_center_x - badge_item_w / 2.0
+    pdf.roundRect(b2_x, y_badges, badge_item_w, badge_item_h, radius=4, stroke=1, fill=1)
+    pdf.drawCentredString(b2_x + badge_item_w / 2.0, y_badges + 4.5, category_display[:10])
+
+    # Grade / Section
+    grade_sec = ''
+    if getattr(student, 'grade', None):
+        grade_sec = f"Grade {student.grade}"
+        if getattr(student, 'section', None):
+            grade_sec += f" - {student.section}"
+    elif getattr(student, 'student_id', None):
+        grade_sec = f"ID: {student.student_id}"
+    else:
+        grade_sec = getattr(student, 'gender', 'Student').title()
+    b3_x = card_x + card_w - 12 - badge_item_w
+    pdf.roundRect(b3_x, y_badges, badge_item_w, badge_item_h, radius=4, stroke=1, fill=1)
+    pdf.drawCentredString(b3_x + badge_item_w / 2.0, y_badges + 4.5, grade_sec[:12])
+
+    # 8. Divider Line
+    y_div = card_top - 138
+    pdf.setStrokeColor(HexColor('#F1F5F9'))
+    pdf.setLineWidth(0.6)
+    pdf.line(card_x + 10, y_div, card_x + card_w - 10, y_div)
+
+    # 9. Programs List (Left) and Stats (Right)
+    student_assignments = ProgramAssignment.objects.filter(
+        student=student, program__event=event
+    ).select_related('program').order_by('program__start_time', 'program__name')
+
+    programs_list = []
+    seen_progs = set()
+    stage_count = 0
+    offstage_count = 0
+    for pa in student_assignments:
+        p = pa.program
+        if p and p.id not in seen_progs:
+            seen_progs.add(p.id)
+            programs_list.append(p.name)
+            if getattr(p, 'program_type', 'off_stage') == 'stage':
+                stage_count += 1
+            else:
+                offstage_count += 1
+
+    if not programs_list and assignment.program:
+        programs_list = [assignment.program.name]
+        if getattr(assignment.program, 'program_type', 'off_stage') == 'stage':
+            stage_count = 1
+        else:
+            offstage_count = 1
+
+    total_count = len(programs_list)
+
+    # Left: PROGRAMS
+    y_prog_head = card_top - 150
+    pdf.setFont('Helvetica-Bold', 6.5)
+    pdf.setFillColor(HexColor('#4338CA'))
+    pdf.drawString(card_x + 12, y_prog_head, 'PROGRAMS')
+
+    for idx, p_name in enumerate(programs_list[:4]):
+        y_item = y_prog_head - 9 - idx * 8.5
+        pdf.setFillColor(HexColor('#4F46E5'))
+        pdf.circle(card_x + 15, y_item + 2, 1.2, stroke=0, fill=1)
+        pdf.setFont('Helvetica', 5.5)
+        pdf.setFillColor(HexColor('#0F172A'))
+        display_name = p_name if len(programs_list) <= 4 or idx < 3 else f'+ {len(programs_list) - 3} more'
+        pdf.drawString(card_x + 19, y_item, display_name[:18])
+
+    # Right: 3 Stats Columns
+    stats_left = card_x + 82
+    col_w = 29.0
+    y_stat_num = y_prog_head - 10
+
+    # Col 1: Total Events
+    c1_cx = stats_left + col_w / 2.0
+    pdf.setFont('Helvetica-Bold', 10.5)
+    pdf.setFillColor(HexColor('#0F172A'))
+    pdf.drawCentredString(c1_cx, y_stat_num, str(total_count))
+    pdf.setFont('Helvetica', 4.5)
+    pdf.setFillColor(HexColor('#64748B'))
+    pdf.drawCentredString(c1_cx, y_stat_num - 7, 'Total')
+    pdf.drawCentredString(c1_cx, y_stat_num - 12, 'Events')
+
+    # Divider 1
+    d1_x = stats_left + col_w
+    pdf.setStrokeColor(HexColor('#E2E8F0'))
+    pdf.setLineWidth(0.5)
+    pdf.line(d1_x, y_stat_num + 8, d1_x, y_stat_num - 14)
+
+    # Col 2: Stage Events
+    c2_cx = d1_x + col_w / 2.0
+    pdf.setFont('Helvetica-Bold', 10.5)
+    pdf.setFillColor(HexColor('#0F172A'))
+    pdf.drawCentredString(c2_cx, y_stat_num, str(stage_count))
+    pdf.setFont('Helvetica', 4.5)
+    pdf.setFillColor(HexColor('#64748B'))
+    pdf.drawCentredString(c2_cx, y_stat_num - 7, 'Stage')
+    pdf.drawCentredString(c2_cx, y_stat_num - 12, 'Events')
+
+    # Divider 2
+    d2_x = d1_x + col_w
+    pdf.line(d2_x, y_stat_num + 8, d2_x, y_stat_num - 14)
+
+    # Col 3: Off-Stage Events
+    c3_cx = d2_x + col_w / 2.0
+    pdf.setFont('Helvetica-Bold', 10.5)
+    pdf.setFillColor(HexColor('#0F172A'))
+    pdf.drawCentredString(c3_cx, y_stat_num, str(offstage_count))
+    pdf.setFont('Helvetica', 4.5)
+    pdf.setFillColor(HexColor('#64748B'))
+    pdf.drawCentredString(c3_cx, y_stat_num - 7, 'Off-Stage')
+    pdf.drawCentredString(c3_cx, y_stat_num - 12, 'Events')
+
+    pdf.restoreState()
+
 
 def render_certificates_pdf(event, templates_by_type, recipients, quality='standard'):
     if quality not in ('screen', 'standard', 'print'):
@@ -296,12 +569,6 @@ def render_certificates_pdf(event, templates_by_type, recipients, quality='stand
 
     # 2. Badges (9 badges per A4 portrait page, 3x3 grid)
     if badge_recipients:
-        badge_template = templates_by_type['badge']
-        fields = normalize_certificate_fields(badge_template.fields)
-        if badge_template.id not in prepared_images:
-            prepared_images[badge_template.id] = _prepare_background(badge_template, quality)
-        badge_bg = prepared_images[badge_template.id]
-
         page_width, page_height = portrait(A4)
         cols = 3
         rows = 3
@@ -320,7 +587,7 @@ def render_certificates_pdf(event, templates_by_type, recipients, quality='stand
 
             # Draw 3x3 grid cut guides
             pdf.saveState()
-            pdf.setStrokeColor(HexColor('#E2E8F0'))
+            pdf.setStrokeColor(HexColor('#CBD5E1'))
             pdf.setLineWidth(0.4)
             pdf.setDash(2, 2)
             for i in range(badges_per_page):
@@ -331,33 +598,17 @@ def render_certificates_pdf(event, templates_by_type, recipients, quality='stand
                 pdf.rect(cx, cy, badge_width, badge_height, stroke=1, fill=0)
             pdf.restoreState()
 
-            # Render each badge in current page batch
+            # Render each badge in current page batch using the official paper badge model
             for idx, recipient in enumerate(page_batch):
                 row = idx // cols
                 col = idx % cols
                 cell_x = margin_x + col * badge_width
                 cell_y = page_height - margin_y - (row + 1) * badge_height
 
-                badge_bg.seek(0)
-                pdf.drawImage(ImageReader(badge_bg), cell_x, cell_y, badge_width, badge_height, preserveAspectRatio=False)
-
-                # Draw crisp card boundary for cutting
-                pdf.saveState()
-                pdf.setStrokeColor(HexColor('#CBD5E1'))
-                pdf.setLineWidth(0.5)
-                pdf.setDash(2, 2)
-                pdf.rect(cell_x, cell_y, badge_width, badge_height, stroke=1, fill=0)
-                pdf.restoreState()
-
-                # Draw all enabled badge fields
-                values = certificate_field_values(recipient, event, category_names)
-                for field_id, field in fields.items():
-                    if field.get('enabled'):
-                        _draw_field(
-                            pdf, field, values.get(field_id, field.get('sample', '')),
-                            box_x=cell_x, box_y=cell_y, box_width=badge_width, box_height=badge_height,
-                            reference_width=240.0
-                        )
+                _draw_paper_badge(
+                    pdf, cell_x, cell_y, badge_width, badge_height,
+                    recipient, event, category_names
+                )
 
             pdf.showPage()
 

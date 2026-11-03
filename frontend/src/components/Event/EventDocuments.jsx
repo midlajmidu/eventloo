@@ -1069,7 +1069,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
           }
         }
         const fallbackMsg = exportItem.type === 'badge'
-          ? 'Unable to generate badges. Check that the badge template is uploaded in Templates.'
+          ? 'Unable to generate badges. Please ensure attendees are registered and assigned to programs.'
           : 'Unable to generate certificates. Check that the selected templates are uploaded and that eligible published results exist.';
         throw new Error(serverMessage || fallbackMsg);
       } else {
@@ -1219,7 +1219,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
     {
       id: 'badge',
       title: 'Badge',
-      description: 'Participant ID cards with chest numbers, team and category.',
+      description: 'Official paper badges (9 per A4 sheet with cut guides, chest numbers & programs).',
       icon: BadgeCheck,
       iconBg: 'bg-indigo-50 text-indigo-600',
     }
@@ -1571,7 +1571,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                     {selectedExportType === 'badge' && (
                       <div className="p-3.5 bg-indigo-50/80 border border-indigo-100 rounded-xl text-xs text-indigo-900 flex items-center space-x-2.5">
                         <BadgeCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                        <span>Exports 1 participant badge per registered attendee (chest number, name, category, team).</span>
+                        <span>Exports official Eventloo paper badges (9 cards per A4 sheet with cut guides, chest numbers, programs & event counts). Ready to print without templates.</span>
                       </div>
                     )}
 
