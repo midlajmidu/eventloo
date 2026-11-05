@@ -87,7 +87,15 @@ const TeamStudents = () => {
           : (rawStudents?.results || []);
 
       setStudents(studentList);
-      setCategories(catRes?.data?.results || catRes?.data || []);
+      const rawCats = catRes?.data?.results || catRes?.data || [];
+      const standardCats = rawCats.filter(
+        (c) =>
+          !c.is_mixing &&
+          !['general', 'gen', 'gn', 'open', 'open category'].includes((c.code || '').toLowerCase()) &&
+          (c.name || '').toLowerCase() !== 'general' &&
+          (c.name || '').toLowerCase() !== 'open'
+      );
+      setCategories(standardCats);
       setClasses(classRes?.data?.results || classRes?.data || []);
     } catch (err) {
       console.error('Error fetching student roster:', err);
@@ -284,7 +292,12 @@ const TeamStudents = () => {
             >
               <option value="all">All categories</option>
               {categories
-                .filter((c) => !c.is_mixing)
+                .filter(
+                  (c) =>
+                    !c.is_mixing &&
+                    !['general', 'gen', 'gn', 'open', 'open category'].includes((c.code || '').toLowerCase()) &&
+                    (c.name || '').toLowerCase() !== 'general'
+                )
                 .map((cat) => (
                   <option key={cat.code} value={cat.code}>
                     {cat.name}

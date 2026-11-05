@@ -70,6 +70,7 @@ function App() {
           <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/team-manager/login" element={<Navigate to="/login?tab=team" replace />} />
           <Route path="/super-admin/login" element={<SuperAdminLogin />} />
           <Route path="/events/:eventId/public" element={<PublicEventPortal />} />
           <Route path="/public/events/:eventId" element={<PublicEventPortal />} />

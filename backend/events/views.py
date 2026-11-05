@@ -5,14 +5,14 @@ from django.db import models, transaction
 from django.utils import timezone
 from django.http import HttpResponse
 from django.contrib.auth import get_user_model
-from rest_framework import viewsets, permissions, status, filters
+from rest_framework import viewsets, permissions, status, filters, exceptions
 from rest_framework.decorators import action, api_view, permission_classes, authentication_classes, throttle_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 import django_filters
-from .models import Event, EventStage, Team, IndividualParticipation, EventAnnouncement, Program, ProgramAssignment, ProgramResult, PointsRecord, TeamProfile, ChestNumber, CertificateTemplate
+from .models import Event, EventStage, EventProgramType, Team, IndividualParticipation, EventAnnouncement, Program, ProgramAssignment, ProgramResult, PointsRecord, TeamProfile, ChestNumber, CertificateTemplate
 from .serializers import (
     EventListSerializer, EventDetailSerializer, EventCreateUpdateSerializer,
     TeamSerializer, TeamCreateSerializer, TeamCreateUpdateSerializer, IndividualParticipationSerializer,
@@ -20,7 +20,7 @@ from .serializers import (
     ProgramSerializer, ProgramAssignmentSerializer, ProgramResultSerializer,
     PointsRecordSerializer, PointsRecordCreateSerializer, TeamProfileSerializer,
     EventWithProgramsSerializer, ChestNumberSerializer, MarkEntrySerializer,
-    ProgramResultSummarySerializer, EventStageSerializer
+    ProgramResultSummarySerializer, EventStageSerializer, EventProgramTypeSerializer
 )
 from .permissions import IsAdminOrEventManager, IsSchoolAdmin, IsTeamManagerOrAdmin, TeamManagerAuthentication
 from accounts.authentication import SchoolJWTAuthentication
@@ -41,12 +41,12 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from collections import defaultdict
 # from .pdf_utils import build_pdf_header
 from .pagination import StandardPagination, LargePagination, SmallPagination, CustomPagination
-# from reportlab.lib import colors
-# from reportlab.lib.pagesizes import letter, A4
-# from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-# from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-# from reportlab.lib.units import inch
-# from reportlab.pdfgen import canvas
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.pdfgen import canvas
 import json
 import csv
 from datetime import datetime, timedelta
@@ -116,11 +116,11 @@ class EventViewSet(viewsets.ModelViewSet):
         if self.action in [
             'create', 'update', 'partial_update', 'destroy',
             'toggle_program_publish', 'publish_all_results', 'toggle_schedule_publish',
-            'bulk_upload_programs', 'create_announcement',
+            'bulk_upload_programs', 'create_announcement', 'admin_programs',
         ]:
             permission_classes = [IsAdminOrEventManager]
         elif self.action in [
-            'retrieve', 'list', 'points_teams', 'schedule_export', 'admin_programs',
+            'retrieve', 'list', 'points_teams', 'schedule_export',
             'chest_numbers', 'search_by_chest_number', 'analytics',
         ]:
             permission_classes = [IsTeamManagerOrAdmin]
@@ -244,11 +244,13 @@ class EventViewSet(viewsets.ModelViewSet):
             textColor=colors.HexColor('#475569'),
         )
         school_name = escape(event.school.name.upper()) if (event.school and event.school.name) else 'EVENTLOO'
+        start_fmt = event.start_date.strftime("%d %b %Y") if getattr(event.start_date, 'strftime', None) else (str(event.start_date) if event.start_date else '')
+        end_fmt = event.end_date.strftime("%d %b %Y") if getattr(event.end_date, 'strftime', None) else (str(event.end_date) if event.end_date else '')
         date_str = ''
-        if event.start_date and event.end_date:
-            date_str = f'{event.start_date.strftime("%d %b %Y")} – {event.end_date.strftime("%d %b %Y")}<br/>'
-        elif event.start_date:
-            date_str = f'{event.start_date.strftime("%d %b %Y")}<br/>'
+        if start_fmt and end_fmt:
+            date_str = f'{start_fmt} – {end_fmt}<br/>'
+        elif start_fmt:
+            date_str = f'{start_fmt}<br/>'
 
         header = Table([[
             Paragraph(
@@ -463,12 +465,20 @@ class EventViewSet(viewsets.ModelViewSet):
         
         if event.is_team_based:
             teams = Team.objects.filter(program_assignments__program__event=event).distinct().prefetch_related('members')
+            page = self.paginate_queryset(teams)
+            if page is not None:
+                serializer = TeamSerializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
             serializer = TeamSerializer(teams, many=True)
-            return self.get_paginated_response(serializer.data)
+            return Response(serializer.data)
         else:
             participants = IndividualParticipation.objects.filter(event=event).select_related('participant')
+            page = self.paginate_queryset(participants)
+            if page is not None:
+                serializer = IndividualParticipationSerializer(page, many=True)
+                return self.get_paginated_response(serializer.data)
             serializer = IndividualParticipationSerializer(participants, many=True)
-            return self.get_paginated_response(serializer.data)
+            return Response(serializer.data)
     
     @action(detail=True, methods=['get'])
     def announcements(self, request, pk=None):
@@ -712,7 +722,7 @@ class EventViewSet(viewsets.ModelViewSet):
         student_data = []
         for result in student_results:
             from accounts.models import User
-            student = User.objects.get(id=result['participant'])
+            student = User.objects.get(id=result['participant'], school_id=event.school_id)
             
             # Get recent achievements from all individual categories.
             recent_achievements = ProgramResult.objects.filter(
@@ -811,22 +821,28 @@ class EventViewSet(viewsets.ModelViewSet):
             results = self._process_program_excel_with_ai(df, event)
             
             if results['errors']:
+                total_analyzed = len(results['valid_programs']) + len(results['structured_errors'])
                 return Response({
                     'error': 'Data validation failed',
+                    'message': f"Found {len(results['structured_errors'])} issue(s) in your spreadsheet. No programs were imported so your event schedule and records remain clean.",
+                    'total_rows': total_analyzed,
+                    'valid_count': len(results['valid_programs']),
+                    'error_count': len(results['structured_errors']),
                     'details': results['errors'],
+                    'structured_errors': results['structured_errors'],
                     'suggestions': results['suggestions']
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if not results['valid_programs']:
+                return Response({
+                    'error': 'No program rows were found in the workbook.',
+                    'suggestions': ['Add at least one program to the Programs sheet and upload it again.'],
                 }, status=status.HTTP_400_BAD_REQUEST)
             
             created_programs = []
             skipped = []
             serializers_to_save = []
             for program_data in results['valid_programs']:
-                if Program.objects.filter(event=event, name__iexact=program_data['name']).exists():
-                    skipped.append({
-                        'name': program_data['name'],
-                        'reason': 'Program already exists with this name',
-                    })
-                    continue
                 candidate = ProgramSerializer(
                     data=program_data, context={'request': request}
                 )
@@ -844,16 +860,16 @@ class EventViewSet(viewsets.ModelViewSet):
             serializer = ProgramSerializer(created_programs, many=True)
             return Response({
                 'success': True,
-                'message': f'Successfully processed {len(created_programs)} programs',
+                'message': f'Successfully processed and created {len(created_programs)} programs',
                 'programs': serializer.data,
                 'skipped': skipped,
                 'summary': {
                     'total_processed': len(results['valid_programs']),
                     'successful_creations': len(created_programs),
-                    'skipped_creations': len(skipped),
+                    'skipped_creations': 0,
                     'event_name': event.title
                 },
-                'note': 'max_participants values represent the maximum participants per team, not total participants across all teams'
+                'note': 'All programs successfully created and ready for scheduling and student assignment.'
             })
             
         except Exception as e:
@@ -861,12 +877,30 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Unable to process the workbook.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def _process_program_excel_with_ai(self, df, event):
-        """AI-powered Excel processing for program data"""
+        """AI-powered Excel processing for program data with comprehensive validation and structured error reporting."""
         results = {
             'valid_programs': [],
             'errors': [],
-            'suggestions': []
+            'structured_errors': [],
+            'suggestions': [],
         }
+
+        def record_error(row_num, program_name, field, field_label, value, issue, reason, suggestion=''):
+            msg = f"Row {row_num}: {reason}"
+            results['errors'].append(msg)
+            results['structured_errors'].append({
+                'row': row_num,
+                'program_name': program_name or '— (Name missing)',
+                'field': field,
+                'field_label': field_label,
+                'value': str(value) if value is not None and not pd.isna(value) else '',
+                'issue': issue,
+                'reason': reason,
+                'suggestion': suggestion,
+            })
+
+        # Clean column names
+        df.columns = df.columns.astype(str).str.strip().str.lower().str.replace(' ', '_')
         
         # Detect columns using AI
         column_mapping = self._detect_program_columns(df.columns.tolist())
@@ -877,105 +911,315 @@ class EventViewSet(viewsets.ModelViewSet):
         }
         missing_columns = sorted(required_columns.difference(column_mapping))
         if missing_columns:
-            results['errors'].append(
-                f'Missing required columns: {", ".join(missing_columns)}.'
-            )
+            missing_labels = [c.replace('_', ' ').title() for c in missing_columns]
+            results['errors'].append(f'Missing required columns: {", ".join(missing_columns)}.')
+            results['structured_errors'].append({
+                'row': 1,
+                'program_name': '— Header Row —',
+                'field': 'header',
+                'field_label': 'Column Headers',
+                'value': ', '.join(missing_columns),
+                'issue': 'Missing Required Columns',
+                'reason': f'Spreadsheet is missing required column header(s): {", ".join(missing_labels)}.',
+                'suggestion': 'Use the downloaded template with Name, Category, Type, Mode, and Duration Minutes columns.',
+            })
             results['suggestions'].append(
-                'Use the downloaded template with Name, Category, Type, Mode and Duration Minutes columns.'
+                'Please ensure your spreadsheet includes columns for: Name, Category, Type, Mode, and Duration Minutes.'
             )
             return results
-        
+
+        # Build dynamic program type lookup
+        event_types_list = list(event.get_program_types())
+        type_lookup = {
+            'stage': 'stage', 'onstage': 'stage', 'on_stage': 'stage', 'on stage': 'stage',
+            'offstage': 'off_stage', 'off stage': 'off_stage', 'off_stage': 'off_stage',
+        }
+        for pt in event_types_list:
+            type_lookup[pt.code.lower()] = pt.code
+            type_lookup[pt.name.lower()] = pt.code
+            type_lookup[pt.name.lower().replace(' ', '_')] = pt.code
+            type_lookup[pt.name.lower().replace('-', '_')] = pt.code
+
+        # Pre-fetch school categories
+        from accounts.models import StudentCategory
+        school_categories = list(
+            StudentCategory.objects.filter(school=event.school, is_active=True)
+        )
+        cat_lookup = {}
+        for sc in school_categories:
+            cat_lookup[sc.code.lower()] = sc.code
+            cat_lookup[sc.name.lower()] = sc.code
+
+        seen_in_file = {}
+
         # Process each row
         for index, row in df.iterrows():
+            row_num = index + 2
             try:
-                # Extract required fields
-                name = str(row[column_mapping['name']]).strip()
-                
-                # Skip empty rows
-                if pd.isna(name) or name == '' or name.lower() == 'nan':
-                    continue
-                
-                program_data = {'name': name}
-
-                raw_type = str(row[column_mapping['program_type']]).strip().lower()
-                type_aliases = {
-                    'stage': 'stage', 'onstage': 'stage', 'on_stage': 'stage',
-                    'offstage': 'off_stage', 'off stage': 'off_stage',
-                    'off_stage': 'off_stage',
-                }
-                program_data['program_type'] = type_aliases.get(raw_type, raw_type)
-
-                raw_category = str(row[column_mapping['category']]).strip()
-                category = StudentCategory.objects.filter(
-                    school=event.school, is_active=True,
-                ).filter(Q(code__iexact=raw_category) | Q(name__iexact=raw_category)).first()
-                if category:
-                    program_data['category'] = category.code
-                elif raw_category.casefold() in ('general', 'open', 'gen', 'gn'):
-                    program_data['category'] = 'general'
-                else:
-                    results['errors'].append(
-                        f'Row {index + 2}: Category "{raw_category}" is not an active category for this school.'
+                raw_name = row[column_mapping['name']]
+                if pd.isna(raw_name) or str(raw_name).strip() == '' or str(raw_name).strip().lower() in ('nan', 'none'):
+                    row_values = [str(v).strip() for v in row if not pd.isna(v) and str(v).strip() not in ('nan', 'none', '')]
+                    if not row_values:
+                        continue
+                    record_error(
+                        row_num=row_num,
+                        program_name='—',
+                        field='name',
+                        field_label='Program Name',
+                        value='',
+                        issue='Missing Program Name',
+                        reason='Program name is required and cannot be empty.',
+                        suggestion='Enter a unique name for this program (e.g. English Elocution, Folk Dance).'
                     )
                     continue
 
+                name = str(raw_name).strip()
+                norm_name = name.casefold()
+
+                # 1. Intra-file duplicate check
+                if norm_name in seen_in_file:
+                    record_error(
+                        row_num=row_num,
+                        program_name=name,
+                        field='duplicate',
+                        field_label='Duplicate Name',
+                        value=name,
+                        issue='Duplicate in Spreadsheet',
+                        reason=f'Program "{name}" appears multiple times in this file (previously on row {seen_in_file[norm_name]}).',
+                        suggestion='Program titles must be unique within an event. Rename or remove the duplicate row.'
+                    )
+                    continue
+                seen_in_file[norm_name] = row_num
+
+                # 2. Database duplicate check
+                if Program.objects.filter(event=event, name__iexact=name).exists():
+                    record_error(
+                        row_num=row_num,
+                        program_name=name,
+                        field='duplicate',
+                        field_label='Duplicate Name',
+                        value=name,
+                        issue='Already Exists in Event',
+                        reason=f'A program named "{name}" already exists in this event.',
+                        suggestion='Choose a different program title or modify the existing program in the Programs tab.'
+                    )
+                    continue
+
+                program_data = {'name': name}
+
+                # 3. Program Type check
+                raw_type = str(row[column_mapping['program_type']]).strip().lower()
+                matched_type = type_lookup.get(raw_type)
+                if not matched_type:
+                    from django.utils.text import slugify
+                    slug = slugify(raw_type).replace('-', '_')
+                    matched_type = type_lookup.get(slug)
+
+                if matched_type:
+                    program_data['program_type'] = matched_type
+                else:
+                    allowed_names = ', '.join([f'"{t.name}"' for t in event_types_list]) or '"Stage Event", "Off-Stage Event"'
+                    record_error(
+                        row_num=row_num,
+                        program_name=name,
+                        field='type',
+                        field_label='Program Type',
+                        value=row[column_mapping['program_type']],
+                        issue='Invalid Program Type',
+                        reason=f'Program type "{raw_type}" is not recognized for this event.',
+                        suggestion=f'Allowed types for this event: {allowed_names}.'
+                    )
+                    continue
+
+                # 4. Category check
+                raw_category = str(row[column_mapping['category']]).strip()
+                norm_cat = raw_category.lower()
+                matched_cat_code = cat_lookup.get(norm_cat)
+                if matched_cat_code:
+                    program_data['category'] = matched_cat_code
+                elif norm_cat in ('general', 'open', 'gen', 'gn', 'all'):
+                    program_data['category'] = 'general'
+                else:
+                    allowed_cats = ', '.join([f'"{c.name}"' for c in school_categories] + ['"General"'])
+                    record_error(
+                        row_num=row_num,
+                        program_name=name,
+                        field='category',
+                        field_label='Category',
+                        value=raw_category,
+                        issue='Invalid Category',
+                        reason=f'Category "{raw_category}" is not configured for your school.',
+                        suggestion=f'Select an active school category ({allowed_cats}).'
+                    )
+                    continue
+
+                # 5. Mode (Individual vs Group) check
                 raw_team = str(row[column_mapping['is_team_based']]).strip().casefold()
                 if raw_team in ('yes', 'true', '1', 'group', 'team'):
                     program_data['is_team_based'] = True
-                elif raw_team in ('no', 'false', '0', 'individual', 'single'):
+                elif raw_team in ('no', 'false', '0', 'individual', 'single', 'solo'):
                     program_data['is_team_based'] = False
                 else:
-                    results['errors'].append(
-                        f'Row {index + 2}: Mode must be Individual or Group.'
+                    record_error(
+                        row_num=row_num,
+                        program_name=name,
+                        field='mode',
+                        field_label='Mode (Individual / Group)',
+                        value=row[column_mapping['is_team_based']],
+                        issue='Invalid Competition Mode',
+                        reason=f'Mode "{raw_team}" is invalid. Must be "Individual" or "Group".',
+                        suggestion='Enter "Individual" for solo events or "Group" for team events.'
                     )
                     continue
 
-                numeric_fields = (
-                    'max_participants', 'team_size', 'max_teams_per_school',
-                    'max_participants_per_team', 'duration_minutes_per_entry',
-                    'num_judges',
-                )
-                invalid_number = False
-                for field in numeric_fields:
-                    column = column_mapping.get(field)
-                    if not column or pd.isna(row[column]):
-                        continue
-                    try:
-                        value = int(float(row[column]))
-                        if value <= 0:
-                            raise ValueError
-                        program_data[field] = value
-                    except (TypeError, ValueError):
-                        results['errors'].append(
-                            f'Row {index + 2}: {field} must be a positive whole number.'
-                        )
-                        invalid_number = True
-                if invalid_number:
-                    continue
-                if 'num_judges' in program_data and (program_data['num_judges'] < 1 or program_data['num_judges'] > 4):
-                    results['errors'].append(f'Row {index + 2}: Number of judges must be between 1 and 4.')
-                    continue
-                # Validate program_type
-                if 'program_type' not in program_data or program_data['program_type'] not in ['stage', 'off_stage']:
-                    results['errors'].append(f'Row {index + 2}: Program type ("Type") is required and must be either "stage" or "off_stage".')
-                    continue
+                # 6. Mode-dependent rules & numeric fields
+                has_row_error = False
                 if program_data['is_team_based']:
-                    if not program_data.get('team_size'):
-                        results['errors'].append(
-                            f'Row {index + 2}: Group programs require Team Size.'
+                    # Group programs require Team Size
+                    team_size_col = column_mapping.get('team_size')
+                    raw_team_size = row.get(team_size_col) if team_size_col else None
+                    if team_size_col and not pd.isna(raw_team_size):
+                        try:
+                            ts_val = int(float(raw_team_size))
+                            if ts_val <= 0:
+                                raise ValueError
+                            program_data['team_size'] = ts_val
+                        except (TypeError, ValueError):
+                            record_error(
+                                row_num=row_num,
+                                program_name=name,
+                                field='team_size',
+                                field_label='Team Size',
+                                value=raw_team_size,
+                                issue='Invalid Team Size',
+                                reason='Team Size must be a positive whole number.',
+                                suggestion='Enter the number of students per team (e.g. 4, 6).'
+                            )
+                            has_row_error = True
+                    else:
+                        record_error(
+                            row_num=row_num,
+                            program_name=name,
+                            field='team_size',
+                            field_label='Team Size',
+                            value='',
+                            issue='Missing Team Size',
+                            reason='Group programs require a Team Size value.',
+                            suggestion='Enter the number of performing members per group (e.g. 6).'
+                        )
+                        has_row_error = True
+
+                    program_data['max_participants'] = None
+                    program_data.setdefault('max_teams_per_school', 1)
+                else:
+                    # Individual programs require Max Participants
+                    max_part_col = column_mapping.get('max_participants')
+                    raw_max_part = row.get(max_part_col) if max_part_col else None
+                    if max_part_col and not pd.isna(raw_max_part):
+                        try:
+                            mp_val = int(float(raw_max_part))
+                            if mp_val <= 0:
+                                raise ValueError
+                            program_data['max_participants'] = mp_val
+                        except (TypeError, ValueError):
+                            record_error(
+                                row_num=row_num,
+                                program_name=name,
+                                field='max_participants',
+                                field_label='Max Participants',
+                                value=raw_max_part,
+                                issue='Invalid Max Participants',
+                                reason='Max Participants must be a positive whole number.',
+                                suggestion='Enter the maximum number of solo participants (e.g. 20).'
+                            )
+                            has_row_error = True
+                    else:
+                        record_error(
+                            row_num=row_num,
+                            program_name=name,
+                            field='max_participants',
+                            field_label='Max Participants',
+                            value='',
+                            issue='Missing Max Participants',
+                            reason='Individual programs require a Max Participants limit.',
+                            suggestion='Enter the maximum number of solo participants (e.g. 20).'
+                        )
+                        has_row_error = True
+
+                if has_row_error:
+                    continue
+
+                # 7. Duration Minutes
+                dur_col = column_mapping.get('duration_minutes_per_entry')
+                raw_dur = row.get(dur_col) if dur_col else None
+                if dur_col and not pd.isna(raw_dur):
+                    try:
+                        dur_val = int(float(raw_dur))
+                        if dur_val <= 0:
+                            raise ValueError
+                        program_data['duration_minutes_per_entry'] = dur_val
+                    except (TypeError, ValueError):
+                        record_error(
+                            row_num=row_num,
+                            program_name=name,
+                            field='duration',
+                            field_label='Duration (Minutes)',
+                            value=raw_dur,
+                            issue='Invalid Duration',
+                            reason='Duration must be a positive whole number of minutes.',
+                            suggestion='Enter estimated duration in minutes (e.g. 5, 10, 15).'
                         )
                         continue
-                    program_data.setdefault('max_teams_per_school', 1)
-                    program_data['max_participants'] = None
-                elif not program_data.get('max_participants'):
-                    results['errors'].append(
-                        f'Row {index + 2}: Individual programs require Max Participants.'
+                else:
+                    record_error(
+                        row_num=row_num,
+                        program_name=name,
+                        field='duration',
+                        field_label='Duration (Minutes)',
+                        value='',
+                        issue='Missing Duration',
+                        reason='Duration Minutes is required for scheduling.',
+                        suggestion='Enter estimated duration in minutes (e.g. 5, 10).'
                     )
                     continue
+
+                # 8. Optional Numeric Fields (Judges, Sub-teams, Capacity)
+                judges_col = column_mapping.get('num_judges')
+                raw_judges = row.get(judges_col) if judges_col else None
+                if judges_col and not pd.isna(raw_judges) and str(raw_judges).strip() != '':
+                    try:
+                        j_val = int(float(raw_judges))
+                        if j_val < 1 or j_val > 4:
+                            raise ValueError
+                        program_data['num_judges'] = j_val
+                    except (TypeError, ValueError):
+                        record_error(
+                            row_num=row_num,
+                            program_name=name,
+                            field='judges',
+                            field_label='Judges Count',
+                            value=raw_judges,
+                            issue='Invalid Judges Count',
+                            reason='Number of judges must be between 1 and 4.',
+                            suggestion='Enter a number between 1 and 4, or leave blank to use the event default.'
+                        )
+                        continue
+
                 results['valid_programs'].append(program_data)
+
             except Exception:
-                logger.exception('Program spreadsheet row processing failed', extra={'row': index + 2})
-                results['errors'].append(f'Row {index + 2}: This row could not be processed.')
+                logger.exception('Program spreadsheet row processing failed', extra={'row': row_num})
+                record_error(
+                    row_num=row_num,
+                    program_name=str(row.get(column_mapping.get('name', ''), '')),
+                    field='other',
+                    field_label='Row Data',
+                    value='',
+                    issue='Row Processing Error',
+                    reason='This row could not be parsed due to invalid data format.',
+                    suggestion='Check cell contents and copy values into a clean template row.'
+                )
+
         return results
     
     def _detect_program_columns(self, columns):
@@ -995,8 +1239,8 @@ class EventViewSet(viewsets.ModelViewSet):
             'duration_minutes_per_entry': [
                 r'duration.*minute', r'minutes.*entry', r'time.*entry', r'^duration$',
             ],
-            'program_type': [r'program.*type', r'type', r'program.*stage', r'stage'],
-            'num_judges': [r'num.*judge', r'judge.*count', r'^judges$', r'no.*of.*judges']
+            'program_type': [r'program.*type', r'^type$', r'program.*stage', r'^stage$'],
+            'num_judges': [r'num.*judge', r'judge.*count', r'judge', r'no.*of.*judges']
         }
         
         for field, field_patterns in patterns.items():
@@ -1012,54 +1256,212 @@ class EventViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['get'])
     def download_program_template(self, request, pk=None):
-        """Download Excel template for bulk program upload"""
+        """Download comprehensive Excel template for bulk program upload with dropdowns and examples."""
         try:
+            from openpyxl.worksheet.datavalidation import DataValidation
+            from accounts.models import StudentCategory
             event = self.get_object()
             
-            # Create workbook and worksheet
             wb = Workbook()
-            ws = wb.active
-            ws.title = "Programs Template"
             
-            # Add headers
-            ws.append([
+            # 1. Sheet 1: Programs (Data Entry Sheet)
+            ws_programs = wb.active
+            ws_programs.title = "Programs"
+            
+            headers = [
                 "Name", "Category", "Type", "Mode", "Max Participants",
                 "Team Size", "Max Sub-Teams", "Team Capacity", "Duration Minutes",
                 "Judges (Optional)"
-            ])
-            # Add example row
-            ws.append(["English Elocution", "hs", "stage", "Individual", 2, "", "", "", 5, ""])
-            ws.append(["Quiz", "general", "off_stage", "Group", "", 4, 2, 8, 10, 3])
+            ]
+            ws_programs.append(headers)
             
-            # Set column widths
-            for col in ws.columns:
-                max_length = 0
-                column = col[0].column_letter # Get the column name
-                for cell in col:
-                    try: # Necessary to avoid error on empty cells
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                adjusted_width = (max_length + 2)
-                ws.column_dimensions[column].width = adjusted_width
+            header_fill = PatternFill(start_color='4F46E5', end_color='4F46E5', fill_type='solid')
+            header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
+            for cell in ws_programs[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            ws_programs.row_dimensions[1].height = 26
+            ws_programs.freeze_panes = 'A2'
+            ws_programs.sheet_view.showGridLines = True
             
-            # Save to BytesIO
-            from io import BytesIO
+            # Fetch active categories and program types for reference and dropdowns
+            school_categories = list(
+                StudentCategory.objects.filter(school=event.school, is_active=True).order_by('name')
+            )
+            event_types = list(event.get_program_types())
+            
+            cat_options = [c.name for c in school_categories]
+            if 'General' not in cat_options:
+                cat_options.insert(0, 'General')
+            
+            type_options = [pt.name for pt in event_types]
+            if not type_options:
+                type_options = ['Stage Event', 'Off-Stage Event']
+                
+            # 2. Sheet 2: Setup (Data source for dropdowns)
+            ws_setup = wb.create_sheet('Setup')
+            ws_setup.append(["Categories", "Program Types", "Modes"])
+            for cell in ws_setup[1]:
+                cell.font = Font(bold=True)
+                
+            max_setup_rows = max(len(cat_options), len(type_options), 2)
+            for i in range(max_setup_rows):
+                cat_val = cat_options[i] if i < len(cat_options) else ""
+                type_val = type_options[i] if i < len(type_options) else ""
+                mode_val = ["Individual", "Group"][i] if i < 2 else ""
+                ws_setup.append([cat_val, type_val, mode_val])
+                
+            ws_setup.column_dimensions['A'].width = 24
+            ws_setup.column_dimensions['B'].width = 24
+            ws_setup.column_dimensions['C'].width = 18
+            ws_setup.sheet_view.showGridLines = True
+            
+            # Add Data Validation dropdowns to Programs sheet
+            # Category Dropdown (Column B)
+            cat_validation = DataValidation(
+                type='list',
+                formula1=f"'Setup'!$A$2:$A${len(cat_options) + 1}",
+                allow_blank=False,
+                error='Select a category from the dropdown list.',
+                errorTitle='Invalid Category',
+                showErrorMessage=True,
+                prompt='Select category (e.g. General, Junior, Senior).',
+                promptTitle='Category',
+                showInputMessage=True,
+            )
+            ws_programs.add_data_validation(cat_validation)
+            cat_validation.add('B2:B1001')
+            
+            # Type Dropdown (Column C)
+            type_validation = DataValidation(
+                type='list',
+                formula1=f"'Setup'!$B$2:$B${len(type_options) + 1}",
+                allow_blank=False,
+                error='Select a program type from the dropdown list.',
+                errorTitle='Invalid Program Type',
+                showErrorMessage=True,
+                prompt='Select event program type (e.g. Stage Event, Off-Stage Event).',
+                promptTitle='Program Type',
+                showInputMessage=True,
+            )
+            ws_programs.add_data_validation(type_validation)
+            type_validation.add('C2:C1001')
+            
+            # Mode Dropdown (Column D)
+            mode_validation = DataValidation(
+                type='list',
+                formula1='"Individual,Group"',
+                allow_blank=False,
+                error='Choose either Individual or Group.',
+                errorTitle='Invalid Mode',
+                showErrorMessage=True,
+                prompt='Choose Individual (solo) or Group (team).',
+                promptTitle='Competition Mode',
+                showInputMessage=True,
+            )
+            ws_programs.add_data_validation(mode_validation)
+            mode_validation.add('D2:D1001')
+            
+            # Column widths for Programs sheet
+            col_widths = {
+                'A': 28,  # Name
+                'B': 18,  # Category
+                'C': 20,  # Type
+                'D': 16,  # Mode
+                'E': 18,  # Max Participants
+                'F': 14,  # Team Size
+                'G': 16,  # Max Sub-Teams
+                'H': 16,  # Team Capacity
+                'I': 18,  # Duration Minutes
+                'J': 18,  # Judges (Optional)
+            }
+            for col_letter, width in col_widths.items():
+                ws_programs.column_dimensions[col_letter].width = width
+                
+            # 3. Sheet 3: Example (Clear demonstration rows)
+            ws_example = wb.create_sheet('Example')
+            ws_example.append(headers)
+            for cell in ws_example[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            ws_example.row_dimensions[1].height = 26
+            ws_example.freeze_panes = 'A2'
+            ws_example.sheet_view.showGridLines = True
+            
+            sample_cat1 = cat_options[1] if len(cat_options) > 1 else 'General'
+            sample_cat2 = cat_options[2] if len(cat_options) > 2 else sample_cat1
+            sample_type_stage = type_options[0] if type_options else 'Stage Event'
+            sample_type_offstage = type_options[1] if len(type_options) > 1 else (type_options[0] if type_options else 'Off-Stage Event')
+            
+            sample_rows = [
+                ["English Elocution", sample_cat1, sample_type_stage, "Individual", 20, "", "", "", 5, 3],
+                ["Classical Solo Song", sample_cat1, sample_type_stage, "Individual", 15, "", "", "", 7, 3],
+                ["Pencil Drawing", sample_cat2, sample_type_offstage, "Individual", 30, "", "", "", 60, 2],
+                ["Folk Dance Group", sample_cat2, sample_type_stage, "Group", "", 6, 1, 6, 10, 3],
+                ["Quiz Competition", "General", sample_type_offstage, "Group", "", 4, 2, 8, 45, 2],
+                ["Mime Group", sample_cat1, sample_type_stage, "Group", "", 6, 1, 6, 8, 3],
+            ]
+            for row in sample_rows:
+                ws_example.append(row)
+                
+            for col_letter, width in col_widths.items():
+                ws_example.column_dimensions[col_letter].width = width
+                
+            # 4. Sheet 4: Instructions
+            ws_instructions = wb.create_sheet('Instructions')
+            inst_headers = ["Field", "Required", "Applies To", "Guideline & Allowed Values"]
+            ws_instructions.append(inst_headers)
+            for cell in ws_instructions[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            ws_instructions.row_dimensions[1].height = 26
+            ws_instructions.freeze_panes = 'A2'
+            ws_instructions.sheet_view.showGridLines = True
+            
+            instructions_data = [
+                ("Name", "Yes", "Both", "Unique title of the program/event (e.g. English Elocution, Folk Dance)."),
+                ("Category", "Yes", "Both", "Select category from dropdown (e.g. Junior, Senior, or General for open events)."),
+                ("Type", "Yes", "Both", "Select program type from dropdown (e.g. Stage Event, Off-Stage Event)."),
+                ("Mode", "Yes", "Both", "Must be 'Individual' (solo performer) or 'Group' (team performers)."),
+                ("Max Participants", "Yes (Individual)", "Individual", "Maximum number of solo participants who can be registered (e.g. 20). Leave blank for Group."),
+                ("Team Size", "Yes (Group)", "Group", "Exact number of students in each performing team (e.g. 6). Leave blank for Individual."),
+                ("Max Sub-Teams", "No", "Group", "Number of teams permitted per school/house (defaults to 1)."),
+                ("Team Capacity", "No", "Group", "Maximum members per team entry (typically equals Team Size or slightly higher)."),
+                ("Duration Minutes", "Yes", "Both", "Estimated duration per performance in minutes (used for automated stage scheduling)."),
+                ("Judges", "No", "Both", "Optional number of judges to evaluate this program (between 1 and 4). Default is event setting."),
+            ]
+            for row in instructions_data:
+                ws_instructions.append(row)
+                
+            ws_instructions.column_dimensions['A'].width = 20
+            ws_instructions.column_dimensions['B'].width = 18
+            ws_instructions.column_dimensions['C'].width = 16
+            ws_instructions.column_dimensions['D'].width = 75
+            
+            # Tab Colors
+            ws_programs.sheet_properties.tabColor = '10B981'    # Emerald Green
+            ws_example.sheet_properties.tabColor = '4F46E5'     # Indigo
+            ws_setup.sheet_properties.tabColor = '6366F1'       # Blue
+            ws_instructions.sheet_properties.tabColor = 'F59E0B' # Amber
+            
             output = BytesIO()
             wb.save(output)
             output.seek(0)
             
             response = HttpResponse(
-                output,
+                output.read(),
                 content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
-            response['Content-Disposition'] = f'attachment; filename="bulk_upload_template_{event.title.replace(" ", "_")}.xlsx"'
+            clean_title = re.sub(r'[^a-zA-Z0-9_\-]', '_', event.title)
+            response['Content-Disposition'] = f'attachment; filename="program_bulk_upload_template_{clean_title}.xlsx"'
             return response
             
-        except Exception as e:
+        except Exception:
             logger.exception('Program template generation failed')
-            return Response({'error': 'Unable to generate the template.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'error': 'Unable to generate the program template.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @action(detail=True, methods=['get'])
     def search_by_chest_number(self, request, pk=None):
@@ -1088,6 +1490,20 @@ class EventViewSet(viewsets.ModelViewSet):
                 event=event,
                 chest_number=chest_number
             )
+
+            if getattr(request.user, 'role', '') == 'team_manager':
+                user_team_id = getattr(request.user, 'team_id', None)
+                if not user_team_id and hasattr(request.user, 'team') and request.user.team:
+                    user_team_id = getattr(request.user.team, 'id', None)
+                if not user_team_id and hasattr(request.user, 'managed_teams'):
+                    managed = request.user.managed_teams.filter(school_id=request.user.school_id).first()
+                    if managed:
+                        user_team_id = managed.id
+                if not user_team_id or chest_record.team_id != user_team_id:
+                    return Response(
+                        {'error': 'You do not have permission to view chest numbers of other teams.'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
             
             # Get student's program assignments for this event
             assignments = ProgramAssignment.objects.filter(
@@ -1174,6 +1590,8 @@ class EventViewSet(viewsets.ModelViewSet):
                     user_team_id = managed.id
             if user_team_id:
                 team_id = user_team_id
+            else:
+                return Response([])
 
         assigned_query = ProgramAssignment.objects.filter(
             program__event=event,
@@ -1241,9 +1659,11 @@ class EventViewSet(viewsets.ModelViewSet):
         # Prepare structure
         category_performers = {}
         all_participant_points = {}
-        program_types = [('stage', 'Stage'), ('off_stage', 'Off Stage')]
+        program_types = [(t.code, t.name) for t in event.get_program_types()]
         
         for cat_obj in active_cats:
+            if cat_obj.is_mixing or cat_obj.code.lower() in ('general', 'gen', 'gn', 'open') or cat_obj.name.lower() == 'general':
+                continue
             category = cat_obj.code
             category_name = cat_obj.name
             category_performers[category] = {}
@@ -1419,8 +1839,10 @@ class EventViewSet(viewsets.ModelViewSet):
 
                 final_team = team_obj or getattr(student_obj, 'team', None)
 
+                chest_num = self.get_chest_number_for_participant(student_obj, event)
                 scorers[sid] = {
                     'student_id': sid,
+                    'chest_number': chest_num,
                     'name': name_str,
                     'team_name': final_team.name if final_team else 'No Team',
                     'team_id': final_team.id if final_team else None,
@@ -1428,6 +1850,7 @@ class EventViewSet(viewsets.ModelViewSet):
                     'category_display': cat_display,
                     'offstage_points': 0,
                     'stage_points': 0,
+                    'points_by_type': {},
                     'total_points': 0,
                     'achievements': []
                 }
@@ -1436,9 +1859,13 @@ class EventViewSet(viewsets.ModelViewSet):
             p_type = getattr(res_obj.program, 'program_type', 'stage') or 'stage'
             p_type_norm = str(p_type).lower().replace(' ', '_').replace('-', '_')
 
+            if 'points_by_type' not in scorers[sid]:
+                scorers[sid]['points_by_type'] = {}
+            scorers[sid]['points_by_type'][p_type_norm] = scorers[sid]['points_by_type'].get(p_type_norm, 0) + pts
+
             if p_type_norm in ('off_stage', 'offstage'):
                 scorers[sid]['offstage_points'] += pts
-            else:
+            elif p_type_norm in ('stage', 'onstage', 'on_stage'):
                 scorers[sid]['stage_points'] += pts
 
             scorers[sid]['total_points'] += pts
@@ -1482,7 +1909,10 @@ class EventViewSet(viewsets.ModelViewSet):
     def get_chest_number_for_participant(self, participant, event):
         """Helper method to get chest number for a participant in an event"""
         try:
-            from events.models import ProgramAssignment
+            from events.models import ChestNumber, ProgramAssignment
+            chest = ChestNumber.objects.filter(student=participant, event=event).first()
+            if chest and chest.chest_number:
+                return chest.chest_number
             assignment = ProgramAssignment.objects.filter(
                 student=participant,
                 program__event=event
@@ -1636,6 +2066,8 @@ class TeamViewSet(viewsets.ModelViewSet):
             'credentials', 'regenerate_credentials', 'reset_numbering',
         ]:
             return [IsSchoolAdmin()]
+        elif self.action in ['list', 'retrieve', 'events']:
+            return [IsTeamManagerOrAdmin()]
         return [IsAdminOrEventManager()]
     
     def get_queryset(self):
@@ -1645,6 +2077,14 @@ class TeamViewSet(viewsets.ModelViewSet):
         # Base queryset based on user permissions
         if user.role in ['admin', 'event_manager']:
             queryset = Team.objects.filter(school_id=user.school_id).prefetch_related('members')
+        elif user.role == 'team_manager':
+            token_team_id = getattr(user, 'team_id', None)
+            if token_team_id:
+                queryset = Team.objects.filter(id=token_team_id, school_id=user.school_id).prefetch_related('members')
+            elif hasattr(user, 'managed_teams'):
+                queryset = user.managed_teams.filter(school_id=user.school_id).prefetch_related('members')
+            else:
+                queryset = Team.objects.filter(team_manager=user, school_id=user.school_id).prefetch_related('members')
         else:
             # Users can only see teams they're part of
             queryset = Team.objects.filter(
@@ -2240,7 +2680,50 @@ class EventAnnouncementViewSet(viewsets.ModelViewSet):
         event = serializer.validated_data['event']
         if event.school_id != self.request.user.school_id:
             raise ValidationError('This event does not belong to your school.')
-        serializer.save(created_by=self.request.user)
+class EventProgramTypeViewSet(viewsets.ModelViewSet):
+    serializer_class = EventProgramTypeSerializer
+    authentication_classes = [TeamManagerAuthentication, SchoolJWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'code']
+    ordering_fields = ['display_order', 'name', 'created_at']
+    ordering = ['display_order', 'id']
+    pagination_class = None
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            permission_classes = [IsTeamManagerOrAdmin]
+        else:
+            permission_classes = [IsAdminOrEventManager]
+        return [permission() for permission in permission_classes]
+
+    def get_queryset(self):
+        school_id = getattr(self.request.user, 'school_id', None)
+        event_id = self.kwargs.get('event_pk')
+        event = Event.objects.filter(pk=event_id, school_id=school_id).first()
+        if not event:
+            return EventProgramType.objects.none()
+        # Lazily provisions defaults ('stage', 'off_stage') if none exist
+        event.get_program_types()
+        return EventProgramType.objects.filter(event=event).order_by('display_order', 'id')
+
+    def perform_create(self, serializer):
+        school_id = getattr(self.request.user, 'school_id', None)
+        event = Event.objects.filter(
+            pk=self.kwargs.get('event_pk'), school_id=school_id
+        ).first()
+        if not event:
+            raise ValidationError({'event': 'Event not found.'})
+        serializer.save(event=event)
+
+    def perform_destroy(self, instance):
+        count = Program.objects.filter(event=instance.event, program_type=instance.code).count()
+        if count > 0:
+            raise ValidationError(
+                f"Cannot delete type '{instance.name}' because {count} program(s) are assigned to it. Reassign those programs first."
+            )
+        instance.delete()
+
 
 class EventStageViewSet(viewsets.ModelViewSet):
     serializer_class = EventStageSerializer
@@ -2525,9 +3008,17 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         program_id = self.kwargs.get('program_pk')
-        return ProgramAssignment.objects.filter(
+        qs = ProgramAssignment.objects.filter(
             program_id=program_id, program__event__school_id=self.request.user.school_id
         )
+        if getattr(self.request.user, 'role', '') == 'team_manager':
+            token_team_id = getattr(self.request.user, 'team_id', None)
+            if token_team_id:
+                return qs.filter(team_id=token_team_id)
+            elif hasattr(self.request.user, 'managed_teams'):
+                return qs.filter(team__in=self.request.user.managed_teams.filter(school_id=self.request.user.school_id))
+            return qs.filter(team__team_manager=self.request.user)
+        return qs
     
     def perform_create(self, serializer):
         program_id = self.kwargs.get('program_pk')
@@ -3604,8 +4095,15 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
                             value = mark_data[field]
                             if field == 'code_letter':
                                 value = str(value or '').strip().upper() if is_attending else ''
-                            if not is_attending and field.startswith('judge'):
-                                value = None
+                            elif field.startswith('judge'):
+                                if not is_attending or value is None or str(value).strip() == '':
+                                    value = None
+                                else:
+                                    from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+                                    try:
+                                        value = Decimal(str(value).strip()).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                                    except (InvalidOperation, TypeError, ValueError):
+                                        raise DjangoValidationError(f'Invalid numeric mark for {field}: {value}')
                             setattr(result, field, value)
 
                     if not is_attending:
@@ -4502,6 +5000,30 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
             team_manager=self.request.user,
             school_id=self.request.user.school_id,
         )
+
+    def _get_team_for_request(self, pk):
+        """Fetch team for pk while strictly enforcing school and team manager boundaries."""
+        school_id = getattr(self.request.user, 'school_id', None)
+        if not school_id:
+            raise exceptions.PermissionDenied("Active school context required.")
+
+        try:
+            team = Team.objects.get(id=pk, school_id=school_id)
+        except Team.DoesNotExist:
+            raise exceptions.NotFound("Team not found")
+
+        if getattr(self.request.user, 'role', '') == 'team_manager':
+            token_team_id = getattr(self.request.user, 'team_id', None)
+            if token_team_id:
+                if str(team.id) != str(token_team_id):
+                    raise exceptions.PermissionDenied("You do not have permission to access another team's data.")
+            elif hasattr(self.request.user, 'managed_teams'):
+                if not self.request.user.managed_teams.filter(id=team.id).exists():
+                    raise exceptions.PermissionDenied("You do not have permission to access another team's data.")
+            elif team.team_manager_id != getattr(self.request.user, 'id', None):
+                raise exceptions.PermissionDenied("You do not have permission to access another team's data.")
+
+        return team
     
     @action(detail=False, methods=['get'])
     def my_teams(self, request):
@@ -4546,7 +5068,7 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
     def students(self, request, pk=None):
         """Get students for a specific team"""
         try:
-            team = Team.objects.get(id=pk, school_id=request.user.school_id)
+            team = self._get_team_for_request(pk)
             
             students = team.members.filter(role='student')
             
@@ -4603,17 +5125,17 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
     def events(self, request, pk=None):
         """Get events for a specific team"""
         try:
-            Team.objects.get(id=pk, school_id=request.user.school_id)
+            team = self._get_team_for_request(pk)
             events = Event.objects.filter(school_id=request.user.school_id).order_by('-start_date')
             
             # Simplify the response - just return basic event info
             event_data = []
             for event in events:
                 assigned_programs = ProgramAssignment.objects.filter(
-                    team_id=pk, program__event=event
+                    team=team, program__event=event
                 ).values('program_id').distinct().count()
                 team_points = ProgramResult.objects.filter(
-                    team_id=pk,
+                    team=team,
                     program__event=event,
                     program__is_published=True,
                     entry_status='submitted',
@@ -4649,7 +5171,7 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
     def event_programs(self, request, pk=None, event_id=None):
         """Get programs for a specific event and team"""
         try:
-            team = Team.objects.get(id=pk, school_id=request.user.school_id)
+            team = self._get_team_for_request(pk)
             event = Event.objects.get(id=event_id, school_id=request.user.school_id)
 
             programs = Program.objects.filter(event=event, is_active=True).order_by('category', 'name')
@@ -4745,6 +5267,7 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                     'max_programs_per_student': event.max_programs_per_student,
                     'max_single_programs_per_student': event.max_single_programs_per_student,
                     'max_group_programs_per_student': event.max_group_programs_per_student,
+                    'category_participation_limits': event.category_participation_limits,
                     'registration_open': (
                         event.status in ('published', 'ongoing')
                         and (
@@ -4765,7 +5288,7 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
     def assign_student_to_program(self, request, pk=None, event_id=None, program_id=None):
         """Assign students to a program"""
         try:
-            team = Team.objects.get(id=pk, school_id=request.user.school_id)
+            team = self._get_team_for_request(pk)
             event = Event.objects.get(id=event_id, school_id=request.user.school_id)
             program = Program.objects.get(
                 id=program_id, event=event, event__school_id=request.user.school_id
@@ -4808,7 +5331,7 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
     def set_leader(self, request, pk=None, event_id=None, program_id=None):
         """Set the single representative/leader for one assigned sub-team."""
         try:
-            team = Team.objects.get(id=pk, school_id=request.user.school_id)
+            team = self._get_team_for_request(pk)
             event = Event.objects.get(id=event_id, school_id=request.user.school_id)
             program = Program.objects.get(
                 id=program_id, event=event, event__school_id=request.user.school_id,
@@ -4844,7 +5367,7 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
     ):
         """Remove an individual entry or the student's complete group sub-team."""
         try:
-            team = Team.objects.get(id=pk, school_id=request.user.school_id)
+            team = self._get_team_for_request(pk)
             assignment = ProgramAssignment.objects.select_related('program__event').get(
                 team=team,
                 student_id=student_id,
@@ -4867,11 +5390,15 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
     def remove_assignment_by_id(self, request, pk=None, assignment_id=None):
         """Remove a program assignment by assignment ID"""
         try:
-            team = Team.objects.get(id=pk, school_id=request.user.school_id)
+            team = self._get_team_for_request(pk)
             
             # Get the assignment
             try:
-                assignment = ProgramAssignment.objects.get(id=assignment_id, team=team)
+                assignment = ProgramAssignment.objects.get(
+                    id=assignment_id,
+                    team=team,
+                    program__event__school_id=request.user.school_id,
+                )
             except ProgramAssignment.DoesNotExist:
                 return Response({'error': 'Assignment not found'}, status=status.HTTP_404_NOT_FOUND)
             
@@ -4894,7 +5421,7 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
     def team_profile(self, request, pk=None):
         """Get team profile information"""
         try:
-            team = Team.objects.get(id=pk, school_id=request.user.school_id)
+            team = self._get_team_for_request(pk)
             
             # Get team statistics
             total_assignments = ProgramAssignment.objects.filter(team=team).count()
@@ -5010,7 +5537,8 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
         
         # Get all assignments for these teams
         assignments = ProgramAssignment.objects.filter(
-            team__in=managed_teams
+            team__in=managed_teams,
+            program__event__school_id=request.user.school_id,
         ).select_related('program', 'student', 'team', 'program__event')
         
         # Apply pagination
@@ -5076,12 +5604,23 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
             return Response({'error': 'Assignment ID is required'}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            assignment = ProgramAssignment.objects.get(id=assignment_id)
+            assignment = ProgramAssignment.objects.select_related('team', 'program__event').get(
+                id=assignment_id,
+                program__event__school_id=request.user.school_id,
+            )
         except ProgramAssignment.DoesNotExist:
             return Response({'error': 'Assignment not found'}, status=status.HTTP_404_NOT_FOUND)
         
         token_team_id = getattr(request.user, 'team_id', None)
-        if token_team_id and assignment.team_id != token_team_id:
+        if token_team_id:
+            if assignment.team_id != token_team_id:
+                return Response({'error': 'You do not have permission to remove this assignment'}, 
+                              status=status.HTTP_403_FORBIDDEN)
+        elif hasattr(request.user, 'managed_teams'):
+            if not request.user.managed_teams.filter(id=assignment.team_id).exists():
+                return Response({'error': 'You do not have permission to remove this assignment'}, 
+                              status=status.HTTP_403_FORBIDDEN)
+        elif assignment.team.team_manager_id != getattr(request.user, 'id', None):
             return Response({'error': 'You do not have permission to remove this assignment'}, 
                           status=status.HTTP_403_FORBIDDEN)
 
@@ -5190,11 +5729,18 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
         })
 
 @api_view(['GET'])
-@permission_classes([IsAdminOrEventManager])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 @throttle_classes([ExportRateThrottle])
 def generate_team_list_pdf(request, event_id, team_id):
     """Generate team list PDF organized by category and grade with participant details"""
     try:
+        # Enforce team manager restriction to own team
+        if getattr(request.user, 'role', None) == 'team_manager':
+            token_team_id = getattr(request.user, 'team_id', None)
+            if not token_team_id or str(token_team_id) != str(team_id):
+                return JsonResponse({'error': 'You can only export your own team roster.'}, status=403)
+
         event = Event.objects.get(id=event_id, school_id=request.user.school_id)
         team = Team.objects.get(id=team_id, school_id=request.user.school_id)
         
@@ -5292,17 +5838,24 @@ def generate_team_list_pdf(request, event_id, team_id):
                 fontName='Helvetica-Bold'
             )
             
-            # Process each category
-            for category in ['hs', 'hss', 'open']:
+            # Process each category dynamically
+            cat_order_priority = ['kiddies', 'lp', 'up', 'hs', 'hss', 'open']
+            all_categories = sorted(
+                category_grade_assignments.keys(),
+                key=lambda c: (cat_order_priority.index(c.lower()) if c.lower() in cat_order_priority else 99, c)
+            )
+            for category in all_categories:
                 if category not in category_grade_assignments:
                     continue
                 
                 # Category heading
                 category_display = {
+                    'lp': 'LOWER PRIMARY',
+                    'up': 'UPPER PRIMARY',
                     'hs': 'HIGH SCHOOL',
-                    'hss': 'HSS',
+                    'hss': 'HIGHER SECONDARY',
                     'open': 'GENERAL'
-                }.get(category, category.upper())
+                }.get(str(category).lower(), str(category).upper())
                 
                 story.append(Paragraph(category_display, category_style))
                 
@@ -6798,7 +7351,7 @@ def generate_green_room_sign_sheet(request, event_id):
         event = Event.objects.get(id=event_id, school_id=request.user.school_id)
         
         # Query params for filtering
-        only_with_participants = request.query_params.get('only_with_participants', '').lower() == 'true'
+        only_with_participants = request.query_params.get('only_with_participants', 'true').lower() == 'true'
         layout = request.query_params.get('layout', 'single') # 'single' or 'continuous'
         category = request.query_params.get('category', 'all')
         program_id = request.query_params.get('program_id', 'all')
@@ -7244,18 +7797,34 @@ def generate_valuation_sheet(request, event_id):
                 # Determine total rows (1 row per participant for individual, 1 row per sub-team/team for group)
                 if assignments.exists():
                     if program.is_team_based:
-                        sub_teams = set()
-                        for a in assignments:
-                            sub_teams.add((a.team_id, a.sub_team_number or 1))
+                        sub_teams = sorted(list({(a.team_id, a.sub_team_number or 1) for a in assignments}))
                         entry_count = len(sub_teams)
+                        result_code_map = {
+                            (r.team_id, r.sub_team_number or 1): r.code_letter
+                            for r in ProgramResult.objects.filter(program=program, is_team_result=True)
+                            if r.code_letter
+                        }
+                        for idx, st_key in enumerate(sub_teams):
+                            code = result_code_map.get(st_key) or (chr(65 + idx) if idx < 26 else f"{chr(65 + (idx // 26) - 1)}{chr(65 + (idx % 26))}")
+                            row_cells = [Paragraph(f"<b>{code}</b>", table_body_center)]
+                            row_cells.extend([""] * (judge_count + 1))
+                            table_data.append(row_cells)
                     else:
                         entry_count = assignments.count()
+                        result_code_map = {
+                            r.participant_id: r.code_letter
+                            for r in ProgramResult.objects.filter(program=program)
+                            if r.code_letter
+                        }
+                        for idx, a in enumerate(assignments):
+                            code = result_code_map.get(a.student_id) or (chr(65 + idx) if idx < 26 else f"{chr(65 + (idx // 26) - 1)}{chr(65 + (idx % 26))}")
+                            row_cells = [Paragraph(f"<b>{code}</b>", table_body_center)]
+                            row_cells.extend([""] * (judge_count + 1))
+                            table_data.append(row_cells)
                 else:
                     entry_count = 3  # Minimum 3 empty rows if no participants
-
-                # Add rows with free/blank Code Letter and scoring fields
-                for _ in range(entry_count):
-                    table_data.append([""] * (judge_count + 2))
+                    for _ in range(entry_count):
+                        table_data.append([""] * (judge_count + 2))
 
                 judge_width = (4.0 / judge_count) * inch
                 main_table = Table(
@@ -7300,7 +7869,8 @@ def generate_valuation_sheet(request, event_id):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminOrEventManager])
+@authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
+@permission_classes([IsTeamManagerOrAdmin])
 @throttle_classes([ExportRateThrottle])
 def generate_call_list(request, event_id):
     """
@@ -7325,11 +7895,138 @@ def generate_call_list(request, event_id):
         from datetime import datetime
 
         event = Event.objects.get(id=event_id, school_id=request.user.school_id)
-        mode = request.GET.get('mode', 'competition')
+        is_team_manager = getattr(request.user, 'role', None) == 'team_manager'
+        token_team_id = getattr(request.user, 'team_id', None)
+        if is_team_manager and not token_team_id:
+            # Fallback for accounts.User model where role='team_manager'
+            managed = getattr(request.user, 'managed_teams', None)
+            first_managed = managed.first() if managed and hasattr(managed, 'first') else None
+            if not first_managed:
+                first_managed = Team.objects.filter(team_manager=request.user, school_id=event.school_id).first()
+            if first_managed:
+                token_team_id = first_managed.id
+            else:
+                token_team_id = request.GET.get('team_id')
+
+        mode = request.GET.get('mode', 'team' if is_team_manager else 'competition')
+        if is_team_manager:
+            if mode == 'team':
+                team_id = str(token_team_id) if token_team_id else request.GET.get('team_id', 'all')
+            else:
+                req_team = request.GET.get('team_id')
+                if req_team and req_team != 'all':
+                    team_id = str(token_team_id) if token_team_id else req_team
+                else:
+                    team_id = 'all'
+        else:
+            team_id = request.GET.get('team_id', 'all')
+
         category = request.GET.get('category', 'all')
         program_id = request.GET.get('program_id', 'all')
-        team_id = request.GET.get('team_id', 'all')
         only_with_participants = request.GET.get('only_with_participants', 'true').lower() == 'true'
+
+        # JSON preview format support
+        if request.GET.get('format') == 'json':
+            items = []
+            if mode == 'team':
+                teams = Team.objects.filter(school_id=event.school_id)
+                if team_id != 'all':
+                    try:
+                        teams = teams.filter(id=int(team_id))
+                    except ValueError:
+                        teams = teams.none()
+
+                for team in teams:
+                    assignments = ProgramAssignment.objects.filter(
+                        Q(team=team) | Q(student__team_memberships=team),
+                        program__event=event
+                    ).distinct().select_related('program', 'student')
+                    if category != 'all':
+                        assignments = assignments.filter(program__category=category)
+                    if program_id != 'all':
+                        try:
+                            assignments = assignments.filter(program_id=int(program_id))
+                        except ValueError:
+                            assignments = assignments.none()
+
+                    categories_dict = {}
+                    for a in assignments:
+                        cat_name = a.program.get_category_display() if hasattr(a.program, 'get_category_display') and callable(getattr(a.program, 'get_category_display', None)) else str(a.program.category).capitalize()
+                        if cat_name not in categories_dict:
+                            categories_dict[cat_name] = {}
+                        prog_key = (a.program_id, getattr(a, 'sub_team_number', 1) or 1 if a.program.is_team_based else a.id)
+                        if prog_key not in categories_dict[cat_name]:
+                            categories_dict[cat_name][prog_key] = []
+                        categories_dict[cat_name][prog_key].append(a)
+
+                    for cat_name, cat_prog_map in categories_dict.items():
+                        for prog_key, a_list in cat_prog_map.items():
+                            first_a = a_list[0]
+                            program_obj = first_a.program
+                            entries = get_grouped_assignments_for_report(program_obj, ProgramAssignment.objects.filter(id__in=[x.id for x in a_list]), event)
+                            for entry in entries:
+                                items.append({
+                                    'team_id': team.id,
+                                    'team_name': team.name,
+                                    'category': cat_name,
+                                    'category_code': program_obj.category,
+                                    'program_id': program_obj.id,
+                                    'program_name': program_obj.name,
+                                    'program_code': getattr(program_obj, 'code', None) or str(program_obj.id),
+                                    'is_team_based': program_obj.is_team_based,
+                                    'team_size': getattr(program_obj, 'team_size', 1),
+                                    'chest_no': entry.get('chest_no') or 'N/A',
+                                    'participant_names': entry.get('participant_names') or '',
+                                    'gender': entry.get('gender') or '',
+                                })
+            else:
+                programs = Program.objects.filter(event=event).order_by('category', 'name')
+                if category != 'all':
+                    programs = programs.filter(category=category)
+                if program_id != 'all':
+                    try:
+                        programs = programs.filter(id=int(program_id))
+                    except ValueError:
+                        programs = programs.none()
+
+                for program in programs:
+                    assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team').order_by('chest_number', 'student__first_name')
+                    if team_id != 'all':
+                        try:
+                            t_id = int(team_id)
+                            assignments = assignments.filter(
+                                Q(team_id=t_id) | Q(student__team_memberships__id=t_id)
+                            ).distinct()
+                        except ValueError:
+                            assignments = assignments.none()
+
+                    if only_with_participants and not assignments.exists():
+                        continue
+
+                    entries = get_grouped_assignments_for_report(program, assignments, event)
+                    for entry in entries:
+                        items.append({
+                            'team_id': entry.get('team_id'),
+                            'team_name': entry.get('team_name'),
+                            'category': program.get_category_display() if hasattr(program, 'get_category_display') and callable(getattr(program, 'get_category_display', None)) else str(program.category).capitalize(),
+                            'category_code': program.category,
+                            'program_id': program.id,
+                            'program_name': program.name,
+                            'program_code': getattr(program, 'code', None) or str(program.id),
+                            'is_team_based': program.is_team_based,
+                            'team_size': getattr(program, 'team_size', 1),
+                            'chest_no': entry.get('chest_no') or 'N/A',
+                            'participant_names': entry.get('participant_names') or '',
+                            'gender': entry.get('gender') or '',
+                        })
+
+            return JsonResponse({
+                'event_id': event.id,
+                'event_title': event.title,
+                'mode': mode,
+                'total_entries': len(items),
+                'items': items
+            })
 
         buffer = BytesIO()
         doc = SimpleDocTemplate(
@@ -7478,7 +8175,10 @@ def generate_call_list(request, event_id):
                     teams = teams.none()
 
             for team in teams:
-                assignments = ProgramAssignment.objects.filter(team=team, program__event=event).select_related('program', 'student')
+                assignments = ProgramAssignment.objects.filter(
+                    Q(team=team) | Q(student__team_memberships=team),
+                    program__event=event
+                ).distinct().select_related('program', 'student')
                 if category != 'all':
                     assignments = assignments.filter(program__category=category)
                 if program_id != 'all':
@@ -7584,7 +8284,10 @@ def generate_call_list(request, event_id):
                 assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team').order_by('chest_number', 'student__first_name')
                 if team_id != 'all':
                     try:
-                        assignments = assignments.filter(team_id=int(team_id))
+                        t_id = int(team_id)
+                        assignments = assignments.filter(
+                            Q(team_id=t_id) | Q(student__team_memberships__id=t_id)
+                        ).distinct()
                     except ValueError:
                         assignments = assignments.none()
 
@@ -7679,15 +8382,63 @@ def generate_call_list(request, event_id):
                 elements.append(Spacer(1, 10))
 
         if not elements or page_counter == 0:
-            elements.append(Paragraph("No matching assignments found for Call List.", styles['Normal']))
+            top_header_table = Table(
+                [[Paragraph(escape(event.title), event_name_style), Paragraph(current_dt_str, datetime_style)]],
+                colWidths=[4.2 * inch, 3.0 * inch]
+            )
+            top_header_table.setStyle(TableStyle([
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('LEFTPADDING', (0,0), (-1,-1), 0),
+                ('RIGHTPADDING', (0,0), (-1,-1), 0),
+                ('TOPPADDING', (0,0), (-1,-1), 0),
+                ('BOTTOMPADDING', (0,0), (-1,-1), 0),
+                ('LINEBELOW', (0,0), (-1,-1), 0.7, colors.HexColor('#CBD5E1')),
+            ]))
+            elements.append(top_header_table)
+            elements.append(Spacer(1, 10))
+            elements.append(Paragraph("Official Call List", title_style))
+            team_obj = None
+            if team_id != 'all':
+                try:
+                    team_obj = Team.objects.filter(id=int(team_id)).first()
+                except (ValueError, TypeError):
+                    pass
+            if team_obj:
+                elements.append(Paragraph(escape(team_obj.name), subtitle_style))
+            elements.append(HRFlowable(width="100%", thickness=1.2, color=colors.HexColor('#4F46E5'), spaceBefore=4, spaceAfter=14))
+            
+            notice_style = ParagraphStyle(
+                'EmptyCallListNotice',
+                parent=styles['Normal'],
+                fontName='Helvetica',
+                fontSize=10,
+                alignment=TA_CENTER,
+                textColor=colors.HexColor('#475569'),
+                spaceBefore=12,
+                spaceAfter=12
+            )
+            elements.append(Spacer(1, 40))
+            elements.append(Paragraph("<b>No matching assignments found for Call List.</b>", notice_style))
+            elements.append(Paragraph("Please ensure students are assigned to programs and verified with chest numbers for this event.", notice_style))
 
         doc.build(elements)
         pdf_data = buffer.getvalue()
         buffer.close()
 
         response = HttpResponse(pdf_data, content_type='application/pdf')
-        filename = f"Call_List_{event.title.replace(' ', '_')}.pdf"
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        team_obj = None
+        if team_id != 'all':
+            try:
+                team_obj = Team.objects.filter(id=int(team_id)).first()
+            except (ValueError, TypeError):
+                pass
+
+        if team_obj:
+            team_slug = team_obj.name.replace(' ', '_')
+            filename = f"Call_List_{team_slug}_{event.title.replace(' ', '_')}.pdf"
+        else:
+            filename = f"Call_List_{event.title.replace(' ', '_')}.pdf"
+        response['Content-Disposition'] = f'inline; filename="{filename}"'
         return response
 
     except Event.DoesNotExist:
@@ -8064,6 +8815,7 @@ def get_public_participant_badge(request, event_id, student_identifier):
     chest_obj = None
     student = None
 
+    student_identifier = str(student_identifier).strip()
     # 1. Check by chest number in this event
     if student_identifier.isdigit():
         chest_obj = ChestNumber.objects.filter(
@@ -8117,17 +8869,37 @@ def get_public_participant_badge(request, event_id, student_identifier):
     total_points = 0
     stage_count = 0
     offstage_count = 0
+    event_program_types = {pt.code: pt for pt in event.get_program_types()}
+    type_counts = {}
 
     for pa in assignments:
         prog = pa.program
         if not prog:
             continue
 
-        is_stage = getattr(prog, 'program_type', 'off_stage') == 'stage'
+        p_type = getattr(prog, 'program_type', None) or ('stage' if prog.stage else 'off_stage')
+        p_type_norm = (p_type or 'stage').lower().replace(' ', '_').replace('-', '_')
+
+        pt_obj = event_program_types.get(p_type_norm) or event_program_types.get(p_type)
+        type_name = pt_obj.name if pt_obj else (p_type.replace('_', ' ').title() if p_type else 'Stage')
+        type_color = getattr(pt_obj, 'color', 'indigo') or 'indigo'
+        is_stage = pt_obj.is_stage_based if pt_obj else (p_type_norm in ('stage', 'onstage', 'on_stage'))
+
         if is_stage:
             stage_count += 1
         else:
             offstage_count += 1
+
+        type_key = getattr(pt_obj, 'code', p_type_norm)
+        if type_key not in type_counts:
+            type_counts[type_key] = {
+                'code': type_key,
+                'name': type_name,
+                'count': 0,
+                'color': type_color,
+                'is_stage_based': is_stage,
+            }
+        type_counts[type_key]['count'] += 1
 
         result = None
         if not prog.is_team_based:
@@ -8172,8 +8944,9 @@ def get_public_participant_badge(request, event_id, student_identifier):
             'id': prog.id,
             'name': prog.name,
             'category': prog.category,
-            'program_type': prog.program_type,
-            'type_label': 'Stage' if is_stage else 'Offstage',
+            'program_type': p_type,
+            'type_label': type_name,
+            'type_color': type_color,
             'is_stage': is_stage,
             'is_team_based': prog.is_team_based,
             'mode_label': 'Group' if prog.is_team_based else 'Individual',
@@ -8249,6 +9022,7 @@ def get_public_participant_badge(request, event_id, student_identifier):
             'total_programs': len(programs_list),
             'stage_count': stage_count,
             'offstage_count': offstage_count,
+            'type_counts': type_counts,
             'total_points': total_points,
         },
         'programs': programs_list,
@@ -8371,7 +9145,7 @@ def get_public_event_portal(request, event_id):
 
         student = res.participant
         chest_info = chest_map.get(student.id, {}) if student else {}
-        student_name = student.get_full_name() if student else (res.team.name if res.team else 'Participant')
+        student_name = getattr(student, 'name', None) or (student.get_full_name() if student else (res.team.name if res.team else 'Participant'))
         team_name = res.team.name if res.team else chest_info.get('team_name', '-')
         chest_number = chest_info.get('chest_number')
 
@@ -8405,6 +9179,7 @@ def get_public_event_portal(request, event_id):
     # 3. Team Standings (Points Table) from published results
     from events.models import Team, ProgramAssignment
     school_teams = Team.objects.filter(school=event.school) if event.school else Team.objects.none()
+    teams_in_event_ids = set(ProgramAssignment.objects.filter(program__event=event, team__isnull=False).values_list('team_id', flat=True))
     team_points_map = {}
     for team in school_teams:
         team_points_map[team.id] = {
@@ -8416,6 +9191,7 @@ def get_public_event_portal(request, event_id):
             'first_places': 0,
             'second_places': 0,
             'third_places': 0,
+            'program_results': [],
         }
 
     # Distinct programs assigned per team in this event
@@ -8427,7 +9203,7 @@ def get_public_event_portal(request, event_id):
         if t_id in team_points_map:
             team_points_map[t_id]['programs_count'] = item['count']
 
-    for res in ProgramResult.objects.filter(program__event=event, program__is_published=True, team__isnull=False):
+    for res in ProgramResult.objects.filter(program__event=event, program__is_published=True, team__isnull=False, entry_status='submitted').select_related('program', 'participant', 'team'):
         t_id = res.team_id
         if t_id not in team_points_map:
             team_points_map[t_id] = {
@@ -8439,8 +9215,10 @@ def get_public_event_portal(request, event_id):
                 'first_places': 0,
                 'second_places': 0,
                 'third_places': 0,
+                'program_results': [],
             }
-        team_points_map[t_id]['total_points'] += (res.points_earned or 0)
+        pts = res.points_earned or 0
+        team_points_map[t_id]['total_points'] += pts
         if res.position == 1:
             team_points_map[t_id]['programs_won'] += 1
             team_points_map[t_id]['first_places'] += 1
@@ -8449,9 +9227,20 @@ def get_public_event_portal(request, event_id):
         elif res.position == 3:
             team_points_map[t_id]['third_places'] += 1
 
+        if pts > 0 or res.position:
+            part_name = getattr(res.participant, 'name', None) or (res.participant.get_full_name() if res.participant else res.team.name)
+            team_points_map[t_id]['program_results'].append({
+                'program_id': res.program_id,
+                'program_name': res.program.name if res.program else 'Program',
+                'position': res.position,
+                'grade': res.grade or '',
+                'points_earned': pts,
+                'participant_name': part_name,
+            })
+
     team_standings = [
         item for item in sorted(team_points_map.values(), key=lambda x: (x['total_points'], x['first_places']), reverse=True)
-        if item.get('total_points', 0) > 0
+        if item.get('total_points', 0) > 0 or item['team_id'] in teams_in_event_ids
     ]
     for idx, item in enumerate(team_standings):
         item['rank'] = idx + 1
@@ -8467,11 +9256,31 @@ def get_public_event_portal(request, event_id):
                 'map_link': stg.map_link or '',
             })
 
+    total_stages = EventStage.objects.filter(event=event).count()
+    if total_stages == 0:
+        total_stages = programs_qs.exclude(stage__isnull=True).values('stage_id').distinct().count()
+
+    total_participants = ChestNumber.objects.filter(event=event).count()
+    if total_participants == 0:
+        total_participants = ProgramAssignment.objects.filter(program__event=event).values('student_id').distinct().count()
+    if total_participants == 0 and event.school:
+        from accounts.models import User as AccountUser
+        total_participants = AccountUser.objects.filter(school=event.school, role='student', is_active=True).count()
+
     stats = {
         'total_programs': programs_qs.count(),
         'total_teams': school_teams.count() if school_teams.exists() else len(team_standings),
         'published_results_count': len(published_program_ids),
+        'total_participants': total_participants,
+        'total_stages': total_stages,
     }
+
+    event_logo_url = None
+    if event.logo:
+        try:
+            event_logo_url = request.build_absolute_uri(event.logo.url)
+        except Exception:
+            event_logo_url = getattr(event.logo, 'url', None)
 
     return Response({
         'event': {
@@ -8485,12 +9294,18 @@ def get_public_event_portal(request, event_id):
             'is_schedule_published': event.is_schedule_published,
             'school_name': school_name,
             'school_logo': school_logo_url,
+            'logo': event_logo_url,
+            'event_logo': event_logo_url,
         },
         'stats': stats,
         'categories': categories,
         'programs': programs_data,
         'team_standings': team_standings,
         'stages': stages_data,
+        'program_types': [
+            {'code': pt.code, 'name': pt.name, 'is_stage_based': pt.is_stage_based, 'color': pt.color}
+            for pt in event.get_program_types()
+        ],
         'public_url': public_url,
         'qr_code_svg': qr_svg,
     })

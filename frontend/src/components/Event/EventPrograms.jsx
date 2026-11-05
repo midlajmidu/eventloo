@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { eventProgramsAPI, eventStagesAPI, eventsAPI, markEntryAPI, eventAssignmentsAPI } from '../../services/api';
+import React, { useState, useEffect, useMemo } from 'react';
+import { eventProgramsAPI, eventStagesAPI, eventProgramTypesAPI, eventsAPI, markEntryAPI, eventAssignmentsAPI } from '../../services/api';
 import { 
   Plus, 
   Edit, 
@@ -17,15 +17,26 @@ import {
   MoreVertical,
   X,
   Award,
-  Sparkles
+  Sparkles,
+  AlertCircle,
+  AlertTriangle,
+  CheckCircle2,
+  Download,
+  Copy,
+  Check,
+  FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
+  Layers,
+  HelpCircle
 } from 'lucide-react';
 import Pagination from '../common/Pagination';
 
 const DEFAULT_GRADE_RULES = [
-  { name: 'A+', min_mark: 90, max_mark: 100 },
-  { name: 'A', min_mark: 80, max_mark: 89.99 },
-  { name: 'B+', min_mark: 70, max_mark: 79.99 },
-  { name: 'B', min_mark: 60, max_mark: 69.99 },
+  { name: 'A+', min_mark: 90, max_mark: 100, bonus_points: 3 },
+  { name: 'A', min_mark: 80, max_mark: 89.99, bonus_points: 2 },
+  { name: 'B+', min_mark: 70, max_mark: 79.99, bonus_points: 1 },
+  { name: 'B', min_mark: 60, max_mark: 69.99, bonus_points: 0 },
 ];
 
 const toDateTimeLocal = (value) => {
@@ -38,6 +49,7 @@ const toDateTimeLocal = (value) => {
 const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = false }) => {
   const [programs, setPrograms] = useState([]);
   const [stages, setStages] = useState([]);
+  const [programTypes, setProgramTypes] = useState(event?.program_types || []);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProgram, setEditingProgram] = useState(null);
@@ -56,7 +68,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
   const [sortBy, setSortBy] = useState('start_time');
   
   // Add program type filter state
-  const [programTypeFilter, setProgramTypeFilter] = useState('all'); // 'all', 'stage', 'off_stage'
+  const [programTypeFilter, setProgramTypeFilter] = useState('all'); // 'all', or any dynamic type code
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -69,6 +81,53 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
     general: 0,
     total: 0
   });
+
+  const getProgramTypeObj = (typeCode) => {
+    return programTypes.find((pt) => pt.code === typeCode) || null;
+  };
+
+  const getProgramTypeLabel = (prog) => {
+    if (!prog) return 'Program';
+    if (prog.program_type_display) return prog.program_type_display;
+    const match = getProgramTypeObj(prog.program_type);
+    if (match) return match.name;
+    if (prog.program_type === 'stage') return 'Stage';
+    if (prog.program_type === 'off_stage') return 'Off-Stage';
+    return (prog.program_type || 'Stage').replace(/_/g, ' ');
+  };
+
+  const getProgramTypeBadgeStyle = (prog) => {
+    if (!prog) return { backgroundColor: '#EEF2FF', color: '#4338CA', borderColor: '#C7D2FE' };
+    const match = getProgramTypeObj(prog.program_type);
+    if (match?.color) {
+      return {
+        backgroundColor: `${match.color}15`,
+        color: match.color,
+        borderColor: `${match.color}40`,
+      };
+    }
+    if (prog.program_type === 'stage') {
+      return { backgroundColor: '#EEF2FF', color: '#4338CA', borderColor: '#C7D2FE' };
+    }
+    return { backgroundColor: '#F0FDF4', color: '#15803D', borderColor: '#BBF7D0' };
+  };
+
+  useEffect(() => {
+    const actualEventId = eventId || event?.id;
+    if (!actualEventId) return;
+    eventProgramTypesAPI.list(actualEventId)
+      .then((res) => {
+        const list = res.data?.results || res.data || [];
+        if (Array.isArray(list) && list.length > 0) {
+          setProgramTypes(list);
+        } else if (event?.program_types) {
+          setProgramTypes(event.program_types);
+        }
+      })
+      .catch(() => {
+        if (event?.program_types) setProgramTypes(event.program_types);
+      });
+  }, [eventId, event?.id, event?.program_types]);
   
   const [formData, setFormData] = useState({
     name: '',
@@ -563,8 +622,15 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                 className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="all">All Types</option>
-                <option value="stage">Stage</option>
-                <option value="off_stage">Off-Stage</option>
+                {programTypes.map(pt => (
+                  <option key={pt.code} value={pt.code}>{pt.name}</option>
+                ))}
+                {programTypes.length === 0 && (
+                  <>
+                    <option value="stage">Stage</option>
+                    <option value="off_stage">Off-Stage</option>
+                  </>
+                )}
               </select>
 
               {/* Status Filter */}
@@ -700,8 +766,11 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="space-y-1">
                           <div>
-                            <span className={`inline-flex px-2 py-0.5 text-[11px] font-semibold rounded-full border ${program.program_type === 'stage' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-green-50 text-green-700 border-green-200'}`}>
-                              {program.program_type === 'stage' ? 'Stage' : 'Off-Stage'}
+                            <span
+                              className="inline-flex px-2 py-0.5 text-[11px] font-semibold rounded-full border shadow-2xs"
+                              style={getProgramTypeBadgeStyle(program)}
+                            >
+                              {getProgramTypeLabel(program)}
                             </span>
                           </div>
                           <div className="text-xs text-gray-500 font-medium flex items-center">
@@ -871,7 +940,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                   </div>
                   <div>
                     <span className="text-gray-500 font-medium">Program Type</span>
-                    <p className="font-bold text-gray-900 mt-0.5">{selectedViewProgram.program_type === 'stage' ? 'Stage Program' : 'Off-Stage Program'}</p>
+                    <p className="font-bold text-gray-900 mt-0.5">{getProgramTypeLabel(selectedViewProgram)} Program</p>
                   </div>
                   <div>
                     <span className="text-gray-500 font-medium">Participant Format</span>
@@ -1042,8 +1111,15 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                       required
                       className="w-full px-3.5 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                     >
-                      <option value="stage">Stage</option>
-                      <option value="off_stage">Off-Stage</option>
+                      {programTypes.map(pt => (
+                        <option key={pt.code} value={pt.code}>{pt.name}</option>
+                      ))}
+                      {programTypes.length === 0 && (
+                        <>
+                          <option value="stage">Stage</option>
+                          <option value="off_stage">Off-Stage</option>
+                        </>
+                      )}
                     </select>
                   </div>
 
@@ -1318,9 +1394,9 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                   {event?.enable_grading_system && activeGradeRules.length > 0 && (
                     <div className="md:col-span-2 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
                       <div className="mb-3">
-                        <h3 className="text-xs font-bold text-gray-900">Grade Points</h3>
+                        <h3 className="text-xs font-bold text-gray-900">Grade Bonus Points</h3>
                         <p className="mt-1 text-[11px] text-gray-500">
-                          Optional absolute points for this program. Leave blank to use the event placement points. A value entered here replaces the placement points; it is not added as a bonus.
+                          Optional bonus point override for this program. Leave blank to use the event default bonus points. A value entered here is added on top of placement points.
                         </p>
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1343,8 +1419,8 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                                 },
                               })}
                               className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                              placeholder="Use placement points"
-                              aria-label={`Absolute points for grade ${rule.name}`}
+                              placeholder={`Default (+${rule.bonus_points ?? 0} pts)`}
+                              aria-label={`Bonus points for grade ${rule.name}`}
                             />
                           </label>
                         ))}
@@ -1395,6 +1471,8 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
           <ProgramBulkUploadModal
             event={event}
             eventId={eventId || event?.id}
+            categories={categories}
+            programTypes={programTypes}
             onClose={() => setShowProgramBulkUpload(false)}
             onSuccess={() => {
               fetchPrograms();
@@ -1407,12 +1485,117 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
   );
 };
 
-// Program Bulk Upload Modal Component
-const ProgramBulkUploadModal = ({ event, eventId, onClose, onSuccess }) => {
+// Program Bulk Upload Modal Component with Issue Resolution Center
+const normalizeProgramImportErrors = (errorData) => {
+  if (Array.isArray(errorData?.structured_errors) && errorData.structured_errors.length > 0) {
+    return errorData.structured_errors;
+  }
+
+  const rawList = Array.isArray(errorData?.details)
+    ? errorData.details
+    : Array.isArray(errorData?.errors)
+      ? errorData.errors
+      : [];
+
+  return rawList.map((errString, idx) => {
+    const str = String(errString || '');
+    const rowMatch = str.match(/Row\s+(\d+):/i);
+    const row = rowMatch ? parseInt(rowMatch[1], 10) : idx + 2;
+    const body = str.replace(/^Row\s+\d+:\s*/i, '');
+
+    let field = 'other';
+    let field_label = 'Spreadsheet Data';
+    let issue = 'Validation Error';
+    let suggestion = '';
+
+    if (/category/i.test(body)) {
+      field = 'category';
+      field_label = 'Category';
+      issue = 'Invalid Category';
+      suggestion = 'Check the Setup sheet for allowed categories.';
+    } else if (/program type|type/i.test(body)) {
+      field = 'type';
+      field_label = 'Program Type';
+      issue = 'Invalid Program Type';
+      suggestion = 'Select an allowed program type for this event.';
+    } else if (/mode/i.test(body)) {
+      field = 'mode';
+      field_label = 'Mode';
+      issue = 'Invalid Mode';
+      suggestion = 'Set mode to either Individual or Group.';
+    } else if (/team size/i.test(body)) {
+      field = 'team_size';
+      field_label = 'Team Size';
+      issue = 'Team Size Required';
+      suggestion = 'Enter the number of students per team (e.g. 4, 6).';
+    } else if (/max participants/i.test(body)) {
+      field = 'max_participants';
+      field_label = 'Max Participants';
+      issue = 'Max Participants Required';
+      suggestion = 'Enter the maximum number of solo participants (e.g. 20).';
+    } else if (/duration/i.test(body)) {
+      field = 'duration';
+      field_label = 'Duration';
+      issue = 'Invalid Duration';
+      suggestion = 'Enter duration in whole minutes (e.g. 5, 10).';
+    } else if (/duplicate|already exists/i.test(body)) {
+      field = 'duplicate';
+      field_label = 'Duplicate Program';
+      issue = 'Duplicate Program Title';
+      suggestion = 'Make each program title unique.';
+    }
+
+    return {
+      row,
+      program_name: '—',
+      field,
+      field_label,
+      value: '',
+      issue,
+      reason: body || str,
+      suggestion: suggestion || 'Check the Reference Template for correct format.'
+    };
+  });
+};
+
+const handleDownloadProgramIssuesCSV = (issues) => {
+  if (!issues || issues.length === 0) return;
+  const header = ['Row', 'Program Name', 'Field', 'Value in Spreadsheet', 'Issue', 'Reason', 'Suggestion'];
+  const rows = issues.map((i) => [
+    i.row,
+    `"${(i.program_name || '').replace(/"/g, '""')}"`,
+    `"${(i.field_label || i.field || '').replace(/"/g, '""')}"`,
+    `"${(i.value || '').replace(/"/g, '""')}"`,
+    `"${(i.issue || '').replace(/"/g, '""')}"`,
+    `"${(i.reason || '').replace(/"/g, '""')}"`,
+    `"${(i.suggestion || '').replace(/"/g, '""')}"`,
+  ]);
+  const csvContent = [header.join(','), ...rows.map((r) => r.join(','))].join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'program_bulk_upload_issues.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+};
+
+const ProgramBulkUploadModal = ({ event, eventId, categories = [], programTypes = [], onClose, onSuccess }) => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadResults, setUploadResults] = useState(null);
+  const [downloadingTemplate, setDownloadingTemplate] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+  const [uploadError, setUploadError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+
+  // Issue Resolution Center controls
+  const [issueFilter, setIssueFilter] = useState('all');
+  const [issueSearch, setIssueSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [copiedIssues, setCopiedIssues] = useState(false);
+  const pageSize = 10;
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -1428,10 +1611,10 @@ const ProgramBulkUploadModal = ({ event, eventId, onClose, onSuccess }) => {
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
     const files = e.dataTransfer.files;
     if (files && files[0]) {
       setFile(files[0]);
+      setUploadError(null);
     }
   };
 
@@ -1439,10 +1622,12 @@ const ProgramBulkUploadModal = ({ event, eventId, onClose, onSuccess }) => {
     const selectedFile = e.target.files[0];
     if (selectedFile) {
       setFile(selectedFile);
+      setUploadError(null);
     }
   };
 
   const downloadTemplate = async () => {
+    setDownloadingTemplate(true);
     try {
       const response = await eventsAPI.downloadProgramTemplate(eventId);
       const blob = new Blob([response.data], { 
@@ -1451,7 +1636,8 @@ const ProgramBulkUploadModal = ({ event, eventId, onClose, onSuccess }) => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${event.title}_programs_template.xlsx`;
+      const cleanTitle = (event?.title || 'event').replace(/[^a-zA-Z0-9_\-]/g, '_');
+      a.download = `program_bulk_upload_template_${cleanTitle}.xlsx`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -1459,198 +1645,782 @@ const ProgramBulkUploadModal = ({ event, eventId, onClose, onSuccess }) => {
     } catch (error) {
       console.error('Error downloading template:', error);
       alert('Error downloading template. Please try again.');
+    } finally {
+      setDownloadingTemplate(false);
     }
   };
 
-  const handleUpload = async () => {
-    if (!file) {
-      alert('Please select a file first');
-      return;
-    }
+  const uploadSpreadsheetFile = async (fileToUpload) => {
+    const target = fileToUpload || file;
+    if (!target) return;
 
     setUploading(true);
-    setUploadResults(null);
+    setUploadError(null);
+    setUploadResult(null);
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
+      formData.append('file', target);
 
       const response = await eventsAPI.bulkUploadPrograms(eventId, formData);
-      setUploadResults(response.data);
-      
-      if (response.data.success) {
-        setTimeout(() => {
-          onSuccess();
-        }, 3000);
+      setUploadResult(response.data);
+      if (onSuccess) {
+        onSuccess();
       }
     } catch (error) {
-      console.error('Error uploading file:', error);
-      setUploadResults({
-        success: false,
-        error: error.response?.data?.error || 'Upload failed',
-        details: error.response?.data?.details || [],
-        suggestions: error.response?.data?.suggestions || []
+      console.error('Error uploading programs:', error);
+      const errorData = error.response?.data;
+      const structured = normalizeProgramImportErrors(errorData);
+      setUploadError({
+        message: errorData?.message || errorData?.error || 'Validation failed for uploaded spreadsheet.',
+        total_rows: errorData?.total_rows ?? null,
+        valid_count: errorData?.valid_count ?? null,
+        error_count: errorData?.error_count ?? structured.length,
+        structured_errors: structured,
+        details: Array.isArray(errorData?.details) ? errorData.details : [],
+        suggestions: Array.isArray(errorData?.suggestions) ? errorData.suggestions : []
       });
+      setCurrentPage(1);
+      setIssueFilter('all');
+      setIssueSearch('');
     } finally {
       setUploading(false);
     }
   };
 
+  const handleUpload = (e) => {
+    if (e) e.preventDefault();
+    if (!file) return;
+    uploadSpreadsheetFile(file);
+  };
+
+  const resetForm = () => {
+    setFile(null);
+    setUploadResult(null);
+    setUploadError(null);
+    setIssueFilter('all');
+    setIssueSearch('');
+    setCurrentPage(1);
+  };
+
+  const handleCopyIssues = (issues) => {
+    if (!issues || issues.length === 0) return;
+    const text = [
+      `=== PROGRAM BULK UPLOAD ISSUES (${issues.length} detected) ===`,
+      ...issues.map((item, idx) => 
+        `#${idx + 1} [Row ${item.row}] ${item.program_name && item.program_name !== '—' ? `Program: "${item.program_name}" | ` : ''}${item.field_label} ("${item.value}"): ${item.reason}${item.suggestion ? ` -> Fix: ${item.suggestion}` : ''}`
+      )
+    ].join('\n');
+    navigator.clipboard.writeText(text);
+    setCopiedIssues(true);
+    setTimeout(() => setCopiedIssues(false), 2000);
+  };
+
+  const structuredErrors = uploadError?.structured_errors || [];
+
+  const counts = useMemo(() => {
+    const c = { all: 0, category: 0, type: 0, mode: 0, duplicate: 0, other: 0 };
+    if (!structuredErrors) return c;
+    c.all = structuredErrors.length;
+    structuredErrors.forEach((err) => {
+      if (err.field === 'category') c.category += 1;
+      else if (err.field === 'type') c.type += 1;
+      else if (err.field === 'mode' || err.field === 'team_size' || err.field === 'max_participants') c.mode += 1;
+      else if (err.field === 'duplicate') c.duplicate += 1;
+      else c.other += 1;
+    });
+    return c;
+  }, [structuredErrors]);
+
+  const filteredIssues = useMemo(() => {
+    if (!structuredErrors) return [];
+    return structuredErrors.filter((err) => {
+      if (issueFilter === 'category' && err.field !== 'category') return false;
+      if (issueFilter === 'type' && err.field !== 'type') return false;
+      if (issueFilter === 'mode' && !['mode', 'team_size', 'max_participants'].includes(err.field)) return false;
+      if (issueFilter === 'duplicate' && err.field !== 'duplicate') return false;
+      if (issueFilter === 'other' && ['category', 'type', 'mode', 'team_size', 'max_participants', 'duplicate'].includes(err.field)) return false;
+
+      if (issueSearch.trim()) {
+        const q = issueSearch.toLowerCase().trim();
+        const inRow = String(err.row).includes(q) || `row ${err.row}`.includes(q);
+        const inName = (err.program_name || '').toLowerCase().includes(q);
+        const inVal = (err.value || '').toLowerCase().includes(q);
+        const inReason = (err.reason || '').toLowerCase().includes(q);
+        const inIssue = (err.issue || '').toLowerCase().includes(q);
+        const inField = (err.field_label || '').toLowerCase().includes(q);
+        return inRow || inName || inVal || inReason || inIssue || inField;
+      }
+      return true;
+    });
+  }, [structuredErrors, issueFilter, issueSearch]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredIssues.length / pageSize));
+  const paginatedIssues = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredIssues.slice(start, start + pageSize);
+  }, [filteredIssues, currentPage, pageSize]);
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">Bulk Upload Programs</h2>
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 transition-all">
+      <div 
+        className={`w-full max-h-[92vh] flex flex-col rounded-2xl border border-slate-200 bg-white shadow-2xl transition-all duration-200 overflow-hidden ${
+          uploadError ? 'max-w-5xl' : uploadResult ? 'max-w-3xl' : 'max-w-2xl'
+        }`}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-white shrink-0">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-100">
+              Bulk Upload Programs
+            </span>
+            {uploadError && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                <AlertCircle className="h-3 w-3" />
+                {uploadError.error_count || structuredErrors.length} Issue{(uploadError.error_count || structuredErrors.length) > 1 ? 's' : ''} Found
+              </span>
+            )}
+            {uploadResult && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <CheckCircle2 className="h-3 w-3" />
+                Completed
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors"
+            aria-label="Close bulk upload modal"
           >
-            ×
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="space-y-4">
-          {/* Template Download */}
-          <div className="bg-indigo-50 p-4 rounded-lg">
-            <h3 className="font-medium text-indigo-800 mb-2">Step 1: Download Template</h3>
-            <p className="text-sm text-indigo-600 mb-3">
-              Download the Excel template with sample data and instructions for creating multiple programs. 
-              <strong>Note: General category programs should be created manually, not via bulk upload.</strong>
-            </p>
-            <button
-              onClick={downloadTemplate}
-              className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m0 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Download Template
-            </button>
-          </div>
+        {/* Modal Body */}
+        <div className="p-6 overflow-y-auto flex-1">
+          {uploadError ? (
+            /* =========================================================================
+               ISSUE RESOLUTION CENTER (Validation Issues Detected)
+               ========================================================================= */
+            <div className="space-y-5">
+              {/* Alert Banner */}
+              <div className="rounded-xl border border-rose-200 bg-gradient-to-r from-rose-50 via-rose-50/60 to-white p-5 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2.5 rounded-xl bg-rose-100 text-rose-600 shrink-0 mt-0.5">
+                      <AlertTriangle className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-bold text-rose-950">
+                        Spreadsheet Validation Blocked ({uploadError.error_count || structuredErrors.length} Issue{(uploadError.error_count || structuredErrors.length) > 1 ? 's' : ''})
+                      </h4>
+                      <p className="text-xs text-rose-800/90 mt-1 leading-relaxed">
+                        No programs were imported so your event schedule remains clean and uncorrupted. Every row with an issue has been pinpointed below with the exact row number and required fix.
+                      </p>
+                    </div>
+                  </div>
 
-          {/* File Upload */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="font-medium text-gray-800 mb-2">Step 2: Upload Your File</h3>
-            <div
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                dragActive 
-                  ? 'border-indigo-500 bg-indigo-50' 
-                  : 'border-gray-300 hover:border-gray-400'
-              }`}
-              onDragEnter={handleDrag}
-              onDragLeave={handleDrag}
-              onDragOver={handleDrag}
-              onDrop={handleDrop}
-            >
-              <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-              </svg>
-              <p className="text-gray-600 mb-2">
-                Drag and drop your Excel file here, or click to select
-              </p>
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleFileChange}
-                className="hidden"
-                id="program-file-upload"
-              />
-              <label
-                htmlFor="program-file-upload"
-                className="cursor-pointer bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors"
-              >
-                Select File
-              </label>
-              {file && (
-                <p className="text-sm text-green-600 mt-2">
-                  Selected: {file.name}
-                </p>
+                  {/* Quick Action Buttons */}
+                  <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => handleDownloadProgramIssuesCSV(structuredErrors)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-rose-200 text-rose-700 hover:bg-rose-50 shadow-xs transition-colors"
+                      title="Download errors as CSV to review side-by-side with Excel"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      <span>Download Issues CSV</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyIssues(structuredErrors)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shadow-xs transition-colors"
+                      title="Copy issue summary to clipboard"
+                    >
+                      {copiedIssues ? (
+                        <>
+                          <Check className="h-3.5 w-3.5 text-emerald-600" />
+                          <span className="text-emerald-700">Copied!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-3.5 w-3.5" />
+                          <span>Copy Issues</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Metrics Summary Strip */}
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-rose-200/70 pt-4 text-left">
+                  <div className="rounded-lg bg-white/80 p-3 border border-rose-100">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Rows Evaluated</div>
+                    <div className="text-xl font-bold text-slate-900 mt-0.5">
+                      {uploadError.total_rows || (structuredErrors.length + (uploadError.valid_count || 0))}
+                    </div>
+                    <div className="text-[11px] text-slate-400 mt-0.5">Total data rows in file</div>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-3 border border-emerald-200">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Valid Rows Ready</div>
+                    <div className="text-xl font-bold text-emerald-700 mt-0.5">
+                      {uploadError.valid_count ?? '—'}
+                    </div>
+                    <div className="text-[11px] text-emerald-600/80 mt-0.5">Will import once issues fixed</div>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-3 border border-rose-200">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-rose-700">Issues to Fix</div>
+                    <div className="text-xl font-bold text-rose-700 mt-0.5">
+                      {uploadError.error_count || structuredErrors.length}
+                    </div>
+                    <div className="text-[11px] text-rose-600/80 mt-0.5">Rows requiring attention</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter Tabs & Search Bar */}
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  {/* Category Filter Tabs */}
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 scrollbar-none text-xs">
+                    <button
+                      type="button"
+                      onClick={() => { setIssueFilter('all'); setCurrentPage(1); }}
+                      className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                        issueFilter === 'all'
+                          ? 'bg-slate-900 text-white shadow-xs'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      <span>All Issues</span>
+                      <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                        issueFilter === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-200 text-slate-700'
+                      }`}>{counts.all}</span>
+                    </button>
+
+                    {counts.category > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setIssueFilter('category'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                          issueFilter === 'category'
+                            ? 'bg-sky-600 text-white shadow-xs'
+                            : 'bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200'
+                        }`}
+                      >
+                        <Layers className="h-3 w-3" />
+                        <span>Category</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          issueFilter === 'category' ? 'bg-sky-800 text-white' : 'bg-sky-200 text-sky-800'
+                        }`}>{counts.category}</span>
+                      </button>
+                    )}
+
+                    {counts.type > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setIssueFilter('type'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                          issueFilter === 'type'
+                            ? 'bg-purple-600 text-white shadow-xs'
+                            : 'bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200'
+                        }`}
+                      >
+                        <MapPin className="h-3 w-3" />
+                        <span>Program Type</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          issueFilter === 'type' ? 'bg-purple-800 text-white' : 'bg-purple-200 text-purple-800'
+                        }`}>{counts.type}</span>
+                      </button>
+                    )}
+
+                    {counts.mode > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setIssueFilter('mode'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                          issueFilter === 'mode'
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200'
+                        }`}
+                      >
+                        <Users className="h-3 w-3" />
+                        <span>Mode / Limits</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          issueFilter === 'mode' ? 'bg-amber-800 text-white' : 'bg-amber-200 text-amber-800'
+                        }`}>{counts.mode}</span>
+                      </button>
+                    )}
+
+                    {counts.duplicate > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setIssueFilter('duplicate'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                          issueFilter === 'duplicate'
+                            ? 'bg-rose-600 text-white shadow-xs'
+                            : 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                        }`}
+                      >
+                        <Copy className="h-3 w-3" />
+                        <span>Duplicates</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          issueFilter === 'duplicate' ? 'bg-rose-800 text-white' : 'bg-rose-200 text-rose-800'
+                        }`}>{counts.duplicate}</span>
+                      </button>
+                    )}
+
+                    {counts.other > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => { setIssueFilter('other'); setCurrentPage(1); }}
+                        className={`px-3 py-1.5 rounded-lg font-semibold transition-colors shrink-0 flex items-center gap-1.5 ${
+                          issueFilter === 'other'
+                            ? 'bg-slate-700 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200'
+                        }`}
+                      >
+                        <span>Other</span>
+                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                          issueFilter === 'other' ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-800'
+                        }`}>{counts.other}</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Search Filter Input */}
+                  <div className="relative shrink-0 sm:w-64">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={issueSearch}
+                      onChange={(e) => { setIssueSearch(e.target.value); setCurrentPage(1); }}
+                      placeholder="Search issue by row, name..."
+                      className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-slate-200 bg-white placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                {/* Issues Table */}
+                <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[10px]">
+                          <th className="py-2.5 px-3 w-16 text-center">Row</th>
+                          <th className="py-2.5 px-3 w-40">Program Name</th>
+                          <th className="py-2.5 px-3 w-32">Field</th>
+                          <th className="py-2.5 px-3 w-36">Value in File</th>
+                          <th className="py-2.5 px-4">Reason & Actionable Fix</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {paginatedIssues.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-8 text-center text-slate-400">
+                              No issues match your active filter.
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedIssues.map((issue, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
+                              {/* Row Number */}
+                              <td className="py-2.5 px-3 text-center align-top">
+                                <span className="inline-flex items-center justify-center font-mono font-bold text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
+                                  #{issue.row}
+                                </span>
+                              </td>
+
+                              {/* Program Name */}
+                              <td className="py-2.5 px-3 align-top">
+                                <div className="font-semibold text-slate-900 truncate max-w-[150px]" title={issue.program_name}>
+                                  {issue.program_name || '—'}
+                                </div>
+                              </td>
+
+                              {/* Field */}
+                              <td className="py-2.5 px-3 align-top">
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                  {issue.field_label || issue.field}
+                                </span>
+                              </td>
+
+                              {/* Value Entered in Excel */}
+                              <td className="py-2.5 px-3 align-top">
+                                {issue.value !== undefined && issue.value !== null && String(issue.value).trim() !== '' ? (
+                                  <code 
+                                    className="font-mono text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200 block truncate max-w-[140px]" 
+                                    title={String(issue.value)}
+                                  >
+                                    "{issue.value}"
+                                  </code>
+                                ) : (
+                                  <span className="text-[11px] italic text-slate-400">
+                                    (empty cell)
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Reason & Fix */}
+                              <td className="py-2.5 px-4 align-top">
+                                <div className="font-semibold text-slate-900 text-xs">
+                                  {issue.issue || issue.reason}
+                                </div>
+                                {issue.reason && issue.issue && issue.reason !== issue.issue && (
+                                  <div className="text-[11px] text-slate-600 mt-0.5 leading-relaxed">
+                                    {issue.reason}
+                                  </div>
+                                )}
+                                {issue.suggestion && (
+                                  <div className="mt-1 inline-flex items-start gap-1 text-[11px] font-medium text-indigo-700 bg-indigo-50/80 px-2 py-1 rounded border border-indigo-100">
+                                    <span className="shrink-0">💡</span>
+                                    <span><strong>Fix:</strong> {issue.suggestion}</span>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Footer */}
+                  {filteredIssues.length > pageSize && (
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50/80 border-t border-slate-200 text-xs text-slate-600">
+                      <div>
+                        Showing <strong>{(currentPage - 1) * pageSize + 1}</strong> to{' '}
+                        <strong>{Math.min(currentPage * pageSize, filteredIssues.length)}</strong> of{' '}
+                        <strong>{filteredIssues.length}</strong> issues
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="px-2.5 py-1 rounded border border-slate-200 bg-white font-medium hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                        >
+                          <ChevronLeft className="h-3 w-3" />
+                          <span>Prev</span>
+                        </button>
+                        <span className="px-2 py-1 font-semibold text-slate-700">
+                          {currentPage} / {totalPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className="px-2.5 py-1 rounded border border-slate-200 bg-white font-medium hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+                        >
+                          <span>Next</span>
+                          <ChevronRight className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Suggestions strip */}
+              {uploadError.suggestions && uploadError.suggestions.length > 0 && (
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-3.5 text-xs text-indigo-900">
+                  <div className="font-bold flex items-center gap-1.5 mb-1 text-indigo-950">
+                    <Sparkles className="h-3.5 w-3.5 text-indigo-600" />
+                    <span>How to proceed:</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-0.5 text-indigo-800">
+                    {uploadError.suggestions.map((sug, i) => (
+                      <li key={i}>{sug}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={downloadTemplate}
+                  disabled={downloadingTemplate}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download Reference Template</span>
+                </button>
+
+                <div className="flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                  >
+                    Back to Upload
+                  </button>
+
+                  <label className="inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm cursor-pointer transition-colors">
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>Upload Corrected File</span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      className="hidden"
+                      onChange={(e) => {
+                        const selected = e.target.files[0];
+                        if (selected) {
+                          setFile(selected);
+                          setUploadError(null);
+                          uploadSpreadsheetFile(selected);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
-          </div>
-
-          {/* Upload Results */}
-          {uploadResults && (
-            <div className={`p-4 rounded-lg ${
-              uploadResults.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
-            }`}>
-              <h3 className={`font-medium mb-2 ${
-                uploadResults.success ? 'text-green-800' : 'text-red-800'
-              }`}>
-                Upload Results
-              </h3>
-              
-              {uploadResults.success ? (
-                <div className="text-green-700">
-                  <p className="mb-2">{uploadResults.message}</p>
-                  {uploadResults.summary && (
-                    <div className="text-sm">
-                      <p>Total Processed: {uploadResults.summary.total_processed}</p>
-                      <p>Successfully Created: {uploadResults.summary.successful_creations}</p>
-                      <p>Skipped: {uploadResults.summary.skipped_creations}</p>
-                    </div>
-                  )}
-                  {uploadResults.skipped && uploadResults.skipped.length > 0 && (
-                    <div className="mt-3">
-                      <p className="font-medium">Skipped Programs:</p>
-                      <ul className="text-sm mt-1">
-                        {uploadResults.skipped.map((item, index) => (
-                          <li key={index} className="text-orange-600">
-                            {item.name}: {item.reason}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+          ) : uploadResult ? (
+            /* =========================================================================
+               SUCCESS SCREEN (Programs Imported Successfully)
+               ========================================================================= */
+            <div className="space-y-5 py-2">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-5 text-center">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 mb-3 shadow-xs">
+                  <CheckCircle2 className="h-6 w-6" />
                 </div>
-              ) : (
-                <div className="text-red-700">
-                  <p className="mb-2">{uploadResults.error}</p>
-                  {uploadResults.details && uploadResults.details.length > 0 && (
-                    <div className="text-sm">
-                      <p className="font-medium">Details:</p>
-                      <ul className="mt-1">
-                        {uploadResults.details.map((detail, index) => (
-                          <li key={index}>• {detail}</li>
-                        ))}
-                      </ul>
+                <h4 className="text-lg font-bold text-emerald-950">Programs Imported Successfully!</h4>
+                <p className="mt-1 text-xs text-emerald-800">
+                  {uploadResult.message || `Successfully processed ${uploadResult.summary?.successful_creations || 0} programs.`}
+                </p>
+
+                {/* Stats Bar */}
+                <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2.5 border-t border-emerald-200/60 pt-4 text-left">
+                  <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
+                    <div className="text-[11px] font-semibold text-emerald-700">Total Evaluated</div>
+                    <div className="text-lg font-bold text-slate-900 mt-0.5">
+                      {uploadResult.summary?.total_processed || (uploadResult.programs?.length || 0)}
                     </div>
-                  )}
-                  {uploadResults.suggestions && uploadResults.suggestions.length > 0 && (
-                    <div className="text-sm mt-2">
-                      <p className="font-medium">Suggestions:</p>
-                      <ul className="mt-1">
-                        {uploadResults.suggestions.map((suggestion, index) => (
-                          <li key={index}>• {suggestion}</li>
-                        ))}
-                      </ul>
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-3 border border-emerald-100">
+                    <div className="text-[11px] font-semibold text-emerald-700">Successfully Created</div>
+                    <div className="text-lg font-bold text-emerald-700 mt-0.5">
+                      {uploadResult.summary?.successful_creations || (uploadResult.programs?.length || 0)}
                     </div>
-                  )}
+                  </div>
+                  <div className="rounded-lg bg-white/80 p-3 border border-emerald-100 col-span-2 sm:col-span-1">
+                    <div className="text-[11px] font-semibold text-slate-500">Skipped (Existing)</div>
+                    <div className="text-lg font-bold text-slate-700 mt-0.5">
+                      {uploadResult.summary?.skipped_creations || (uploadResult.skipped?.length || 0)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Created Programs Preview List */}
+              {uploadResult.programs && uploadResult.programs.length > 0 && (
+                <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-xs">
+                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 font-bold text-xs text-slate-800 flex items-center justify-between">
+                    <span>Imported Programs List</span>
+                    <span className="text-slate-500 font-normal">{uploadResult.programs.length} programs</span>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 text-xs">
+                    {uploadResult.programs.map((prog, i) => (
+                      <div key={i} className="px-4 py-2.5 flex items-center justify-between hover:bg-slate-50/60 transition-colors">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-slate-400 text-[11px]">#{i + 1}</span>
+                          <span className="font-semibold text-slate-900">{prog.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                            {prog.category || 'General'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                            {prog.is_team_based ? 'Group' : 'Individual'}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-100">
+                            {prog.program_type_name || prog.program_type || 'Event'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
+
+              {/* Skipped Programs if any */}
+              {uploadResult.skipped && uploadResult.skipped.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-900">
+                  <div className="font-bold mb-1 flex items-center gap-1 text-amber-950">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                    <span>Skipped Programs ({uploadResult.skipped.length}):</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-0.5 text-amber-800">
+                    {uploadResult.skipped.map((item, idx) => (
+                      <li key={idx}>
+                        <strong>{item.name}</strong>: {item.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Footer */}
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={resetForm}
+                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  Upload another file
+                </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg shadow-sm transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* =========================================================================
+               INITIAL UPLOAD SCREEN (Template Download & File Drag/Drop)
+               ========================================================================= */
+            <div className="space-y-5">
+              {/* Step 1: Download Template */}
+              <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/80 via-white to-indigo-50/40 p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-lg bg-indigo-100/80 text-indigo-700 shrink-0 mt-0.5">
+                      <FileSpreadsheet className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900">Step 1: Download Reference Excel Template</h4>
+                      <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                        Pre-configured with dropdowns for your categories and event program types. Includes a complete <strong>Example</strong> sheet with sample solo and group competitions!
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={downloadTemplate}
+                    disabled={downloadingTemplate}
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-indigo-700 disabled:opacity-50 shadow-sm"
+                  >
+                    {downloadingTemplate ? (
+                      <>
+                        <div className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-3.5 w-3.5" />
+                        Download Template
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Spreadsheet Column Reference */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5 text-xs">
+                <div className="font-semibold text-slate-800 mb-1.5 flex items-center justify-between">
+                  <span>Spreadsheet Columns & Field Rules</span>
+                  <span className="text-[11px] font-normal text-slate-500">Mode-specific rules apply</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                  <div className="p-2 rounded-lg bg-white border border-slate-200/80">
+                    <div className="font-bold text-indigo-600 flex items-center gap-1">
+                      <Check className="h-3 w-3" /> Core Required Columns
+                    </div>
+                    <p className="text-slate-600 mt-0.5">
+                      <strong>Name</strong>, <strong>Category</strong>, <strong>Type</strong>, <strong>Mode</strong> (Individual / Group), and <strong>Duration Minutes</strong>.
+                    </p>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white border border-slate-200/80">
+                    <div className="font-semibold text-slate-700">Mode-Specific Columns</div>
+                    <p className="text-slate-500 mt-0.5">
+                      Individual needs <strong>Max Participants</strong>. Group needs <strong>Team Size</strong>. (Max Sub-Teams and Judges are optional).
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-2 text-[11px] text-indigo-700 bg-indigo-50/60 rounded px-2.5 py-1.5 border border-indigo-100 flex items-center gap-1.5">
+                  <span>💡</span>
+                  <span>General category programs can be entered directly by selecting "General" in the Category column!</span>
+                </div>
+              </div>
+
+              {/* Step 2: Upload File */}
+              <form onSubmit={handleUpload} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
+                    Step 2: Select Spreadsheet or CSV File
+                  </label>
+                  
+                  <div 
+                    className={`relative border-2 border-dashed rounded-xl p-6 transition-colors bg-slate-50/40 text-center ${
+                      dragActive ? 'border-indigo-500 bg-indigo-50/60' : 'border-slate-300 hover:border-indigo-400'
+                    }`}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                  >
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                      onChange={handleFileChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      id="program-file-upload-dialog"
+                    />
+                    {file ? (
+                      <div className="flex items-center justify-center gap-3">
+                        <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600">
+                          <FileSpreadsheet className="h-6 w-6" />
+                        </div>
+                        <div className="text-left">
+                          <p className="text-sm font-semibold text-slate-900 truncate max-w-xs">{file.name}</p>
+                          <p className="text-xs text-slate-500">{(file.size / 1024).toFixed(1)} KB • Click or drag to change file</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <Upload className="mx-auto h-8 w-8 text-slate-400" />
+                        <p className="text-sm font-medium text-slate-700">Click or drag & drop to choose file</p>
+                        <p className="text-xs text-slate-400">Supported formats: Excel (.xlsx, .xls) and CSV (.csv)</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Form Action Buttons */}
+                <div className="flex justify-end items-center gap-3 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={uploading || !file}
+                    className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm transition-colors flex items-center gap-2"
+                  >
+                    {uploading ? (
+                      <>
+                        <div className="animate-spin w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full" />
+                        Processing spreadsheet...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-3.5 w-3.5" />
+                        Upload & Validate Programs
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
-
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleUpload}
-              disabled={!file || uploading}
-              className={`px-4 py-2 rounded-lg text-white transition-colors ${
-                !file || uploading
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-indigo-600 hover:bg-indigo-700'
-              }`}
-            >
-              {uploading ? 'Uploading...' : 'Upload Programs'}
-            </button>
-          </div>
         </div>
       </div>
     </div>

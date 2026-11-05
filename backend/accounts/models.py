@@ -124,6 +124,22 @@ class User(AbstractUser):
         """Chest numbers are event-specific and generated only when assigned to a program."""
         return None
 
+    def save(self, *args, **kwargs):
+        # Keep name and first_name/last_name in sync bidirectionally
+        update_fields = kwargs.get('update_fields')
+        if self.name:
+            stripped = self.name.strip()
+            parts = stripped.split(None, 1)
+            self.first_name = parts[0]
+            self.last_name = parts[1] if len(parts) > 1 else ''
+            if update_fields is not None:
+                kwargs['update_fields'] = set(update_fields) | {'name', 'first_name', 'last_name'}
+        elif self.first_name or self.last_name:
+            self.name = f"{self.first_name} {self.last_name}".strip()
+            if update_fields is not None:
+                kwargs['update_fields'] = set(update_fields) | {'name', 'first_name', 'last_name'}
+        super().save(*args, **kwargs)
+
     
     class Meta:
         db_table = 'auth_user'
@@ -264,4 +280,28 @@ class StudentClass(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.category.name if self.category else 'No Category'})"
+
+
+class PasswordResetOTP(models.Model):
+    PURPOSE_CHOICES = [
+        ('forgot_password', 'Forgot Password'),
+        ('settings_change', 'Settings Change'),
+    ]
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_otps')
+    otp_code = models.CharField(max_length=6)
+    purpose = models.CharField(max_length=20, choices=PURPOSE_CHOICES, default='forgot_password')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    is_used = models.BooleanField(default=False)
+    attempts = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'purpose', 'is_used', 'expires_at']),
+        ]
+
+    def is_valid(self):
+        from django.utils import timezone
+        return not self.is_used and self.expires_at > timezone.now() and self.attempts < 5
  

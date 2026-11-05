@@ -2,7 +2,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from datetime import timedelta
-from .models import Event, EventStage, Team, IndividualParticipation, EventAnnouncement, PointsRecord, TeamProfile, Program, ProgramAssignment, ProgramResult, ChestNumber
+from .models import Event, EventStage, EventProgramType, Team, IndividualParticipation, EventAnnouncement, PointsRecord, TeamProfile, Program, ProgramAssignment, ProgramResult, ChestNumber
 
 User = get_user_model()
 
@@ -21,6 +21,22 @@ class EventListSerializer(serializers.ModelSerializer):
     current_teams = serializers.ReadOnlyField()
     is_registration_open = serializers.ReadOnlyField()
     created_by = UserBasicSerializer(read_only=True)
+    logo = serializers.SerializerMethodField()
+    event_logo = serializers.SerializerMethodField()
+
+    def get_logo(self, obj):
+        if not obj.logo:
+            return None
+        request = self.context.get('request')
+        if request:
+            try:
+                return request.build_absolute_uri(obj.logo.url)
+            except Exception:
+                pass
+        return getattr(obj.logo, 'url', None)
+
+    def get_event_logo(self, obj):
+        return self.get_logo(obj)
     
     class Meta:
         model = Event
@@ -30,7 +46,7 @@ class EventListSerializer(serializers.ModelSerializer):
             'venue', 'max_participants', 'is_team_based',
             'current_participants', 'current_teams',
             'is_registration_open', 'created_by', 'created_at',
-            'image', 'registration_deadline', 'is_schedule_published'
+            'image', 'logo', 'event_logo', 'registration_deadline', 'is_schedule_published'
         ]
     
     def to_representation(self, instance):
@@ -64,6 +80,8 @@ class EventListSerializer(serializers.ModelSerializer):
                 },
                 'created_at': instance.created_at.isoformat() if instance.created_at else None,
                 'image': instance.image or '',
+                'logo': self.get_logo(instance),
+                'event_logo': self.get_logo(instance),
                 'registration_deadline': instance.registration_deadline.isoformat() if instance.registration_deadline else None,
                 'serialization_error': 'Some optional event fields could not be rendered.'
             }
@@ -76,6 +94,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
     created_by = UserBasicSerializer(read_only=True)
     school_name = serializers.SerializerMethodField()
     school_logo = serializers.SerializerMethodField()
+    logo = serializers.SerializerMethodField()
+    event_logo = serializers.SerializerMethodField()
 
     def get_school_name(self, obj):
         if not obj.school:
@@ -113,6 +133,41 @@ class EventDetailSerializer(serializers.ModelSerializer):
                     pass
             return getattr(obj.school.logo, 'url', None)
         return None
+
+    def get_logo(self, obj):
+        if not obj.logo:
+            return None
+        request = self.context.get('request')
+        if request:
+            try:
+                return request.build_absolute_uri(obj.logo.url)
+            except Exception:
+                pass
+        return getattr(obj.logo, 'url', None)
+
+    def get_event_logo(self, obj):
+        return self.get_logo(obj)
+
+    program_types = serializers.SerializerMethodField()
+
+    def get_program_types(self, obj):
+        try:
+            types = obj.get_program_types()
+            return [
+                {
+                    'id': t.id,
+                    'code': t.code,
+                    'name': t.name,
+                    'description': t.description,
+                    'is_stage_based': t.is_stage_based,
+                    'color': t.color,
+                    'display_order': t.display_order,
+                    'program_count': getattr(t, 'programs_count', t.programs.count()) if hasattr(t, 'programs') else 0,
+                }
+                for t in types
+            ]
+        except Exception:
+            return []
     
     class Meta:
         model = Event
@@ -123,7 +178,8 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'max_teams', 'is_team_based', 'team_size_min', 'team_size_max',
             'winner_points', 'runner_up_points', 'participation_points',
             'num_judges', 'max_mark_per_judge', 'converted_total_mark',
-            'max_single_programs_per_student', 'max_group_programs_per_student',
+            'max_programs_per_student', 'max_single_programs_per_student', 'max_group_programs_per_student',
+            'category_participation_limits', 'program_types',
             'enable_grading_system', 'grading_rules',
             'std_ind_first', 'std_ind_second', 'std_ind_third',
             'std_group_first', 'std_group_second', 'std_group_third',
@@ -131,13 +187,14 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'mix_group_first', 'mix_group_second', 'mix_group_third',
             'count_general_individual_points_for_students',
             'is_schedule_published',
-            'school_name', 'school_logo',
+            'school_name', 'school_logo', 'logo', 'event_logo',
             'current_participants', 'current_teams', 'is_registration_open',
             'created_by', 'created_at', 'updated_at', 'image'
         ]
 
 class EventCreateUpdateSerializer(serializers.ModelSerializer):
     """Serializer for creating and updating events"""
+    logo = serializers.ImageField(required=False, allow_null=True)
     
     class Meta:
         model = Event
@@ -148,7 +205,8 @@ class EventCreateUpdateSerializer(serializers.ModelSerializer):
             'max_teams', 'is_team_based', 'team_size_min', 'team_size_max',
             'winner_points', 'runner_up_points', 'participation_points',
             'num_judges', 'max_mark_per_judge', 'converted_total_mark',
-            'max_single_programs_per_student', 'max_group_programs_per_student',
+            'max_programs_per_student', 'max_single_programs_per_student', 'max_group_programs_per_student',
+            'category_participation_limits',
             'enable_grading_system', 'grading_rules',
             'std_ind_first', 'std_ind_second', 'std_ind_third',
             'std_group_first', 'std_group_second', 'std_group_third',
@@ -156,8 +214,18 @@ class EventCreateUpdateSerializer(serializers.ModelSerializer):
             'mix_group_first', 'mix_group_second', 'mix_group_third',
             'count_general_individual_points_for_students',
             'is_schedule_published',
-            'image'
+            'image', 'logo'
         ]
+
+    def to_internal_value(self, data):
+        # Allow updating other event fields without re-uploading file if logo is a string or empty
+        if hasattr(data, 'copy'):
+            data = data.copy()
+        if 'logo' in data:
+            val = data['logo']
+            if isinstance(val, str) and (val.startswith('http') or val.startswith('/media') or not val.strip()):
+                data.pop('logo')
+        return super().to_internal_value(data)
     
     def validate(self, data):
         """Custom validation for event data"""
@@ -185,45 +253,60 @@ class EventCreateUpdateSerializer(serializers.ModelSerializer):
             if not data.get('team_size_max'):
                 data['team_size_max'] = 50  # Default high value
 
-        rules = data.get('grading_rules', getattr(self.instance, 'grading_rules', [])) or []
-        normalized_ranges = []
-        names = set()
-        for index, rule in enumerate(rules, 1):
-            if not isinstance(rule, dict):
-                raise serializers.ValidationError({'grading_rules': f'Rule {index} must be an object.'})
-            name = str(rule.get('name', '')).strip()
-            if not name or name.lower() in names:
-                raise serializers.ValidationError({'grading_rules': 'Grade names must be present and unique.'})
-            names.add(name.lower())
-            try:
-                minimum = float(rule.get('min_mark'))
-                maximum = float(rule.get('max_mark'))
-            except (TypeError, ValueError):
-                raise serializers.ValidationError({'grading_rules': f'Rule {index} contains invalid numbers.'})
-            if minimum < 0 or maximum > 100 or minimum > maximum:
-                raise serializers.ValidationError({
-                    'grading_rules': f'Grade {name} must stay between 0 and 100%, with minimum not above maximum.'
-                })
-            for existing_min, existing_max, existing_name in normalized_ranges:
-                if minimum <= existing_max and maximum >= existing_min:
+        if 'grading_rules' in data or not self.instance:
+            rules = data.get('grading_rules', getattr(self.instance, 'grading_rules', [])) or []
+            names = set()
+            normalized_ranges = []
+            converted_target = float(data.get(
+                'converted_total_mark',
+                getattr(self.instance, 'converted_total_mark', 100) if self.instance else 100
+            ) or 100)
+            allowed_max = max(100.0, converted_target)
+            for index, rule in enumerate(rules, 1):
+                if not isinstance(rule, dict):
+                    raise serializers.ValidationError({'grading_rules': f'Rule {index} must be an object.'})
+                name = str(rule.get('name', '')).strip()
+                if not name or name.lower() in names:
+                    raise serializers.ValidationError({'grading_rules': 'Grade names must be present and unique.'})
+                names.add(name.lower())
+                try:
+                    minimum = float(rule.get('min_mark'))
+                    maximum = float(rule.get('max_mark'))
+                except (TypeError, ValueError):
+                    raise serializers.ValidationError({'grading_rules': f'Rule {index} contains invalid numbers.'})
+                if minimum < 0 or maximum > allowed_max or minimum > maximum:
                     raise serializers.ValidationError({
-                        'grading_rules': f'Grade ranges {existing_name} and {name} overlap.'
+                        'grading_rules': f'Grade {name} must stay between 0 and {allowed_max:g}, with minimum not above maximum.'
                     })
-            normalized_ranges.append((minimum, maximum, name))
+                bonus_raw = rule.get('bonus_points', rule.get('points', 0))
+                try:
+                    bonus_pts = int(bonus_raw if bonus_raw is not None and bonus_raw != '' else 0)
+                    if bonus_pts < 0:
+                        raise ValueError
+                except (TypeError, ValueError):
+                    raise serializers.ValidationError({
+                        'grading_rules': f'Bonus points for grade {name} must be a non-negative whole number.'
+                    })
+                for existing_min, existing_max, existing_name in normalized_ranges:
+                    if minimum <= existing_max and maximum >= existing_min:
+                        raise serializers.ValidationError({
+                            'grading_rules': f'Grade ranges {existing_name} and {name} overlap.'
+                        })
+                normalized_ranges.append((minimum, maximum, name))
 
-        # Persist only the three supported event-level fields. This also
-        # removes legacy extra_points keys without treating them as awards.
-        if 'grading_rules' in data:
-            data['grading_rules'] = [
-                {
-                    'name': str(rule['name']).strip(),
-                    'min_mark': float(rule['min_mark']),
-                    'max_mark': float(rule['max_mark']),
-                }
-                for rule in rules
-            ]
+            if 'grading_rules' in data:
+                data['grading_rules'] = [
+                    {
+                        'name': str(rule['name']).strip(),
+                        'min_mark': float(rule['min_mark']),
+                        'max_mark': float(rule['max_mark']),
+                        'bonus_points': max(0, int(rule.get('bonus_points', rule.get('points', 0)) or 0)),
+                    }
+                    for rule in rules
+                ]
 
         for field in (
+            'max_programs_per_student',
             'max_single_programs_per_student',
             'max_group_programs_per_student',
         ):
@@ -231,6 +314,42 @@ class EventCreateUpdateSerializer(serializers.ModelSerializer):
             if value is not None and int(value) < 0:
                 raise serializers.ValidationError({field: 'Use 0 for unlimited or a positive limit.'})
         
+        if 'category_participation_limits' in data:
+            cat_limits = data['category_participation_limits']
+            if not isinstance(cat_limits, dict):
+                raise serializers.ValidationError({'category_participation_limits': 'Must be an object mapping category codes to limits.'})
+            sanitized = {}
+            for cat_code, limits in cat_limits.items():
+                if isinstance(limits, dict):
+                    raw_type_limits = limits.get('type_limits')
+                    sanitized_type_limits = {}
+                    if isinstance(raw_type_limits, dict):
+                        for t_key, t_val in raw_type_limits.items():
+                            sanitized_type_limits[str(t_key)] = max(0, int(t_val or 0))
+
+                    # Sync legacy max_onstage / max_offstage if type_limits present
+                    on_val = sanitized_type_limits.get('stage')
+                    if on_val is None:
+                        on_val = max(0, int(limits.get('max_onstage') or 0))
+                    else:
+                        sanitized_type_limits['stage'] = on_val
+
+                    off_val = sanitized_type_limits.get('off_stage')
+                    if off_val is None:
+                        off_val = max(0, int(limits.get('max_offstage') or 0))
+                    else:
+                        sanitized_type_limits['off_stage'] = off_val
+
+                    sanitized[str(cat_code)] = {
+                        'max_total': max(0, int(limits.get('max_total') or 0)),
+                        'max_onstage': on_val,
+                        'max_offstage': off_val,
+                        'type_limits': sanitized_type_limits,
+                        'max_single': max(0, int(limits.get('max_single') or 0)),
+                        'max_group': max(0, int(limits.get('max_group') or 0)),
+                    }
+            data['category_participation_limits'] = sanitized
+
         return data
 
 class TeamSerializer(serializers.ModelSerializer):
@@ -507,6 +626,47 @@ class TeamProfileSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'win_rate', 'created_at', 'updated_at']
 
+class EventProgramTypeSerializer(serializers.ModelSerializer):
+    program_count = serializers.IntegerField(source='programs.count', read_only=True)
+
+    class Meta:
+        model = EventProgramType
+        fields = [
+            'id', 'code', 'name', 'description', 'is_stage_based',
+            'color', 'display_order', 'program_count', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'program_count', 'created_at', 'updated_at']
+
+    def validate_code(self, value):
+        from django.utils.text import slugify
+        cleaned = slugify(value).replace('-', '_')
+        if not cleaned:
+            raise serializers.ValidationError("Valid type code is required.")
+        return cleaned
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        request = self.context.get('request')
+        view = self.context.get('view')
+        event_id = view.kwargs.get('event_pk') if view else None
+        if not event_id and self.instance:
+            event_id = self.instance.event_id
+        if not request or not Event.objects.filter(
+            pk=event_id, school_id=request.user.school_id
+        ).exists():
+            raise serializers.ValidationError({'event': 'Event not found.'})
+
+        code = attrs.get('code', getattr(self.instance, 'code', None))
+        duplicate = EventProgramType.objects.filter(event_id=event_id, code=code)
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError({
+                'code': 'A program type with this code already exists for this event.'
+            })
+        return attrs
+
+
 class EventStageSerializer(serializers.ModelSerializer):
     display_name = serializers.CharField(read_only=True)
     program_count = serializers.IntegerField(source='programs.count', read_only=True)
@@ -549,6 +709,7 @@ class ProgramSerializer(serializers.ModelSerializer):
     category_display = serializers.SerializerMethodField()
     event = serializers.SerializerMethodField()
     program_type = serializers.CharField(required=True)
+    program_type_display = serializers.CharField(read_only=True)
     total_max_participants = serializers.SerializerMethodField()
     limit_description = serializers.SerializerMethodField()
     total_teams = serializers.SerializerMethodField()
@@ -568,6 +729,7 @@ class ProgramSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'event', 'name', 'description', 'category', 'category_display',
             'is_team_based', 'max_participants', 'max_participants_per_team', 'team_size', 'max_teams_per_school',
+            'program_type', 'program_type_display',
             'stage', 'stage_id', 'venue', 'start_time', 'end_time', 'duration_minutes_per_entry',
             'schedule_end_is_manual',
             'schedule_entry_count', 'schedule_entry_type', 'scheduled_duration_minutes',
@@ -842,8 +1004,9 @@ class ProgramSerializer(serializers.ModelSerializer):
         program_type = data.get(
             'program_type', getattr(self.instance, 'program_type', None)
         )
-        if not program_type or program_type not in ['stage', 'off_stage']:
-            raise serializers.ValidationError('Program type is required and must be either "stage" or "off_stage".')
+        if not program_type:
+            raise serializers.ValidationError('Program type is required.')
+        data['program_type'] = str(program_type).strip()
         
         return data
 
@@ -936,7 +1099,7 @@ class ChestNumberSerializer(serializers.ModelSerializer):
                     points_val = 0
                     team_points_val = 0
                     
-            prog_type_str = 'Stage' if getattr(prog, 'program_type', 'off_stage') == 'stage' else 'Offstage'
+            prog_type_str = getattr(prog, 'program_type_display', prog.program_type.replace('_', ' ').title()) if prog.program_type else 'Stage'
             prog_mode_str = 'Group' if prog.is_team_based else 'Individual'
             
             results.append({
@@ -948,7 +1111,8 @@ class ChestNumberSerializer(serializers.ModelSerializer):
                 'grade': grade_str,
                 'points': points_val,
                 'team_points': team_points_val,
-                'is_stage': getattr(prog, 'program_type', 'off_stage') == 'stage'
+                'is_stage': getattr(prog, 'program_type', 'off_stage') == 'stage' or getattr(prog, 'stage_id', None) is not None,
+                'program_type': prog.program_type,
             })
         return results
 

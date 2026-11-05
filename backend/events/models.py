@@ -17,6 +17,11 @@ from .certificate_config import (
 
 User = get_user_model()
 
+def event_logo_upload_to(instance, filename):
+    school_id = getattr(instance, 'school_id', None) or 'common'
+    extension = Path(filename).suffix.lower()[:10]
+    return f'schools/{school_id}/events/{secrets.token_hex(16)}{extension}'
+
 class Event(models.Model):
     school = models.ForeignKey(
         'accounts.School', on_delete=models.CASCADE, related_name='events'
@@ -101,14 +106,22 @@ class Event(models.Model):
         validators=[MinValueValidator(0)],
         help_text="Maximum group/team programs a single student can participate in"
     )
+    category_participation_limits = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Category-specific limits, e.g. "
+            "{'CAT_CODE': {'max_total': 5, 'max_onstage': 3, 'max_offstage': 2, 'max_single': 3, 'max_group': 2}}"
+        ),
+    )
 
-    # Grading system. Event rules define score-percentage bands only; the
-    # absolute points for each grade are configured on each Program.
+    # Grading system. Event rules define score-percentage bands and bonus points;
+    # programs can optionally override bonus points per grade.
     enable_grading_system = models.BooleanField(default=True)
     grading_rules = models.JSONField(
         default=list,
         blank=True,
-        help_text="Grade percentage bands e.g. [{name:'A+', min_mark:90, max_mark:100}]"
+        help_text="Grade percentage bands and bonus points e.g. [{name:'A+', min_mark:90, max_mark:100, bonus_points:3}]"
     )
 
     # Event-Specific Points Configuration
@@ -142,11 +155,20 @@ class Event(models.Model):
     def get_effective_grading_rules(self):
         if self.grading_rules and isinstance(self.grading_rules, list) and len(self.grading_rules) > 0:
             return self.grading_rules
+        scale = float(self.converted_total_mark or 100)
+        if abs(scale - 100) < 0.01:
+            return [
+                {"name": "A+", "min_mark": 90, "max_mark": 100, "bonus_points": 3},
+                {"name": "A",  "min_mark": 80, "max_mark": 89.99, "bonus_points": 2},
+                {"name": "B+", "min_mark": 70, "max_mark": 79.99, "bonus_points": 1},
+                {"name": "B",  "min_mark": 60, "max_mark": 69.99, "bonus_points": 0},
+            ]
+        round2 = lambda n: round(n, 2)
         return [
-            {"name": "A+", "min_mark": 90, "max_mark": 100},
-            {"name": "A",  "min_mark": 80, "max_mark": 89.99},
-            {"name": "B+", "min_mark": 70, "max_mark": 79.99},
-            {"name": "B",  "min_mark": 60, "max_mark": 69.99},
+            {"name": "A+", "min_mark": round2(scale * 0.9), "max_mark": scale, "bonus_points": 3},
+            {"name": "A",  "min_mark": round2(scale * 0.8), "max_mark": round2(scale * 0.9 - 0.01), "bonus_points": 2},
+            {"name": "B+", "min_mark": round2(scale * 0.7), "max_mark": round2(scale * 0.8 - 0.01), "bonus_points": 1},
+            {"name": "B",  "min_mark": round2(scale * 0.6), "max_mark": round2(scale * 0.7 - 0.01), "bonus_points": 0},
         ]
 
     # Administrative
@@ -154,8 +176,9 @@ class Event(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    # Event image (optional)
+    # Event image / logo
     image = models.TextField(null=True, blank=True)  # URL to image
+    logo = models.ImageField(upload_to=event_logo_upload_to, null=True, blank=True)
     
     class Meta:
         ordering = ['-created_at']
@@ -213,6 +236,42 @@ class Event(models.Model):
             return 'ongoing'
         else:
             return 'completed'
+
+    def get_program_types(self):
+        """
+        Returns all program types for this event.
+        If none exist, lazily provisions default 'stage' and 'off_stage' types.
+        """
+        types_qs = self.program_types.all().order_by('display_order', 'id')
+        if not types_qs.exists():
+            from django.db import transaction
+            try:
+                with transaction.atomic():
+                    EventProgramType.objects.bulk_create([
+                        EventProgramType(
+                            event=self,
+                            code='stage',
+                            name='Stage',
+                            is_stage_based=True,
+                            color='indigo',
+                            display_order=1
+                        ),
+                        EventProgramType(
+                            event=self,
+                            code='off_stage',
+                            name='Off-Stage',
+                            is_stage_based=False,
+                            color='emerald',
+                            display_order=2
+                        )
+                    ], ignore_conflicts=True)
+            except Exception:
+                pass
+            types_qs = self.program_types.all().order_by('display_order', 'id')
+        return types_qs
+
+    def get_valid_program_type_codes(self):
+        return list(self.get_program_types().values_list('code', flat=True))
 
     def delete(self, *args, **kwargs):
         """Override delete method to automatically clean up all related data"""
@@ -675,6 +734,29 @@ class TeamProfile(models.Model):
             return 0
         return (self.events_won / self.events_participated) * 100
 
+class EventProgramType(models.Model):
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='program_types')
+    code = models.CharField(max_length=50)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default='')
+    is_stage_based = models.BooleanField(default=False, help_text="Requires stage allocation")
+    color = models.CharField(max_length=30, blank=True, default='indigo')
+    display_order = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['display_order', 'id']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['event', 'code'], name='unique_program_type_code_per_event'
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.event.title} - {self.name} ({self.code})"
+
+
 class EventStage(models.Model):
     event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='stages')
     number = models.PositiveIntegerField(validators=[MinValueValidator(1)])
@@ -780,11 +862,7 @@ class Program(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    PROGRAM_TYPE_CHOICES = [
-        ('stage', 'Stage'),
-        ('off_stage', 'Off Stage'),
-    ]
-    program_type = models.CharField(max_length=20, choices=PROGRAM_TYPE_CHOICES, default='stage')
+    program_type = models.CharField(max_length=50, default='stage')
 
     class Meta:
         ordering = ['start_time', 'name']
@@ -792,6 +870,24 @@ class Program(models.Model):
     
     def __str__(self):
         return f"{self.name} - {self.event.title}"
+
+    @property
+    def program_type_display(self):
+        if hasattr(self, 'event') and self.event_id:
+            pt = self.event.program_types.filter(code=self.program_type).first()
+            if pt:
+                return pt.name
+        return self.program_type.replace('_', ' ').title() if self.program_type else 'Stage'
+
+    @property
+    def is_stage(self):
+        if self.stage_id:
+            return True
+        if hasattr(self, 'event') and self.event_id:
+            pt = self.event.program_types.filter(code=self.program_type).first()
+            if pt:
+                return pt.is_stage_based
+        return self.program_type in ('stage', 'onstage', 'on_stage')
     
     @property
     def status(self):
@@ -1064,8 +1160,21 @@ class ProgramResult(models.Model):
             raise ValidationError('All configured judge marks are required before submission.')
     
     def save(self, *args, **kwargs):
-        from decimal import Decimal, InvalidOperation
+        from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
         
+        # Ensure judge marks are strictly quantized to 2 decimal places to avoid float precision errors
+        for i in range(1, 5):
+            val = getattr(self, f'judge{i}_marks')
+            if val is not None:
+                try:
+                    dec = Decimal(str(val).strip())
+                    if abs(dec.as_tuple().exponent) > 2:
+                        setattr(self, f'judge{i}_marks', dec.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+                    elif not isinstance(val, Decimal):
+                        setattr(self, f'judge{i}_marks', dec)
+                except (InvalidOperation, TypeError, ValueError):
+                    pass
+
         self.is_team_result = bool(self.program_id and self.program.is_team_based)
 
         # Auto-sync team assignment from global team membership if not set

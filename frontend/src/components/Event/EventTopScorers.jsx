@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ChevronDown } from 'lucide-react';
-import { eventsAPI, teamsAPI } from '../../services/api';
+import { eventsAPI, teamsAPI, eventProgramTypesAPI } from '../../services/api';
 
 const EventTopScorers = ({ event, eventId, categories = [] }) => {
   const [scorers, setScorers] = useState([]);
   const [teams, setTeams] = useState([]);
+  const [programTypes, setProgramTypes] = useState(event?.program_types || []);
   const [loading, setLoading] = useState(true);
 
   // Filters & Checkboxes State
@@ -16,7 +17,19 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
 
   useEffect(() => {
     fetchTeams();
-  }, []);
+    const actualId = eventId || event?.id;
+    if (actualId) {
+      eventProgramTypesAPI.list(actualId)
+        .then(res => {
+          const list = res.data?.results || res.data || [];
+          if (Array.isArray(list) && list.length > 0) setProgramTypes(list);
+          else if (event?.program_types) setProgramTypes(event.program_types);
+        })
+        .catch(() => {
+          if (event?.program_types) setProgramTypes(event.program_types);
+        });
+    }
+  }, [eventId, event?.id, event?.program_types]);
 
   useEffect(() => {
     fetchTopScorers();
@@ -57,7 +70,8 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
     return (
       scorer.name?.toLowerCase().includes(term) ||
       scorer.team_name?.toLowerCase().includes(term) ||
-      scorer.category_display?.toLowerCase().includes(term)
+      scorer.category_display?.toLowerCase().includes(term) ||
+      String(scorer.chest_number || '').includes(term)
     );
   });
 
@@ -184,12 +198,14 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
                   <th className="px-6 py-3.5 text-left text-xs font-bold text-gray-600 tracking-wide">
                     Category
                   </th>
-                  <th className="px-6 py-3.5 text-right text-xs font-bold text-gray-600 tracking-wide">
-                    Offstage
-                  </th>
-                  <th className="px-6 py-3.5 text-right text-xs font-bold text-gray-600 tracking-wide">
-                    Stage
-                  </th>
+                  {(programTypes.length > 0 ? programTypes : [
+                    { code: 'off_stage', name: 'Off-Stage' },
+                    { code: 'stage', name: 'Stage' }
+                  ]).map(pt => (
+                    <th key={pt.code} className="px-6 py-3.5 text-right text-xs font-bold text-gray-600 tracking-wide">
+                      {pt.name}
+                    </th>
+                  ))}
                   <th className="px-6 py-3.5 text-right text-xs font-bold text-gray-600 tracking-wide">
                     Total Points
                   </th>
@@ -203,6 +219,11 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
                       {/* Participant Name & Special Badges */}
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center space-x-2.5">
+                          {scorer.chest_number && (
+                            <span className="px-2 py-0.5 text-[11px] font-bold font-mono rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
+                              #{scorer.chest_number}
+                            </span>
+                          )}
                           <span className="font-bold text-xs text-gray-900">
                             {scorer.name}
                           </span>
@@ -230,15 +251,22 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
                         {scorer.category_display}
                       </td>
 
-                      {/* Offstage */}
-                      <td className="px-6 py-4 text-right whitespace-nowrap text-xs text-gray-700 font-medium">
-                        {scorer.offstage_points}
-                      </td>
-
-                      {/* Stage */}
-                      <td className="px-6 py-4 text-right whitespace-nowrap text-xs text-gray-700 font-medium">
-                        {scorer.stage_points}
-                      </td>
+                      {/* Dynamic Points by Type */}
+                      {(programTypes.length > 0 ? programTypes : [
+                        { code: 'off_stage', name: 'Off-Stage' },
+                        { code: 'stage', name: 'Stage' }
+                      ]).map(pt => {
+                        const pts = scorer.points_by_type?.[pt.code] ?? (
+                          pt.code === 'stage' ? scorer.stage_points : (
+                            pt.code === 'off_stage' ? scorer.offstage_points : 0
+                          )
+                        );
+                        return (
+                          <td key={pt.code} className="px-6 py-4 text-right whitespace-nowrap text-xs text-gray-700 font-medium">
+                            {pts ?? 0}
+                          </td>
+                        );
+                      })}
 
                       {/* Total Points */}
                       <td className="px-6 py-4 text-right whitespace-nowrap text-xs font-bold text-gray-900">
@@ -248,7 +276,7 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center text-xs text-gray-500">
+                    <td colSpan={4 + (programTypes.length > 0 ? programTypes.length : 2)} className="px-6 py-12 text-center text-xs text-gray-500">
                       No published results or top performers found matching your filters.
                     </td>
                   </tr>

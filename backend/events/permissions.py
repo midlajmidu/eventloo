@@ -178,15 +178,20 @@ class IsTeamManagerOrAdmin(permissions.BasePermission):
                 and (not event_id or Event.objects.filter(id=event_id, school_id=school_id).exists())
                 and (not program_id or Program.objects.filter(id=program_id, event__school_id=school_id).exists())
             )
-        is_team_view = getattr(view, 'basename', None) in ('team', 'teams') or (
-            '/teams/' in getattr(request, 'path', '') and '/events/' not in getattr(request, 'path', '')
+        is_team_view = getattr(view, 'basename', None) in ('team', 'teams', 'team-manager') or (
+            ('/teams/' in getattr(request, 'path', '') or '/team-manager/' in getattr(request, 'path', ''))
+            and '/events/' not in getattr(request, 'path', '')
         )
         route_team_id = view.kwargs.get('team_id') or (view.kwargs.get('pk') if is_team_view else None)
         token_team_id = getattr(request.user, 'team_id', None)
 
-        if route_team_id is not None and token_team_id is not None:
-            if str(token_team_id) != str(route_team_id):
+        if route_team_id is not None:
+            if token_team_id is not None and str(token_team_id) != str(route_team_id):
                 return False
+            elif getattr(request.user, 'role', None) == 'team_manager' and token_team_id is None:
+                managed_ids = [str(t.id) for t in getattr(request.user, 'managed_teams', []).all()] if hasattr(request.user, 'managed_teams') else []
+                if str(route_team_id) not in managed_ids:
+                    return False
 
         allowed = (
             getattr(request.user, 'role', None) == 'team_manager'
@@ -208,19 +213,36 @@ class IsTeamManagerOrAdmin(permissions.BasePermission):
         if getattr(request.user, 'role', None) in ['admin', 'event_manager', 'super_admin']:
             return True
             
-        # Team managers can access objects belonging to their school
+        # Team managers can only access objects belonging to their school AND their team
         if getattr(request.user, 'role', None) == 'team_manager':
             school_id = getattr(request.user, 'school_id', None)
-            from .models import Event, Program, Team
+            token_team_id = getattr(request.user, 'team_id', None)
+            from .models import Event, Program, Team, ProgramAssignment
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+
             if isinstance(obj, Event):
                 return obj.school_id == school_id
             if isinstance(obj, Program):
                 return obj.event.school_id == school_id
             if isinstance(obj, Team):
-                token_team_id = getattr(request.user, 'team_id', None)
-                if token_team_id:
+                if token_team_id is not None:
                     return obj.id == token_team_id and obj.school_id == school_id
-                return (obj.team_manager == request.user or getattr(request.user, 'school_id', None) == obj.school_id)
+                return (obj.team_manager == request.user and obj.school_id == school_id)
+            if isinstance(obj, ProgramAssignment):
+                if token_team_id is not None:
+                    return obj.team_id == token_team_id and obj.program.event.school_id == school_id
+                return obj.team and obj.team.team_manager == request.user and obj.program.event.school_id == school_id
+            if isinstance(obj, User):
+                if obj.school_id != school_id:
+                    return False
+                if token_team_id is not None:
+                    return obj.team_memberships.filter(id=token_team_id).exists()
+                return obj.team_memberships.filter(team_manager=request.user).exists()
+            if hasattr(obj, 'team'):
+                if token_team_id is not None:
+                    return getattr(obj, 'team_id', None) == token_team_id
+                return getattr(getattr(obj, 'team', None), 'team_manager', None) == request.user
             if hasattr(obj, 'team_manager'):
                 return obj.team_manager == request.user
             if hasattr(obj, 'school_id'):
@@ -233,25 +255,28 @@ class IsTeamManagerOrAdmin(permissions.BasePermission):
 
 class CanManageStudents(permissions.BasePermission):
     """
-    Permission for managing students - admins can manage all, team managers can manage their team's students.
+    Permission for managing students - admins and event managers can manage all in their school,
+    team managers can only view/manage their team's students.
     """
     
     def has_permission(self, request, view):
-        return (
+        return bool(
             request.user and 
             request.user.is_authenticated and 
-            request.user.role in ['admin', 'team_manager']
+            getattr(request.user, 'school_id', None) is not None and
+            request.user.role in ['admin', 'event_manager', 'team_manager']
         )
     
     def has_object_permission(self, request, view, obj):
-        # Admins can manage all students
-        if request.user.role == 'admin':
-            return True
+        # Admins and event managers can manage all students in their school
+        if request.user.role in ['admin', 'event_manager']:
+            return obj.school_id == request.user.school_id
             
-        # Team managers can only manage their team's students
+        # Team managers can only manage their team's students in their school
         if request.user.role == 'team_manager':
+            if obj.school_id != request.user.school_id:
+                return False
             from .models import Team
-            # Check if student is in any of the manager's teams
             token_team_id = getattr(request.user, 'team_id', None)
             if token_team_id is not None:
                 return Team.objects.filter(

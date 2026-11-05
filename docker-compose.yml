@@ -16,6 +16,11 @@ services:
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-https://app.eventloo.in,http://app.eventloo.in,https://app.eventloo.com}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-https://app.eventloo.in,http://app.eventloo.in,https://app.eventloo.com}
       - WEB_CONCURRENCY=${WEB_CONCURRENCY:-2}
+      # Email Configuration (Zoho SMTP)
+      - NOREPLY_EMAIL_USER=${NOREPLY_EMAIL_USER:-noreply@eventloo.in}
+      - NOREPLY_EMAIL_PASSWORD=${NOREPLY_EMAIL_PASSWORD:-EyqVrVAGVEYP}
+      - CONTACT_EMAIL_USER=${CONTACT_EMAIL_USER:-contact@eventloo.in}
+      - CONTACT_EMAIL_PASSWORD=${CONTACT_EMAIL_PASSWORD:-9HfUJjAK07t5}
       # Optional: Uncomment if connecting to external PostgreSQL
       # - DATABASE_URL=postgres://user:password@host:5432/eventloo
       # Optional: Uncomment if connecting to external Redis

@@ -207,9 +207,11 @@ const TeamManagerDashboard = () => {
     if (students.length > 0) {
       const counts = {};
       students.forEach((student) => {
-        const cat = student.category
-          ? (student.category.charAt(0).toUpperCase() + student.category.slice(1).toLowerCase())
-          : 'General';
+        const rawCat = (student.category || '').trim();
+        if (!rawCat || ['general', 'gen', 'gn', 'open'].includes(rawCat.toLowerCase())) {
+          return;
+        }
+        const cat = rawCat.charAt(0).toUpperCase() + rawCat.slice(1).toLowerCase();
         counts[cat] = (counts[cat] || 0) + 1;
       });
       return Object.entries(counts).map(([name, participants], index) => ({

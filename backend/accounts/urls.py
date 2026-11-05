@@ -4,7 +4,17 @@ from rest_framework_simplejwt.views import TokenRefreshView
 from .throttles import LoginRateThrottle
 from django.conf import settings
 from rest_framework.response import Response
-from .views import CustomTokenObtainPairView, user_profile, admin_dashboard_summary, team_manager_dashboard, school_settings, StudentViewSet, PointsViewSet, team_manager_login, team_manager_profile, team_manager_students, team_manager_available_programs, team_manager_event_programs, team_manager_assign_student, team_manager_set_subteam_leader, team_manager_remove_assignment, team_manager_remove_student_from_program, SchoolSettingsViewSet, StudentCategoryViewSet, StudentClassViewSet, SuperAdminSchoolViewSet, SchoolUserViewSet, school_staff_mfa_setup, school_staff_mfa_confirm, super_admin_login, super_admin_mfa_setup, super_admin_mfa_confirm, super_admin_dashboard, logout_view
+from .views import (
+    CustomTokenObtainPairView, user_profile, admin_dashboard_summary, team_manager_dashboard, school_settings,
+    StudentViewSet, PointsViewSet, team_manager_login, team_manager_profile, team_manager_students,
+    team_manager_available_programs, team_manager_event_programs, team_manager_assign_student,
+    team_manager_set_subteam_leader, team_manager_remove_assignment, team_manager_remove_student_from_program,
+    SchoolSettingsViewSet, StudentCategoryViewSet, StudentClassViewSet, SuperAdminSchoolViewSet, SchoolUserViewSet,
+    school_staff_mfa_setup, school_staff_mfa_confirm, super_admin_login, super_admin_mfa_setup,
+    super_admin_mfa_confirm, super_admin_dashboard, logout_view,
+    request_forgot_password_otp, verify_and_reset_password,
+    request_settings_password_otp, change_settings_password_with_otp,
+)
 from .serializers import HardenedTokenRefreshSerializer
 
 router = DefaultRouter()
@@ -62,5 +72,10 @@ urlpatterns = [
     path('team-manager/<int:team_id>/events/<int:event_id>/programs/<int:program_id>/students/<int:student_id>/remove/', team_manager_remove_student_from_program, name='team_manager_remove_student_from_program'),
     path('team-manager/<int:team_id>/assignments/<int:assignment_id>/remove/', team_manager_remove_assignment, name='team_manager_remove_assignment'),
     path('team-manager/leaderboard/', PointsViewSet.as_view({'get': 'leaderboard'}), name='team_manager_leaderboard'),
+    # OTP Password Reset & Settings Change
+    path('auth/forgot-password/request-otp/', request_forgot_password_otp, name='forgot_password_request_otp'),
+    path('auth/forgot-password/verify-reset/', verify_and_reset_password, name='forgot_password_verify_reset'),
+    path('auth/settings/request-password-otp/', request_settings_password_otp, name='settings_request_password_otp'),
+    path('auth/settings/change-password-with-otp/', change_settings_password_with_otp, name='settings_change_password_with_otp'),
 ]
 urlpatterns += router.urls 

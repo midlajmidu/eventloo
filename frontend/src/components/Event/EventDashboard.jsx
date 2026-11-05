@@ -14,9 +14,11 @@ import EventSettings from './EventSettings';
 import EventTopScorers from './EventTopScorers';
 import EventStages from './EventStages';
 import EventSchedule from './EventSchedule';
+import EventProgramTypes from './EventProgramTypes';
 import {
   LayoutDashboard,
   BookOpen,
+  Tags,
   Users,
   UserCheck,
   Edit3,
@@ -29,6 +31,7 @@ import {
   MapPinned,
   CalendarClock,
   ArrowLeft,
+  Calendar,
 } from 'lucide-react';
 
 const EventDashboard = () => {
@@ -83,6 +86,7 @@ const EventDashboard = () => {
   const tabs = [
     { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, description: 'Event overview and key metrics' },
     { id: 'programs', name: 'Programs', icon: BookOpen, description: 'Manage event programs' },
+    { id: 'types', name: 'Types', icon: Tags, description: 'Manage program types (Stage, Off-Stage, etc.)' },
     { id: 'stages', name: 'Stages', icon: MapPinned, description: 'Manage stages and locations' },
     { id: 'schedule', name: 'Schedule', icon: CalendarClock, description: 'Schedule programs by stage and time' },
     { id: 'assignments', name: 'Assignments', icon: Users, description: 'Assign students to programs' },
@@ -105,6 +109,8 @@ const EventDashboard = () => {
         return <EventOverview {...props} setActiveTab={setActiveTab} />;
       case 'programs':
         return <EventPrograms {...props} />;
+      case 'types':
+        return <EventProgramTypes {...props} />;
       case 'stages':
         return <EventStages {...props} />;
       case 'schedule':
@@ -180,12 +186,16 @@ const EventDashboard = () => {
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
-              {event.school_logo && (
+              {(event.logo || event.event_logo) ? (
                 <img
-                  src={event.school_logo}
-                  alt={event.school_name || 'School Logo'}
+                  src={event.logo || event.event_logo}
+                  alt={event.title || 'Event Logo'}
                   className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain bg-slate-50 border border-slate-200/80 p-0.5 shrink-0 mr-3 shadow-2xs"
                 />
+              ) : (
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-200/70 flex items-center justify-center text-indigo-600 shrink-0 mr-3 shadow-2xs">
+                  <Calendar className="w-5 h-5" />
+                </div>
               )}
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600 truncate">
@@ -224,7 +234,7 @@ const EventDashboard = () => {
                 <img
                   src="/eventloo-loop-logo.svg"
                   alt="Eventloo"
-                  className="h-5 sm:h-6 w-auto object-contain"
+                  className="h-6 sm:h-7 w-auto object-contain"
                 />
               </a>
             </div>

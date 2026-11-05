@@ -9,7 +9,7 @@ from rest_framework.decorators import action
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import transaction
 from django.db.models import Q, Sum, Count
-from .models import User, School, SchoolSettings, StudentCategory, StudentClass
+from .models import User, School, SchoolSettings, StudentCategory, StudentClass, PasswordResetOTP
 from events.permissions import CanManageStudents, IsTeamManagerOrAdmin, TeamManagerAuthentication, IsSuperAdmin, IsAdminOrEventManager, IsApplicationStaff, IsSchoolAdmin, IsSameSchool
 from .authentication import SchoolJWTAuthentication
 from events.pagination import StandardPagination, LargePagination, SmallPagination
@@ -28,7 +28,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.utils import timezone
 from events.models import Team, Event, Program, ProgramAssignment, PointsRecord as EventPointsRecord
-from datetime import datetime
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from .serializers import SchoolSettingsSerializer
 from django.conf import settings
@@ -204,16 +204,16 @@ def super_admin_login(request):
         return Response({'error': 'Invalid authentication request.'}, status=400)
     email = str(request.data.get('email', '')).strip().lower()
     password = request.data.get('password', '')
-    user = authenticate(request, email=email, password=password)
-    if not user:
-        user_candidate = User.objects.filter(role='super_admin', school__isnull=True).filter(
-            Q(email__iexact=email) | Q(username__iexact=email)
-        ).first()
-        if user_candidate and user_candidate.check_password(password):
-            user = user_candidate
-    if not user or user.role != 'super_admin' or user.school_id is not None:
+    user_candidate = User.objects.filter(role='super_admin', school__isnull=True).filter(
+        Q(email__iexact=email) | Q(username__iexact=email)
+    ).first()
+    if not user_candidate:
         audit_security_event(request, 'super_admin_login', 'denied')
-        return Response({'error': 'Invalid super-admin credentials.'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'No super-admin account found with this email address.'}, status=status.HTTP_401_UNAUTHORIZED)
+    if not user_candidate.check_password(password):
+        audit_security_event(request, 'super_admin_login', 'denied', actor=user_candidate)
+        return Response({'error': 'Incorrect password. Please verify your password and try again.'}, status=status.HTTP_401_UNAUTHORIZED)
+    user = user_candidate
     if not user.is_active:
         audit_security_event(request, 'super_admin_login', 'denied', actor=user)
         return Response({'error': 'This account is inactive.'}, status=status.HTTP_403_FORBIDDEN)
@@ -400,6 +400,16 @@ class SuperAdminSchoolViewSet(viewsets.ModelViewSet):
         audit_security_event(
             request, 'school_admin_create', 'success', school_id=school.id, target=admin.id
         )
+        try:
+            from accounts.email_service import send_school_admin_welcome_email
+            send_school_admin_welcome_email(
+                to_email=email,
+                name=name,
+                school_name=school.name,
+                password=password,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send school admin welcome email to {email}: {e}")
         return Response(UserSerializer(admin).data, status=201)
 
     @action(detail=True, methods=['post'], url_path='reset-admin-password')
@@ -532,13 +542,23 @@ class SchoolUserViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def perform_create(self, serializer):
         school = lock_and_enforce_quota(self.request.user.school_id, 'users')
-        # The serializer derives tenant scope from request.user; retaining the
-        # locked school through the transaction makes this check race-safe.
+        raw_password = self.request.data.get('password', '')
         user = serializer.save()
         audit_security_event(
             self.request, 'school_user_create', 'success',
             school_id=self.request.user.school_id, target=user.id,
         )
+        try:
+            from accounts.email_service import send_staff_invitation_email
+            send_staff_invitation_email(
+                to_email=user.email,
+                name=user.name or user.username,
+                school_name=self.request.user.school.name,
+                role_name=user.role,
+                password=raw_password,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send staff invitation email to {user.email}: {e}")
 
     def perform_update(self, serializer):
         target = self.get_object()
@@ -652,11 +672,52 @@ def super_admin_dashboard(request):
     })
 
 @api_view(['GET'])
-@permission_classes([IsApplicationStaff])
+@permission_classes([permissions.IsAuthenticated])
 def user_profile(request):
-    """Get current user profile"""
-    serializer = UserSerializer(request.user)
-    return Response(serializer.data)
+    """Get current user or team manager profile"""
+    user = request.user
+    role = getattr(user, 'role', None)
+
+    if role == 'team_manager':
+        team = getattr(user, 'team', None)
+        team_data = TeamManagerResponseSerializer(team).data if team else None
+        school_obj = getattr(user, 'school', None)
+        school_logo_url = None
+        try:
+            if school_obj:
+                settings_obj = getattr(school_obj, 'settings', None)
+                if settings_obj and settings_obj.school_logo:
+                    school_logo_url = settings_obj.school_logo.url
+                elif school_obj.logo:
+                    school_logo_url = school_obj.logo.url
+        except Exception:
+            pass
+
+        return Response({
+            'id': team.id if team else None,
+            'role': 'team_manager',
+            'name': getattr(user, 'name', 'Team Leader'),
+            'username': getattr(user, 'username', ''),
+            'team': team_data,
+            'school': {
+                'id': getattr(user, 'school_id', None),
+                'name': school_obj.name if school_obj else '',
+                'code': school_obj.code if school_obj else '',
+                'logo': school_logo_url,
+                'school_logo': school_logo_url,
+            } if school_obj else None,
+        })
+
+    if role == 'super_admin' and getattr(user, 'school_id', None) is None and getattr(user, 'is_active', True):
+        serializer = UserSerializer(user)
+        return Response(serializer.data)
+
+    if role in ('admin', 'event_manager') and getattr(user, 'school_id', None) is not None and getattr(user, 'is_active', True):
+        if getattr(user, 'school', None) and user.school.status == 'active':
+            serializer = UserSerializer(user)
+            return Response(serializer.data)
+
+    return Response({'error': 'Access denied.'}, status=status.HTTP_403_FORBIDDEN)
 
 @api_view(['GET'])
 @permission_classes([IsSameSchool])
@@ -723,8 +784,16 @@ def admin_dashboard_summary(request):
 
     # A participant is a student with at least one program assignment in any
     # event owned by this school. Count each student once in their own category.
+    # IMPORTANT: Only standard categories belong here. Mixed/general categories
+    # are for programs and never for student classification.
     participants_by_category = []
-    for category in StudentCategory.objects.filter(school=school, is_active=True).order_by('id'):
+    for category in StudentCategory.objects.filter(
+        school=school, is_active=True, is_mixing=False
+    ).exclude(
+        code__in=['general', 'gen', 'gn', 'open']
+    ).exclude(
+        name__iexact='general'
+    ).order_by('id'):
         participant_count = User.objects.filter(
             role='student',
             school=school,
@@ -888,12 +957,29 @@ def team_manager_login(request):
         access['access_type'] = 'team_manager'
         access['credential_hash'] = refresh['credential_hash']
         
+        school_logo_url = None
+        try:
+            if team.school:
+                settings_obj = getattr(team.school, 'settings', None)
+                if settings_obj and settings_obj.school_logo:
+                    school_logo_url = settings_obj.school_logo.url
+                elif team.school.logo:
+                    school_logo_url = team.school.logo.url
+        except Exception:
+            pass
+
         response_data = {
             'success': True,
             'message': f'Welcome, {team.name}!',
             'team': team_data,
             'access_type': 'team_manager',
-            'school': {'id': team.school_id, 'name': team.school.name, 'code': team.school.code},
+            'school': {
+                'id': team.school_id,
+                'name': team.school.name,
+                'code': team.school.code,
+                'logo': school_logo_url,
+                'school_logo': school_logo_url,
+            },
         }
         response = Response(response_data, status=status.HTTP_200_OK)
         audit_security_event(
@@ -1212,6 +1298,10 @@ def team_manager_event_programs(request, team_id, event_id):
                 'end_time': event.end_time,
                 'venue': event.venue,
                 'registration_deadline': event.registration_deadline,
+                'max_programs_per_student': event.max_programs_per_student,
+                'max_single_programs_per_student': event.max_single_programs_per_student,
+                'max_group_programs_per_student': event.max_group_programs_per_student,
+                'category_participation_limits': event.category_participation_limits,
                 'registration_open': (
                     event.status in ('published', 'ongoing')
                     and (
@@ -1389,32 +1479,35 @@ class StudentViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         user = self.request.user
+        school_id = getattr(user, 'school_id', None)
+        if not school_id:
+            return User.objects.none()
         
-        # Base queryset
-        queryset = User.objects.filter(role='student', school_id=user.school_id)
+        # Base queryset strictly scoped to the user's school
+        queryset = User.objects.filter(role='student', school_id=school_id)
         
         # Filter based on user role
-        if user.role == 'admin':
-            # Admins can see all students
+        if user.role in ['admin', 'event_manager']:
+            # Admins and event managers can see all students in their school
             pass
         elif user.role == 'team_manager':
-            # Team managers can only see their team's students
+            # Team managers can ONLY see their own team's students
             from events.models import Team
             token_team_id = getattr(user, 'team_id', None)
             if token_team_id is not None:
                 managed_teams = Team.objects.filter(
-                    id=token_team_id, school_id=user.school_id
+                    id=token_team_id, school_id=school_id
                 )
             else:
                 managed_teams = Team.objects.filter(
-                    team_manager=user, school_id=user.school_id
+                    team_manager=user, school_id=school_id
                 )
             queryset = queryset.filter(
                 Q(team_memberships__in=managed_teams)
             ).distinct()
         else:
             # Other users can't access students
-            queryset = queryset.none()
+            return User.objects.none()
         
         # Apply search filter
         search = self.request.query_params.get('search', '')
@@ -1450,15 +1543,22 @@ class StudentViewSet(viewsets.ModelViewSet):
         if team:
             from events.models import Team
             if team == 'unassigned':
-                # Show students not assigned to any team
+                if user.role == 'team_manager':
+                    # Team managers cannot view unassigned students
+                    return queryset.none()
                 queryset = queryset.filter(team_memberships__isnull=True)
             else:
-                # Show students assigned to specific team
+                if user.role == 'team_manager':
+                    token_team_id = getattr(user, 'team_id', None)
+                    if token_team_id is not None and str(team) != str(token_team_id):
+                        return queryset.none()
+                    elif token_team_id is None and not managed_teams.filter(id=team).exists():
+                        return queryset.none()
                 try:
-                    team_obj = Team.objects.get(id=team, school=self.request.user.school)
+                    team_obj = Team.objects.get(id=team, school_id=school_id)
                     queryset = queryset.filter(team_memberships=team_obj)
                 except Team.DoesNotExist:
-                    queryset = queryset.none()
+                    return queryset.none()
         
         return queryset.order_by('first_name', 'last_name')
     
@@ -1468,14 +1568,14 @@ class StudentViewSet(viewsets.ModelViewSet):
         return StudentSerializer
     
     def get_permissions(self):
-        """Only admins can manage students"""
+        """Only admins can mutate students, but team managers and event managers can view authorized students"""
         if self.action in [
             'create', 'update', 'partial_update', 'destroy', 'assign_to_team',
             'remove_from_team',
             'bulk_upload', 'download_template',
         ]:
             return [IsSchoolAdmin()]
-        return [IsSchoolAdmin()]
+        return [CanManageStudents()]
     
     @transaction.atomic
     def perform_create(self, serializer):
@@ -2757,9 +2857,19 @@ class PointsViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         from events.models import PointsRecord
-        return EventPointsRecord.objects.filter(
-            school_id=self.request.user.school_id
+        school_id = getattr(self.request.user, 'school_id', None)
+        if not school_id:
+            return EventPointsRecord.objects.none()
+        qs = EventPointsRecord.objects.filter(
+            school_id=school_id
         ).select_related('team', 'student', 'event', 'awarded_by')
+        if getattr(self.request.user, 'role', None) == 'team_manager':
+            token_team_id = getattr(self.request.user, 'team_id', None)
+            if token_team_id is not None:
+                qs = qs.filter(team_id=token_team_id)
+            else:
+                qs = qs.filter(team__team_manager=self.request.user)
+        return qs
     
     def get_serializer_class(self):
         from events.serializers import PointsRecordSerializer
@@ -2807,10 +2917,19 @@ class PointsViewSet(viewsets.ReadOnlyModelViewSet):
         """Get detailed student performance breakdown across all events"""
         try:
             from django.db.models import Sum
-            from events.models import ProgramResult, ProgramAssignment
+            from events.models import ProgramResult, ProgramAssignment, Team
             student = User.objects.get(
                 id=pk, role='student', school_id=request.user.school_id
             )
+            
+            # Enforce team manager restriction to own team members only
+            if getattr(request.user, 'role', None) == 'team_manager':
+                token_team_id = getattr(request.user, 'team_id', None)
+                if token_team_id is not None:
+                    if not Team.objects.filter(id=token_team_id, school_id=request.user.school_id, members=student).exists():
+                        return Response({'error': 'You can only view details of students in your assigned team.'}, status=status.HTTP_403_FORBIDDEN)
+                elif not Team.objects.filter(team_manager=request.user, school_id=request.user.school_id, members=student).exists():
+                    return Response({'error': 'You can only view details of students in your assigned team.'}, status=status.HTTP_403_FORBIDDEN)
             
             # Only official individual results contribute to the student score.
             from events.services import program_points_count_for_student
@@ -3234,7 +3353,17 @@ class StudentCategoryViewSet(viewsets.ModelViewSet):
         return [IsTeamManagerOrAdmin()]
 
     def get_queryset(self):
-        return StudentCategory.objects.filter(school_id=self.request.user.school_id)
+        qs = StudentCategory.objects.filter(school_id=self.request.user.school_id)
+        standard_only = self.request.query_params.get('standard_only') or self.request.query_params.get('is_standard')
+        is_mixing = self.request.query_params.get('is_mixing')
+        if standard_only and str(standard_only).lower() in ('true', '1'):
+            qs = qs.filter(is_mixing=False).exclude(code__in=['general', 'gen', 'gn', 'open']).exclude(name__iexact='general')
+        elif is_mixing is not None:
+            if str(is_mixing).lower() in ('false', '0'):
+                qs = qs.filter(is_mixing=False).exclude(code__in=['general', 'gen', 'gn', 'open']).exclude(name__iexact='general')
+            elif str(is_mixing).lower() in ('true', '1'):
+                qs = qs.filter(is_mixing=True)
+        return qs.order_by('id')
 
     from django.db import transaction
 
@@ -3287,6 +3416,251 @@ class StudentClassViewSet(viewsets.ModelViewSet):
         serializer.save(school=self.request.user.school)
 
 
+# ==============================================================================
+# OTP Password Reset & Security Management Views
+# ==============================================================================
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([LoginRateThrottle])
+def request_forgot_password_otp(request):
+    """
+    Step 1 of Public Forgot Password flow:
+    Sends a 6-digit OTP to the registered email from noreply@eventloo.in.
+    Excludes team managers (they should contact school admin).
+    """
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
+
+    email = str(request.data.get('email', '')).strip().lower()
+    if not email:
+        return Response({'error': 'Email address is required.'}, status=400)
+
+    user = User.objects.filter(
+        Q(email__iexact=email) | Q(username__iexact=email)
+    ).first()
+
+    if not user:
+        return Response({'error': 'No account found with this email address.'}, status=404)
+
+    if user.role == 'team_manager':
+        return Response({
+            'error': 'Team Managers should contact their school administrator to manage credentials.'
+        }, status=400)
+
+    if not user.is_active:
+        return Response({'error': 'This account is currently inactive. Please contact support.'}, status=400)
+
+    # Invalidate previous unused OTPs for forgot_password
+    PasswordResetOTP.objects.filter(user=user, purpose='forgot_password', is_used=False).update(is_used=True)
+
+    # Generate 6-digit secure code
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
+    expires_at = timezone.now() + timedelta(minutes=5)
+
+    PasswordResetOTP.objects.create(
+        user=user,
+        otp_code=otp_code,
+        purpose='forgot_password',
+        expires_at=expires_at,
+    )
+
+    from accounts.email_service import send_otp_email
+    email_sent = send_otp_email(
+        to_email=user.email or email,
+        otp_code=otp_code,
+        user_name=user.name or user.username,
+        purpose="Password Reset Request",
+        expiry_minutes=5,
+    )
+
+    if not email_sent:
+        logger.error(f"Failed to deliver OTP email to {email}")
+        return Response({'error': 'Failed to send verification email. Please try again later.'}, status=500)
+
+    audit_security_event(request, 'forgot_password_otp_sent', 'success', actor=user)
+    return Response({
+        'message': f'A 6-digit verification code has been sent to {user.email}.',
+        'email': user.email,
+    })
 
 
- 
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+@throttle_classes([LoginRateThrottle])
+def verify_and_reset_password(request):
+    """
+    Step 2 of Public Forgot Password flow:
+    Verifies the 6-digit OTP, updates the password, and rotates session.
+    """
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
+
+    email = str(request.data.get('email', '')).strip().lower()
+    otp = str(request.data.get('otp', '')).strip()
+    new_password = request.data.get('new_password', '')
+
+    if not email or not otp or not new_password:
+        return Response({'error': 'Email, verification code, and new password are required.'}, status=400)
+
+    user = User.objects.filter(
+        Q(email__iexact=email) | Q(username__iexact=email)
+    ).first()
+
+    if not user or user.role == 'team_manager':
+        return Response({'error': 'Invalid account or request.'}, status=400)
+
+    otp_record = PasswordResetOTP.objects.filter(
+        user=user,
+        purpose='forgot_password',
+        is_used=False,
+    ).order_by('-created_at').first()
+
+    if not otp_record or not otp_record.is_valid():
+        return Response({
+            'error': 'Verification code has expired or is invalid. Please request a new code.'
+        }, status=400)
+
+    if otp_record.otp_code != otp:
+        otp_record.attempts += 1
+        otp_record.save(update_fields=['attempts'])
+        remaining = max(0, 5 - otp_record.attempts)
+        return Response({
+            'error': f'Incorrect verification code. {remaining} attempt(s) remaining.'
+        }, status=400)
+
+    from django.contrib.auth.password_validation import validate_password
+    try:
+        validate_password(new_password, user)
+    except ValidationError as exc:
+        return Response({'error': exc.messages}, status=400)
+
+    user.set_password(new_password)
+    user.session_version += 1
+    user.save(update_fields=['password', 'session_version'])
+
+    otp_record.is_used = True
+    otp_record.save(update_fields=['is_used'])
+
+    audit_security_event(request, 'forgot_password_reset_success', 'success', actor=user)
+    return Response({
+        'message': 'Password has been reset successfully. You can now sign in with your new password.'
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@throttle_classes([LoginRateThrottle])
+def request_settings_password_otp(request):
+    """
+    Authenticated Admin / Staff requests OTP from Global Settings to change account password.
+    Sent from Eventloo Security <noreply@eventloo.in>.
+    """
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
+
+    user = request.user
+    if not user.email:
+        return Response({'error': 'Your profile has no registered email address.'}, status=400)
+
+    # Invalidate previous unused OTPs for settings_change
+    PasswordResetOTP.objects.filter(user=user, purpose='settings_change', is_used=False).update(is_used=True)
+
+    # Generate 6-digit secure code
+    otp_code = f"{secrets.randbelow(900000) + 100000}"
+    expires_at = timezone.now() + timedelta(minutes=5)
+
+    PasswordResetOTP.objects.create(
+        user=user,
+        otp_code=otp_code,
+        purpose='settings_change',
+        expires_at=expires_at,
+    )
+
+    from accounts.email_service import send_otp_email
+    email_sent = send_otp_email(
+        to_email=user.email,
+        otp_code=otp_code,
+        user_name=user.name or user.username,
+        purpose="Password Change Request",
+        expiry_minutes=5,
+    )
+
+    if not email_sent:
+        logger.error(f"Failed to deliver settings OTP email to {user.email}")
+        return Response({'error': 'Failed to send verification email. Please try again.'}, status=500)
+
+    audit_security_event(request, 'settings_password_otp_sent', 'success', actor=user)
+    return Response({
+        'message': f'A 6-digit verification code has been sent to {user.email}.',
+        'email': user.email,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+@throttle_classes([LoginRateThrottle])
+def change_settings_password_with_otp(request):
+    """
+    Authenticated Admin changes password using Current Password + OTP + New Password.
+    Immediately updates auth session cookies so user remains logged in.
+    """
+    if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return Response({'error': 'Invalid authentication request.'}, status=400)
+
+    user = request.user
+    current_password = request.data.get('current_password', '')
+    otp = str(request.data.get('otp', '')).strip()
+    new_password = request.data.get('new_password', '')
+
+    if not current_password or not otp or not new_password:
+        return Response({'error': 'Current password, verification code, and new password are required.'}, status=400)
+
+    if not user.check_password(current_password):
+        return Response({'error': 'Current password is incorrect.'}, status=400)
+
+    otp_record = PasswordResetOTP.objects.filter(
+        user=user,
+        purpose='settings_change',
+        is_used=False,
+    ).order_by('-created_at').first()
+
+    if not otp_record or not otp_record.is_valid():
+        return Response({
+            'error': 'Verification code has expired or is invalid. Please request a new code.'
+        }, status=400)
+
+    if otp_record.otp_code != otp:
+        otp_record.attempts += 1
+        otp_record.save(update_fields=['attempts'])
+        remaining = max(0, 5 - otp_record.attempts)
+        return Response({
+            'error': f'Incorrect verification code. {remaining} attempt(s) remaining.'
+        }, status=400)
+
+    from django.contrib.auth.password_validation import validate_password
+    try:
+        validate_password(new_password, user)
+    except ValidationError as exc:
+        return Response({'error': exc.messages}, status=400)
+
+    user.set_password(new_password)
+    user.session_version += 1
+    user.save(update_fields=['password', 'session_version'])
+
+    otp_record.is_used = True
+    otp_record.save(update_fields=['is_used'])
+
+    # Issue fresh token so existing session does not get logged out
+    from accounts.serializers import CustomTokenObtainPairSerializer
+    refresh_token = CustomTokenObtainPairSerializer.get_token(user)
+    access_token = refresh_token.access_token
+
+    response = Response({
+        'message': 'Password has been updated successfully.',
+    })
+    set_auth_cookies(response, str(refresh_token), str(access_token))
+
+    audit_security_event(request, 'settings_password_change_success', 'success', actor=user)
+    return response
+

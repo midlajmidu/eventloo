@@ -96,8 +96,16 @@ const StudentsPage = () => {
 
   const fetchCategories = async () => {
     try {
-      const res = await categoriesAPI.list();
-      setCategories(res.data.results || res.data);
+      const res = await categoriesAPI.list({ standard_only: true });
+      const raw = res.data.results || res.data || [];
+      const standardCats = raw.filter(
+        (c) =>
+          !c.is_mixing &&
+          !['general', 'gen', 'gn', 'open', 'open category'].includes((c.code || '').toLowerCase()) &&
+          (c.name || '').toLowerCase() !== 'general' &&
+          (c.name || '').toLowerCase() !== 'open'
+      );
+      setCategories(standardCats);
     } catch (err) {
       console.error('Failed to fetch categories:', err);
     }
@@ -387,7 +395,7 @@ const StudentsPage = () => {
             </div>
             <select aria-label="Category" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setSelectedGrade(''); setCurrentPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100">
               <option value="">All categories</option>
-              {categories.filter(c => !c.is_mixing).map(cat => <option key={cat.code} value={cat.code}>{cat.name}</option>)}
+              {categories.filter(c => !c.is_mixing && !['general', 'gen', 'gn', 'open', 'open category'].includes((c.code || '').toLowerCase()) && (c.name || '').toLowerCase() !== 'general').map(cat => <option key={cat.code} value={cat.code}>{cat.name}</option>)}
             </select>
             <select aria-label="Grade" value={selectedGrade} onChange={(e) => { setSelectedGrade(e.target.value); setCurrentPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100">
               <option value="">All grades</option>
@@ -1212,7 +1220,7 @@ const AddStudentDrawer = ({
                     className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300 outline-none transition text-slate-800"
                   >
                     <option value="">Select Category</option>
-                    {categories.filter(c => c.is_active && !c.is_mixing).map(cat => (
+                    {categories.filter(c => (c.is_active ?? true) && !c.is_mixing && !['general', 'gen', 'gn', 'open', 'open category'].includes((c.code || '').toLowerCase()) && (c.name || '').toLowerCase() !== 'general').map(cat => (
                       <option key={cat.code} value={cat.code}>{cat.name}</option>
                     ))}
                   </select>

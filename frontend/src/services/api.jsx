@@ -19,7 +19,7 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Create a separate axios instance for report downloads (no auth)
+// Create a separate axios instance for report downloads
 const reportApi = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -30,6 +30,18 @@ const reportApi = axios.create({
   withCredentials: true,
 });
 
+// Attach access token to reportApi if available in localStorage
+reportApi.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('access_token') || localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 
 // Handle 401 on reportApi by refreshing token once, then retrying
 reportApi.interceptors.response.use(
@@ -38,35 +50,40 @@ reportApi.interceptors.response.use(
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/token/refresh/')) {
       originalRequest._retry = true;
-      const isTeamManager = localStorage.getItem('user_role') === 'team_manager' || !!localStorage.getItem('team_data');
-      if (isTeamManager) {
-        localStorage.removeItem('team_data');
-        localStorage.removeItem('user_role');
-        if (window.location.pathname !== '/team-manager/login') {
-          window.location.href = '/team-manager/login';
-        }
-        return Promise.reject(error);
-      }
+      const currentRole = localStorage.getItem('user_role');
+      const isTeamManager = currentRole === 'team_manager' || (!currentRole && !!localStorage.getItem('team_data') && !localStorage.getItem('user'));
+
       try {
-          await axios.post(
-            `${API_BASE_URL}token/refresh/`, {}, {
-              withCredentials: true,
-              headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            }
-          );
-          return reportApi(originalRequest);
+        await axios.post(
+          `${API_BASE_URL}token/refresh/`, {}, {
+            withCredentials: true,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          }
+        );
+        return reportApi(originalRequest);
       } catch (refreshError) {
-          // Clear and redirect to login on refresh failure
-          const loginPath = localStorage.getItem('user_role') === 'super_admin' ? '/super-admin/login' : '/login';
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem('user_role');
-          localStorage.removeItem('user');
-          if (window.location.pathname !== loginPath) {
-            window.location.href = loginPath;
+        if (isTeamManager) {
+          localStorage.removeItem('team_data');
+          if (localStorage.getItem('user_role') === 'team_manager') {
+            localStorage.removeItem('user_role');
+          }
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login?tab=team';
           }
           return Promise.reject(refreshError);
+        }
+
+        // Clear and redirect to login on refresh failure
+        const loginPath = currentRole === 'super_admin' ? '/super-admin/login' : '/login';
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_role');
+        localStorage.removeItem('user');
+        if (window.location.pathname !== loginPath) {
+          window.location.href = loginPath;
+        }
+        return Promise.reject(refreshError);
       }
     }
     return Promise.reject(error);
@@ -97,41 +114,44 @@ api.interceptors.response.use(
       && !isAuthenticationRequest
     ) {
       originalRequest._retry = true;
-
-      const isTeamManager = localStorage.getItem('user_role') === 'team_manager' || !!localStorage.getItem('team_data');
-      if (isTeamManager) {
-        localStorage.removeItem('team_data');
-        localStorage.removeItem('user_role');
-        if (window.location.pathname !== '/team-manager/login') {
-          window.location.href = '/team-manager/login';
-        }
-        return Promise.reject(error);
-      }
+      const currentRole = localStorage.getItem('user_role');
+      const isTeamManager = currentRole === 'team_manager' || (!currentRole && !!localStorage.getItem('team_data') && !localStorage.getItem('user'));
       
       try {
-          // Use a fresh axios instance to avoid interceptors
-          await axios.post(
-            `${API_BASE_URL}token/refresh/`, {}, {
-              withCredentials: true,
-              headers: { 'X-Requested-With': 'XMLHttpRequest' },
-            }
-          );
-          
-          return api(originalRequest);
+        // Use a fresh axios instance to avoid interceptors
+        await axios.post(
+          `${API_BASE_URL}token/refresh/`, {}, {
+            withCredentials: true,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+          }
+        );
+        
+        return api(originalRequest);
       } catch (refreshError) {
-          // Clear all auth data
-          const loginPath = localStorage.getItem('user_role') === 'super_admin' ? '/super-admin/login' : '/login';
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem('user_role');
-          localStorage.removeItem('user');
-          
-          // Only redirect if not already on login page
-          if (window.location.pathname !== loginPath) {
-            window.location.href = loginPath;
+        if (isTeamManager) {
+          localStorage.removeItem('team_data');
+          if (localStorage.getItem('user_role') === 'team_manager') {
+            localStorage.removeItem('user_role');
+          }
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login?tab=team';
           }
           return Promise.reject(refreshError);
+        }
+
+        // Clear all auth data
+        const loginPath = currentRole === 'super_admin' ? '/super-admin/login' : '/login';
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_role');
+        localStorage.removeItem('user');
+        
+        // Only redirect if not already on login page
+        if (window.location.pathname !== loginPath) {
+          window.location.href = loginPath;
+        }
+        return Promise.reject(refreshError);
       }
     }
     
@@ -170,6 +190,11 @@ export const authAPI = {
   refreshToken: () => api.post('token/refresh/', {}),
   getProfile: () => api.get('profile/'),
   getUserProfile: () => api.get('profile/'),
+  // OTP Password Reset & Settings Change
+  requestForgotPasswordOtp: (email) => api.post('auth/forgot-password/request-otp/', { email }),
+  verifyAndResetPassword: (data) => api.post('auth/forgot-password/verify-reset/', data),
+  requestSettingsPasswordOtp: () => api.post('auth/settings/request-password-otp/', {}),
+  changeSettingsPasswordWithOtp: (data) => api.post('auth/settings/change-password-with-otp/', data),
   // Utility function to clear auth state
   clearAuthState: () => {
     localStorage.removeItem('access_token');
@@ -265,10 +290,34 @@ export const eventsAPI = {
   getEvent: (id) => api.get(`events/${id}/`),
   
   // Create a new event
-  createEvent: (data) => api.post('events/', data),
+  createEvent: (data) => {
+    if (data instanceof FormData) {
+      return api.post('events/', data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.post('events/', data);
+  },
   
   // Update an event
-  updateEvent: (id, data) => api.put(`events/${id}/`, data),
+  updateEvent: (id, data) => {
+    if (data instanceof FormData) {
+      return api.put(`events/${id}/`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.put(`events/${id}/`, data);
+  },
+  
+  // Partial update an event (PATCH)
+  patchEvent: (id, data) => {
+    if (data instanceof FormData) {
+      return api.patch(`events/${id}/`, data, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+    }
+    return api.patch(`events/${id}/`, data);
+  },
   
   // Delete an event
   deleteEvent: (id) => api.delete(`events/${id}/`),
@@ -619,6 +668,10 @@ export const eventCallListAPI = {
   generateCallList: (eventId, params = {}) => {
     const queryString = new URLSearchParams(params).toString();
     return reportApi.get(`events/${eventId}/call-list/?${queryString}`, { responseType: 'blob' });
+  },
+  getCallListData: (eventId, params = {}) => {
+    const queryString = new URLSearchParams({ ...params, format: 'json' }).toString();
+    return api.get(`events/${eventId}/call-list/?${queryString}`);
   }
 };
 
@@ -654,8 +707,17 @@ export const eventProgramsAPI = {
   getChestNumbers: (eventId, params = {}) => api.get(`events/${eventId}/chest_numbers/`, { params }),
 };
 
+export const eventProgramTypesAPI = {
+  list: (eventId, params = {}) => api.get(`events/${eventId}/program-types/`, { params }),
+  create: (eventId, data) => api.post(`events/${eventId}/program-types/`, data),
+  update: (eventId, typeId, data) => api.put(`events/${eventId}/program-types/${typeId}/`, data),
+  patch: (eventId, typeId, data) => api.patch(`events/${eventId}/program-types/${typeId}/`, data),
+  remove: (eventId, typeId) => api.delete(`events/${eventId}/program-types/${typeId}/`),
+};
+
 export const eventStagesAPI = {
   list: (eventId, params = {}) => api.get(`events/${eventId}/stages/`, { params }),
+  getStages: (eventId, params = {}) => api.get(`events/${eventId}/stages/`, { params }),
   create: (eventId, data) => api.post(`events/${eventId}/stages/`, data),
   update: (eventId, stageId, data) => api.patch(`events/${eventId}/stages/${stageId}/`, data),
   remove: (eventId, stageId) => api.delete(`events/${eventId}/stages/${stageId}/`),
@@ -719,9 +781,13 @@ export const eventAssignmentsAPI = {
   getAvailableStudents: (params) => api.get('students/', { params }),
 };
 
-// Event Results API
 export const eventResultsAPI = {
-  getProgramResults: (programId) => api.get(`programs/${programId}/results/`),
+  getProgramResults: (eventIdOrProgramId, maybeProgramId) => {
+    if (maybeProgramId) {
+      return api.get(`events/${eventIdOrProgramId}/programs/${maybeProgramId}/results/`);
+    }
+    return api.get(`events/${eventIdOrProgramId}/programs/${eventIdOrProgramId}/results/`);
+  },
   enterResults: (programId, data) => api.post(`programs/${programId}/results/`, data),
   updateResults: (programId, resultId, data) => api.put(`programs/${programId}/results/${resultId}/`, data),
   generateResultsPDF: (programId) => api.get(`programs/${programId}/results/pdf/`, { responseType: 'blob' }),
@@ -841,7 +907,7 @@ export const schoolSettingsAPI = {
 
 // Categories API
 export const categoriesAPI = {
-  list: () => api.get('categories/'),
+  list: (params = {}) => api.get('categories/', { params }),
   create: (data) => api.post('categories/', data),
   update: (id, data) => api.put(`categories/${id}/`, data),
   delete: (id) => api.delete(`categories/${id}/`),

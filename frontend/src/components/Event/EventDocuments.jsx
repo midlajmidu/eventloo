@@ -457,7 +457,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
         pageCount++;
         const pageBreak = pageCount > 1 ? 'style="page-break-before: always;"' : '';
         const mode = resultProgram.is_team_based ? 'Group' : 'Individual';
-        const stageType = resultProgram.program_type === 'off_stage' ? 'Off Stage' : 'Stage';
+        const stageType = resultProgram.program_type_display || (resultProgram.program_type ? resultProgram.program_type.replace(/_/g, ' ') : 'Stage');
         const categoryName = formatCategory(resultProgram);
 
         const rowsHtml = programResults.length > 0

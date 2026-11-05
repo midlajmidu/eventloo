@@ -97,11 +97,22 @@ const AdminDashboard = () => {
   ), [dashboardData]);
 
   const participantsByCategory = useMemo(() => (
-    (dashboardData?.participantsByCategory || []).map((category, index) => ({
-      ...category,
-      participants: Number(category.participants || 0),
-      color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
-    }))
+    (dashboardData?.participantsByCategory || [])
+      .filter((category) => {
+        const code = (category.code || '').toLowerCase();
+        const name = (category.name || '').toLowerCase();
+        return (
+          !category.is_mixing &&
+          !['general', 'gen', 'gn', 'open', 'open category'].includes(code) &&
+          name !== 'general' &&
+          name !== 'open'
+        );
+      })
+      .map((category, index) => ({
+        ...category,
+        participants: Number(category.participants || 0),
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
+      }))
   ), [dashboardData]);
 
   const totalEvents = Number(dashboardData?.totalEvents || 0);

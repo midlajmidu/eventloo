@@ -16,17 +16,31 @@ const ProtectedRoute = ({ children, requiredRole = null, allowedRoles = null }) 
     let active = true;
     const verify = async () => {
       try {
-        let role;
+        let role = null;
+        const currentStoredRole = localStorage.getItem('user_role');
+        const teamDataRaw = localStorage.getItem('team_data');
         const isTeamManagerExpected = requiredRole === 'team_manager' || (allowedRoles && allowedRoles.includes('team_manager'));
-        if (isTeamManagerExpected && localStorage.getItem('team_data')) {
-          const team = JSON.parse(localStorage.getItem('team_data'));
-          await teamManagerAPI.getTeamProfile(team.id);
-          role = 'team_manager';
-        } else {
-          const response = await authAPI.getProfile();
-          role = response.data.role;
+
+        if ((isTeamManagerExpected || currentStoredRole === 'team_manager') && teamDataRaw) {
+          try {
+            const team = JSON.parse(teamDataRaw);
+            if (team?.id) {
+              await teamManagerAPI.getTeamProfile(team.id);
+              role = 'team_manager';
+            }
+          } catch {
+            // If team profile check fails, fallback to general auth profile
+          }
         }
-        if (active) setState({ loading: false, role, valid: true });
+
+        if (!role) {
+          const response = await authAPI.getProfile();
+          role = response.data?.role;
+        }
+
+        if (active) {
+          setState({ loading: false, role, valid: Boolean(role) });
+        }
       } catch (_) {
         if (active) setState({ loading: false, role: null, valid: false });
       }
@@ -39,7 +53,11 @@ const ProtectedRoute = ({ children, requiredRole = null, allowedRoles = null }) 
     return <div className="min-h-screen bg-slate-50" aria-busy="true" />;
   }
   if (!state.valid) {
-    return <Navigate to={requiredRole === 'super_admin' ? '/super-admin/login' : '/login'} replace />;
+    if (requiredRole === 'super_admin') return <Navigate to="/super-admin/login" replace />;
+    if (requiredRole === 'team_manager' || localStorage.getItem('user_role') === 'team_manager') {
+      return <Navigate to="/login?tab=team" replace />;
+    }
+    return <Navigate to="/login" replace />;
   }
   if (allowedRoles && !allowedRoles.includes(state.role)) {
     return <Navigate to={destinationFor(state.role)} replace />;

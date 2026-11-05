@@ -14,6 +14,7 @@ router.register(r'team-manager', views.TeamManagerViewSet, basename='team-manage
 # Create nested routers for programs
 events_router = routers.NestedDefaultRouter(router, r'events', lookup='event')
 events_router.register(r'stages', views.EventStageViewSet, basename='event-stages')
+events_router.register(r'program-types', views.EventProgramTypeViewSet, basename='event-program-types')
 events_router.register(r'programs', views.ProgramViewSet, basename='event-programs')
 
 # Create nested routers for program assignments and results

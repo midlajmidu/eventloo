@@ -16,13 +16,104 @@ import {
   X,
   CheckCircle2,
   Trophy,
+  ShieldCheck,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Mail,
 } from 'lucide-react';
-import { schoolSettingsAPI, categoriesAPI, classesAPI } from '../../services/api';
+import { schoolSettingsAPI, categoriesAPI, classesAPI, authAPI } from '../../services/api';
 
 const AdminSettings = () => {
   // 1st tab is School Settings as requested
   const [tab, setTab] = useState('schoolDetails');
   const [toast, setToast] = useState(null);
+
+  // Security & Password OTP state
+  const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+  const [pwdCurrent, setPwdCurrent] = useState('');
+  const [pwdOtp, setPwdOtp] = useState('');
+  const [pwdNew, setPwdNew] = useState('');
+  const [pwdConfirm, setPwdConfirm] = useState('');
+  const [pwdShowCurrent, setPwdShowCurrent] = useState(false);
+  const [pwdShowNew, setPwdShowNew] = useState(false);
+  const [pwdLoading, setPwdLoading] = useState(false);
+  const [pwdOtpSent, setPwdOtpSent] = useState(false);
+  const [pwdOtpCountdown, setPwdOtpCountdown] = useState(0);
+  const [pwdError, setPwdError] = useState('');
+  const [pwdSuccess, setPwdSuccess] = useState('');
+
+  useEffect(() => {
+    let timer;
+    if (pwdOtpCountdown > 0) {
+      timer = setInterval(() => {
+        setPwdOtpCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [pwdOtpCountdown]);
+
+  const handleRequestPasswordOtp = async () => {
+    setPwdError('');
+    setPwdSuccess('');
+    setPwdLoading(true);
+    try {
+      const res = await authAPI.requestSettingsPasswordOtp();
+      setPwdOtpSent(true);
+      setPwdOtpCountdown(60);
+      setPwdSuccess(res.data?.message || 'Verification code sent to your email.');
+    } catch (err) {
+      const msg = err.response?.data?.error || err.response?.data?.detail || 'Failed to send verification code. Please try again.';
+      setPwdError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setPwdLoading(false);
+    }
+  };
+
+  const handleChangePasswordWithOtp = async (e) => {
+    e.preventDefault();
+    setPwdError('');
+    setPwdSuccess('');
+    if (!pwdCurrent) {
+      setPwdError('Please enter your current password.');
+      return;
+    }
+    if (!pwdOtp || pwdOtp.trim().length !== 6) {
+      setPwdError('Please enter the 6-digit verification code sent to your email.');
+      return;
+    }
+    if (!pwdNew) {
+      setPwdError('Please enter your new password.');
+      return;
+    }
+    if (pwdNew.length < 8) {
+      setPwdError('New password must be at least 8 characters long.');
+      return;
+    }
+    if (pwdNew !== pwdConfirm) {
+      setPwdError('New password and confirmation do not match.');
+      return;
+    }
+    setPwdLoading(true);
+    try {
+      const res = await authAPI.changeSettingsPasswordWithOtp({
+        current_password: pwdCurrent,
+        otp: pwdOtp.trim(),
+        new_password: pwdNew,
+      });
+      setPwdSuccess(res.data?.message || 'Password updated successfully!');
+      setPwdCurrent('');
+      setPwdOtp('');
+      setPwdNew('');
+      setPwdConfirm('');
+      setPwdOtpSent(false);
+    } catch (err) {
+      const msg = err.response?.data?.error || err.response?.data?.detail || 'Failed to update password. Please check your verification code and password.';
+      setPwdError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setPwdLoading(false);
+    }
+  };
 
   // School details state
   const [school, setSchool] = useState(null);
@@ -74,6 +165,19 @@ const AdminSettings = () => {
       const res = await schoolSettingsAPI.get();
       setSchool(res.data);
       setLogoPreview(res.data.school_logo || null);
+      if (res.data?.school_logo) {
+        try {
+          const stored = JSON.parse(localStorage.getItem('school_data') || '{}');
+          stored.school_logo = res.data.school_logo;
+          stored.logo = res.data.school_logo;
+          stored.name = res.data.school_name || stored.name;
+          localStorage.setItem('school_data', JSON.stringify(stored));
+          localStorage.setItem('school_logo', res.data.school_logo);
+          window.dispatchEvent(new CustomEvent('eventloo_school_updated', { detail: { school_logo: res.data.school_logo } }));
+        } catch {
+          // ignore
+        }
+      }
     } catch (err) {
       setToast({ type: 'error', message: 'Failed to load school settings.' });
     } finally {
@@ -389,6 +493,18 @@ const AdminSettings = () => {
             >
               <Download className="w-4 h-4" />
               <span>Import / Export</span>
+            </button>
+            <button
+              type="button"
+              className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs sm:text-sm font-medium transition-all ${
+                tab === 'security'
+                  ? 'bg-white text-indigo-700 shadow-2xs font-semibold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              onClick={() => setTab('security')}
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>Security & Password</span>
             </button>
           </div>
 
@@ -1043,6 +1159,198 @@ const AdminSettings = () => {
                 </div>
 
               </div>
+            </div>
+          )}
+
+          {/* ============================================================== */}
+          {/* TAB 5: SECURITY & PASSWORD (OTP VERIFIED)                     */}
+          {/* ============================================================== */}
+          {tab === 'security' && (
+            <div className="space-y-6">
+              <div className="border-b border-slate-100 pb-4">
+                <h3 className="text-base font-bold text-slate-900">Account Security & Password Settings</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Change your administrator password securely using two-step email OTP verification.
+                </p>
+              </div>
+
+              {/* Delivery Notice Card */}
+              <div className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-indigo-50/80 to-blue-50/60 p-4 sm:p-5 flex items-start gap-3.5">
+                <div className="p-2 rounded-xl bg-indigo-600 text-white shrink-0 mt-0.5 shadow-sm">
+                  <ShieldCheck className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                    Two-Step OTP Security Active
+                  </h4>
+                  <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                    To safeguard administrative access, password updates require an authorization code sent directly to your registered email address:{' '}
+                    <strong className="text-indigo-950 font-semibold">{currentUser.email || 'your registered email'}</strong>.
+                  </p>
+                  <div className="mt-2.5 flex items-center gap-2 text-[11px] text-indigo-700 font-medium">
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Sender: <strong>Eventloo Security (noreply@eventloo.in)</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Error & Success Banners */}
+              {pwdError && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-3.5 text-xs text-rose-800 flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed font-medium">{pwdError}</div>
+                </div>
+              )}
+
+              {pwdSuccess && (
+                <div className="rounded-xl border border-emerald-200 bg-emerald-50/90 p-3.5 text-xs text-emerald-800 flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed font-medium">{pwdSuccess}</div>
+                </div>
+              )}
+
+              {/* Password Change Form Card */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-7 shadow-2xs">
+                <form onSubmit={handleChangePasswordWithOtp} className="space-y-5 max-w-xl">
+                  
+                  {/* Current Password Field */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Current Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      <input
+                        type={pwdShowCurrent ? 'text' : 'password'}
+                        value={pwdCurrent}
+                        onChange={(e) => setPwdCurrent(e.target.value)}
+                        placeholder="Enter your current password"
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-10 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/70 outline-none transition-all"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPwdShowCurrent(!pwdShowCurrent)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                      >
+                        {pwdShowCurrent ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* OTP Verification Field & Request Button */}
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-800">
+                          6-Digit Email Verification Code (OTP)
+                        </label>
+                        <p className="text-[11px] text-slate-500">
+                          {pwdOtpSent ? 'Code sent to your email. Valid for 5 minutes.' : 'Click request to receive your 6-digit code.'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRequestPasswordOtp}
+                        disabled={pwdLoading || pwdOtpCountdown > 0}
+                        className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-bold shadow-2xs transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                      >
+                        {pwdLoading && !pwdOtpSent ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Sending...</span>
+                          </>
+                        ) : pwdOtpCountdown > 0 ? (
+                          <span>Resend in {pwdOtpCountdown}s</span>
+                        ) : (
+                          <>
+                            <Mail className="w-3.5 h-3.5" />
+                            <span>{pwdOtpSent ? 'Resend OTP' : 'Request OTP Code'}</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <input
+                      type="text"
+                      value={pwdOtp}
+                      onChange={(e) => setPwdOtp(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                      placeholder="0 0 0 0 0 0"
+                      maxLength={6}
+                      className="h-11 w-full rounded-xl border border-slate-200 bg-white text-center font-mono text-base tracking-[8px] font-bold text-indigo-700 placeholder:text-slate-300 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/70 outline-none transition-all shadow-2xs"
+                      required
+                    />
+                  </div>
+
+                  {/* New Password Field */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      <input
+                        type={pwdShowNew ? 'text' : 'password'}
+                        value={pwdNew}
+                        onChange={(e) => setPwdNew(e.target.value)}
+                        placeholder="At least 8 characters"
+                        minLength={8}
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-10 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/70 outline-none transition-all"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPwdShowNew(!pwdShowNew)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1"
+                      >
+                        {pwdShowNew ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Confirm New Password Field */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Confirm New Password
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                      <input
+                        type={pwdShowNew ? 'text' : 'password'}
+                        value={pwdConfirm}
+                        onChange={(e) => setPwdConfirm(e.target.value)}
+                        placeholder="Re-enter new password"
+                        minLength={8}
+                        className="h-11 w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/70 outline-none transition-all"
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={pwdLoading}
+                      className="h-11 w-full sm:w-auto px-8 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-xs tracking-wide shadow-sm hover:shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {pwdLoading ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Updating Password...</span>
+                        </>
+                      ) : (
+                        <>
+                          <KeyRound className="w-4 h-4" />
+                          <span>Verify OTP & Update Password</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                </form>
+              </div>
+
             </div>
           )}
 

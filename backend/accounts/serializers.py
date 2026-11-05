@@ -86,6 +86,12 @@ class HardenedTokenRefreshSerializer(TokenRefreshSerializer):
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     school_code = serializers.SlugField(write_only=True, required=False, allow_blank=True, default='')
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if 'email' in self.fields:
+            self.fields['email'].required = False
+        self.fields['username'] = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
+
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
@@ -98,11 +104,37 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
     def validate(self, attrs):
         school_code = attrs.pop('school_code', '').strip().lower()
+        username_or_email = str(attrs.get('email') or attrs.get('username') or attrs.get(self.username_field, '')).strip()
+        password = attrs.get('password', '')
+
+        if not username_or_email:
+            raise serializers.ValidationError({
+                'detail': 'Email or username is required.'
+            })
+
+        # Check account existence
+        user_candidate = User.objects.filter(
+            Q(email__iexact=username_or_email) | Q(username__iexact=username_or_email)
+        ).first()
+
+        if not user_candidate:
+            raise serializers.ValidationError({
+                'detail': 'No account found with this email address.'
+            })
+
+        if not user_candidate.check_password(password):
+            raise serializers.ValidationError({
+                'detail': 'Incorrect password. Please verify your password and try again.'
+            })
+
+        # Ensure SimpleJWT authenticates against the canonical email / username field
+        attrs[self.username_field] = user_candidate.email or user_candidate.get_username()
         data = super().validate(attrs)
+
         if self.user.is_superuser or self.user.role == 'super_admin':
             raise serializers.ValidationError('Use the super-admin login page for this account.')
         if self.user.role not in ('admin', 'event_manager'):
-            raise serializers.ValidationError('Invalid credentials.')
+            raise serializers.ValidationError('This account is not authorized to access the school portal.')
         if not self.user.school_id:
             raise serializers.ValidationError('User is not associated with an active school.')
         if self.user.school.status != 'active':
@@ -111,6 +143,17 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise serializers.ValidationError('Invalid school code or credentials.')
         
         # Add custom user data to the response
+        school_logo_url = None
+        try:
+            if self.user.school:
+                settings_obj = getattr(self.user.school, 'settings', None)
+                if settings_obj and settings_obj.school_logo:
+                    school_logo_url = settings_obj.school_logo.url
+                elif self.user.school.logo:
+                    school_logo_url = self.user.school.logo.url
+        except Exception:
+            pass
+
         data['user'] = {
             'id': self.user.id,
             'email': self.user.email,
@@ -120,6 +163,8 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
                 'id': self.user.school_id,
                 'name': self.user.school.name,
                 'code': self.user.school.code,
+                'logo': school_logo_url,
+                'school_logo': school_logo_url,
             },
         }
         
@@ -146,6 +191,9 @@ class TeamManagerLoginSerializer(serializers.Serializer):
         if school_code:
             teams = teams.filter(school__code=school_code)
         
+        if not teams.exists():
+            raise serializers.ValidationError("No team account found with this username.")
+            
         from django.contrib.auth.hashers import check_password
         matched_team = None
         for team in teams:
@@ -154,7 +202,7 @@ class TeamManagerLoginSerializer(serializers.Serializer):
                 break
         
         if not matched_team:
-            raise serializers.ValidationError("Invalid team credentials")
+            raise serializers.ValidationError("Incorrect team password. Please verify and try again.")
         
         # Store team in validated data for use in view
         attrs['team'] = matched_team
@@ -558,6 +606,20 @@ class SchoolCreateSerializer(serializers.ModelSerializer):
                 is_staff=False,
                 is_superuser=False,
             )
+
+        # Send welcome email to school admin from contact@eventloo.in
+        try:
+            from accounts.email_service import send_school_admin_welcome_email
+            send_school_admin_welcome_email(
+                to_email=admin_email,
+                name=admin_name,
+                school_name=school.name,
+                password=admin_password,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send school admin welcome email: {e}")
+
         return school
 
 # Note: PointsRecord and TeamProfile serializers are in events/serializers.py

@@ -285,6 +285,26 @@ class EventBusinessLogicTests(TestCase):
             text = '\n'.join(page.extract_text() or '' for page in PdfReader(BytesIO(document.content)).pages)
             self.assertIn('Female', text, url)
 
+    def test_team_manager_can_access_and_download_call_list_pdf(self):
+        from events.permissions import TeamScopedPrincipal
+        principal = TeamScopedPrincipal(self.team)
+        client = APIClient()
+        client.force_authenticate(user=principal)
+
+        # JSON format
+        res_json = client.get(f'/api/events/{self.event.id}/call-list/?format=json')
+        self.assertEqual(res_json.status_code, 200)
+        json_data = res_json.json()
+        self.assertIn('items', json_data)
+        self.assertEqual(json_data['mode'], 'team')
+
+        # PDF format
+        res_pdf = client.get(f'/api/events/{self.event.id}/call-list/')
+        self.assertEqual(res_pdf.status_code, 200)
+        self.assertEqual(res_pdf['Content-Type'], 'application/pdf')
+        self.assertTrue(res_pdf['Content-Disposition'].startswith('inline; filename="Call_List_'))
+        self.assertGreater(len(res_pdf.content), 100)
+
     def test_certificate_templates_persist_and_validate_uploaded_images(self):
         client = APIClient()
         client.force_authenticate(self.admin)
@@ -805,6 +825,56 @@ class EventBusinessLogicTests(TestCase):
                 student_ids=[self.students[0].id],
             )
 
+    def test_category_specific_participation_limits_onstage_offstage_total(self):
+        self.event.category_participation_limits = {
+            'junior': {
+                'max_total': 3,
+                'max_onstage': 2,
+                'max_offstage': 1,
+                'max_single': 3,
+                'max_group': 3,
+            }
+        }
+        self.event.save(update_fields=['category_participation_limits'])
+
+        # 1. On-Stage Program 1 (Limit: 2) -> Succeeds
+        p1 = Program.objects.create(
+            event=self.event, name='Junior Drama', category='junior',
+            program_type='stage', is_team_based=False, max_participants=2,
+        )
+        assign_students(user=self.admin, team=self.team, program=p1, student_ids=[self.students[0].id])
+
+        # 2. On-Stage Program 2 (Limit: 2) -> Succeeds
+        p2 = Program.objects.create(
+            event=self.event, name='Junior Dance', category='junior',
+            program_type='stage', is_team_based=False, max_participants=2,
+        )
+        assign_students(user=self.admin, team=self.team, program=p2, student_ids=[self.students[0].id])
+
+        # 3. On-Stage Program 3 -> Must fail because max_onstage = 2
+        p3 = Program.objects.create(
+            event=self.event, name='Junior Mimicry', category='junior',
+            program_type='stage', is_team_based=False, max_participants=2,
+        )
+        with self.assertRaises(ValidationError) as ctx:
+            assign_students(user=self.admin, team=self.team, program=p3, student_ids=[self.students[0].id])
+        self.assertIn('stage', str(ctx.exception).lower())
+
+        # 4. Off-Stage Program 1 (Limit: 1) -> Succeeds
+        p4 = Program.objects.create(
+            event=self.event, name='Junior Painting', category='junior',
+            program_type='off_stage', is_team_based=False, max_participants=2,
+        )
+        assign_students(user=self.admin, team=self.team, program=p4, student_ids=[self.students[0].id])
+
+        # 5. Off-Stage Program 2 -> Must fail because max_offstage = 1 AND max_total = 3 reached
+        p5 = Program.objects.create(
+            event=self.event, name='Junior Pencil Drawing', category='junior',
+            program_type='off_stage', is_team_based=False, max_participants=2,
+        )
+        with self.assertRaises(ValidationError):
+            assign_students(user=self.admin, team=self.team, program=p5, student_ids=[self.students[0].id])
+
     def test_marks_require_all_judges_and_respect_maximum(self):
         program = Program.objects.create(event=self.event, name='Marks', category='junior')
         assign_students(
@@ -839,7 +909,7 @@ class EventBusinessLogicTests(TestCase):
         recalculate_program_results(program)
         self.assertEqual(
             list(ProgramResult.objects.filter(program=program).order_by('id').values_list('position', flat=True)),
-            [1, 1, 3],
+            [1, 1, 2],
         )
         self.assertFalse(PointsRecord.objects.filter(source_result__program=program).exists())
 
@@ -1140,25 +1210,33 @@ class EventBusinessLogicTests(TestCase):
         fourth = ProgramResult.objects.get(program=program, position=4)
         self.assertEqual(fourth.points_earned, 2)
 
-    def test_program_grade_points_replace_instead_of_add_to_placement_points(self):
+    def test_program_grade_points_add_as_bonus_to_placement_points(self):
         self.event.enable_grading_system = True
+        self.event.std_ind_first = 5
+        self.event.std_ind_second = 3
+        self.event.std_ind_third = 1
+        self.event.participation_points = 0
         self.event.grading_rules = [
-            {'name': 'A+', 'min_mark': 90, 'max_mark': 100},
-            {'name': 'A', 'min_mark': 80, 'max_mark': 89.99},
+            {'name': 'A+', 'min_mark': 90, 'max_mark': 100, 'bonus_points': 3},
+            {'name': 'A',  'min_mark': 80, 'max_mark': 89.99, 'bonus_points': 2},
+            {'name': 'B+', 'min_mark': 70, 'max_mark': 79.99, 'bonus_points': 1},
+            {'name': 'B',  'min_mark': 60, 'max_mark': 69.99, 'bonus_points': 0},
         ]
         self.event.max_single_programs_per_student = 4
         self.event.save(update_fields=[
             'enable_grading_system', 'grading_rules',
+            'std_ind_first', 'std_ind_second', 'std_ind_third',
+            'participation_points',
             'max_single_programs_per_student',
         ])
         program = Program.objects.create(
             event=self.event,
-            name='Absolute Grade Points',
+            name='Bonus Grade Points Event',
             category='junior',
-            max_participants=2,
-            grading_points={'A+': 10},
+            max_participants=4,
         )
-        for student, mark in zip(self.students[:2], (Decimal('95'), Decimal('85'))):
+        scores = (Decimal('95'), Decimal('85'), Decimal('75'), Decimal('72'))
+        for student, mark in zip(self.students[:4], scores):
             assign_students(
                 user=self.admin, team=self.team, program=program,
                 student_ids=[student.id],
@@ -1170,15 +1248,111 @@ class EventBusinessLogicTests(TestCase):
             result.save()
 
         recalculate_program_results(program)
-        winner = ProgramResult.objects.get(program=program, position=1)
-        runner_up = ProgramResult.objects.get(program=program, position=2)
+        first = ProgramResult.objects.get(program=program, position=1)
+        second = ProgramResult.objects.get(program=program, position=2)
+        third = ProgramResult.objects.get(program=program, position=3)
+        fourth = ProgramResult.objects.get(program=program, position=4)
 
-        self.assertEqual(winner.grade, 'A+')
-        self.assertEqual(winner.points_earned, 10)
-        self.assertEqual(winner.grade_extra_points, 10)
-        self.assertEqual(runner_up.grade, 'A')
-        self.assertEqual(runner_up.points_earned, self.event.std_ind_second)
-        self.assertEqual(runner_up.grade_extra_points, 0)
+        # 1st place: 5 placement + 3 (A+) bonus = 8 pts
+        self.assertEqual(first.grade, 'A+')
+        self.assertEqual(first.grade_extra_points, 3)
+        self.assertEqual(first.points_earned, 8)
+
+        # 2nd place: 3 placement + 2 (A) bonus = 5 pts
+        self.assertEqual(second.grade, 'A')
+        self.assertEqual(second.grade_extra_points, 2)
+        self.assertEqual(second.points_earned, 5)
+
+        # 3rd place: 1 placement + 1 (B+) bonus = 2 pts
+        self.assertEqual(third.grade, 'B+')
+        self.assertEqual(third.grade_extra_points, 1)
+        self.assertEqual(third.points_earned, 2)
+
+        # 4th place: 0 placement + 1 (B+) bonus = 1 pt!
+        self.assertEqual(fourth.grade, 'B+')
+        self.assertEqual(fourth.grade_extra_points, 1)
+        self.assertEqual(fourth.points_earned, 1)
+
+    def test_event_api_accepts_and_persists_bonus_points_in_grading_rules(self):
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        url = f'/api/events/{self.event.id}/'
+        response = client.patch(url, {
+            'enable_grading_system': True,
+            'grading_rules': [
+                {'name': 'A+', 'min_mark': 90, 'max_mark': 100, 'bonus_points': 3},
+                {'name': 'A', 'min_mark': 80, 'max_mark': 89.99, 'bonus_points': 2},
+                {'name': 'B+', 'min_mark': 70, 'max_mark': 79.99, 'bonus_points': 1},
+                {'name': 'B', 'min_mark': 60, 'max_mark': 69.99, 'bonus_points': 0},
+            ]
+        }, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.grading_rules[0]['bonus_points'], 3)
+        self.assertEqual(self.event.grading_rules[1]['bonus_points'], 2)
+        self.assertEqual(self.event.grading_rules[2]['bonus_points'], 1)
+        self.assertEqual(self.event.grading_rules[3]['bonus_points'], 0)
+
+    def test_grading_system_with_converted_total_mark_50(self):
+        self.event.enable_grading_system = True
+        self.event.std_ind_first = 5
+        self.event.std_ind_second = 3
+        self.event.std_ind_third = 1
+        self.event.participation_points = 0
+        self.event.converted_total_mark = Decimal('50.00')
+        self.event.max_mark_per_judge = Decimal('100.00')
+        self.event.num_judges = 2
+        self.event.grading_rules = [
+            {'name': 'A+', 'min_mark': 45, 'max_mark': 50, 'bonus_points': 3},
+            {'name': 'A',  'min_mark': 40, 'max_mark': 44.99, 'bonus_points': 2},
+            {'name': 'B+', 'min_mark': 35, 'max_mark': 39.99, 'bonus_points': 1},
+            {'name': 'B',  'min_mark': 30, 'max_mark': 34.99, 'bonus_points': 0},
+        ]
+        self.event.save()
+
+        program = Program.objects.create(
+            event=self.event,
+            name='50 Mark Scale Event',
+            category='junior',
+            max_participants=4,
+        )
+        raw_marks = (Decimal('190'), Decimal('165'), Decimal('145'), Decimal('142'))
+        for student, raw in zip(self.students[:4], raw_marks):
+            assign_students(
+                user=self.admin, team=self.team, program=program,
+                student_ids=[student.id],
+            )
+            result = ProgramResult.objects.get(program=program, participant=student)
+            result.judge1_marks = raw / 2
+            result.judge2_marks = raw / 2
+            result.entry_status = 'submitted'
+            result.save()
+
+        recalculate_program_results(program)
+        first = ProgramResult.objects.get(program=program, position=1)
+        second = ProgramResult.objects.get(program=program, position=2)
+        third = ProgramResult.objects.get(program=program, position=3)
+        fourth = ProgramResult.objects.get(program=program, position=4)
+
+        # 1st place: 47.50 marks out of 50 -> A+ -> 5 + 3 = 8
+        self.assertEqual(first.total_marks, Decimal('47.50'))
+        self.assertEqual(first.grade, 'A+')
+        self.assertEqual(first.points_earned, 8)
+
+        # 2nd place: 41.25 marks out of 50 -> A -> 3 + 2 = 5
+        self.assertEqual(second.total_marks, Decimal('41.25'))
+        self.assertEqual(second.grade, 'A')
+        self.assertEqual(second.points_earned, 5)
+
+        # 3rd place: 36.25 marks out of 50 -> B+ -> 1 + 1 = 2
+        self.assertEqual(third.total_marks, Decimal('36.25'))
+        self.assertEqual(third.grade, 'B+')
+        self.assertEqual(third.points_earned, 2)
+
+        # 4th place: 35.50 marks out of 50 -> B+ -> 0 + 1 = 1
+        self.assertEqual(fourth.total_marks, Decimal('35.50'))
+        self.assertEqual(fourth.grade, 'B+')
+        self.assertEqual(fourth.points_earned, 1)
 
     def test_program_api_accepts_grade_points_on_direct_create_route(self):
         self.event.enable_grading_system = True
@@ -1544,6 +1718,33 @@ class EventBusinessLogicTests(TestCase):
         self.assertEqual(pub_response.status_code, 200)
         program.refresh_from_db()
         self.assertTrue(program.is_published)
+
+    def test_bulk_mark_entry_with_decimal_values_succeeds_without_precision_error(self):
+        program = Program.objects.create(
+            event=self.event, name='Decimal Mark Test', category='junior',
+            is_team_based=False, max_participants=2, num_judges=2,
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=program,
+            student_ids=[self.students[0].id],
+        )
+        res = ProgramResult.objects.get(program=program, participant=self.students[0])
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        endpoint = f'/api/events/{self.event.id}/programs/{program.id}/results/bulk_mark_entry/'
+
+        # Send float 45.02 which in IEEE 754 float representation causes multi-decimal expansion
+        marks = [
+            {'id': res.id, 'code_letter': 'A', 'judge1_marks': 45.02, 'judge2_marks': 42.35},
+        ]
+        response = client.post(endpoint, {'marks': marks, 'entry_status': 'submitted'}, format='json')
+        self.assertEqual(response.status_code, 200)
+
+        res.refresh_from_db()
+        self.assertEqual(res.entry_status, 'submitted')
+        from decimal import Decimal
+        self.assertEqual(res.judge1_marks, Decimal('45.02'))
+        self.assertEqual(res.judge2_marks, Decimal('42.35'))
 
     def test_global_points_sum_each_published_event_percentage(self):
         opponent = User.objects.create_user(
@@ -2024,6 +2225,16 @@ class MultiSchoolIsolationTests(TestCase):
         client = APIClient()
         client.force_authenticate(student)
         self.assertEqual(client.get('/api/profile/').status_code, 403)
+
+    def test_team_manager_can_use_profile_endpoint(self):
+        team = Team.objects.create(name='Tigers', school=self.school_a, team_username='tigers_lead', team_password='TigersPassword123')
+        from events.permissions import TeamScopedPrincipal
+        client = APIClient()
+        client.force_authenticate(TeamScopedPrincipal(team))
+        res = client.get('/api/profile/')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.data['role'], 'team_manager')
+        self.assertEqual(res.data['id'], team.id)
 
     def test_excel_upload_signature_validation_rejects_renamed_text(self):
         upload = SimpleUploadedFile('students.xlsx', b'not an excel workbook')

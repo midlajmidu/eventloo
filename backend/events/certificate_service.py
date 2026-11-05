@@ -256,7 +256,27 @@ def _draw_field(pdf, field, value, box_x=0, box_y=None, box_width=None, box_heig
         text_object.textLine(line)
         pdf.drawText(text_object)
 
-def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None, base_url=None):
+def _normalize_color(col):
+    if not col:
+        return '#4F46E5'
+    if col.startswith('#') or col.startswith('rgb'):
+        return col
+    named = {
+        'indigo': '#4F46E5',
+        'emerald': '#10B981',
+        'amber': '#F59E0B',
+        'rose': '#F43F5E',
+        'sky': '#0EA5E9',
+        'blue': '#3B82F6',
+        'purple': '#8B5CF6',
+        'teal': '#14B8A6',
+        'orange': '#F97316',
+        'green': '#10B981',
+        'red': '#EF4444',
+    }
+    return named.get(col.lower(), '#4F46E5')
+
+def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None, base_url=None, event_program_types=None):
     """
     Renders a single high-quality participant paper badge (1 of 9 per A4 sheet)
     matching the official Eventloo physical credential model reference:
@@ -267,7 +287,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
       - Metadata: [ TEAM ] [ CATEGORY ] [ GRADE / SECTION ]
       - Divider
       - Left: PROGRAMS bullet list
-      - Right: Stats columns (Total Events, Stage Events, Off-Stage Events)
+      - Right: Dynamic Stats columns (Total Events, Stage, Off-Stage, Sports, etc.)
       - Bottom Right: Official verification QR code to participant digital badge
       - Bottom: Smooth dual-tone wave graphic in Eventloo Indigo
     """
@@ -461,33 +481,72 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pdf.setLineWidth(0.6)
     pdf.line(card_x + 10, y_div, card_x + card_w - 10, y_div)
 
-    # 9. Programs List (Left) and Stats (Right)
+    # 9. Programs List (Left) and Dynamic Stats Columns (Right)
+    if event_program_types is None:
+        event_program_types = list(event.get_program_types())
+
+    type_by_code = {}
+    for pt in event_program_types:
+        norm = (pt.code or '').lower().replace(' ', '_').replace('-', '_')
+        type_by_code[norm] = pt
+        type_by_code[pt.code] = pt
+
     student_assignments = ProgramAssignment.objects.filter(
         student=student, program__event=event
-    ).select_related('program').order_by('program__start_time', 'program__name')
+    ).select_related('program', 'program__stage').order_by('program__start_time', 'program__name')
 
     programs_list = []
     seen_progs = set()
-    stage_count = 0
-    offstage_count = 0
+    type_counts = {pt.code: 0 for pt in event_program_types}
+
     for pa in student_assignments:
         p = pa.program
         if p and p.id not in seen_progs:
             seen_progs.add(p.id)
-            programs_list.append(p.name)
-            if getattr(p, 'program_type', 'off_stage') == 'stage':
-                stage_count += 1
+            programs_list.append((p.name, p))
+            p_type = getattr(p, 'program_type', None) or ('stage' if getattr(p, 'is_stage', False) else 'off_stage')
+            p_type_norm = (p_type or 'stage').lower().replace(' ', '_').replace('-', '_')
+            pt_match = type_by_code.get(p_type_norm) or type_by_code.get(p_type)
+            if pt_match:
+                type_counts[pt_match.code] = type_counts.get(pt_match.code, 0) + 1
             else:
-                offstage_count += 1
+                if getattr(p, 'is_stage', False) or p_type_norm in ('stage', 'onstage'):
+                    type_counts['stage'] = type_counts.get('stage', 0) + 1
+                else:
+                    type_counts['off_stage'] = type_counts.get('off_stage', 0) + 1
 
-    if not programs_list and assignment.program:
-        programs_list = [assignment.program.name]
-        if getattr(assignment.program, 'program_type', 'off_stage') == 'stage':
-            stage_count = 1
+    if not programs_list and assignment and getattr(assignment, 'program', None):
+        p = assignment.program
+        programs_list = [(p.name, p)]
+        p_type = getattr(p, 'program_type', None) or ('stage' if getattr(p, 'is_stage', False) else 'off_stage')
+        p_type_norm = (p_type or 'stage').lower().replace(' ', '_').replace('-', '_')
+        pt_match = type_by_code.get(p_type_norm) or type_by_code.get(p_type)
+        if pt_match:
+            type_counts[pt_match.code] = type_counts.get(pt_match.code, 0) + 1
         else:
-            offstage_count = 1
+            if getattr(p, 'is_stage', False) or p_type_norm in ('stage', 'onstage'):
+                type_counts['stage'] = type_counts.get('stage', 0) + 1
+            else:
+                type_counts['off_stage'] = type_counts.get('off_stage', 0) + 1
 
     total_count = len(programs_list)
+
+    # Determine dynamic stats columns to show
+    cols_to_show = [('Total', total_count)]
+    if len(event_program_types) <= 3:
+        for pt in event_program_types:
+            c = type_counts.get(pt.code, 0)
+            cols_to_show.append((pt.name.title(), c))
+    else:
+        active_pts = [pt for pt in event_program_types if type_counts.get(pt.code, 0) > 0]
+        other_pts = [pt for pt in event_program_types if type_counts.get(pt.code, 0) == 0]
+        selected_pts = (active_pts + other_pts)[:3]
+        selected_pts.sort(key=lambda x: getattr(x, 'display_order', 0))
+        for pt in selected_pts:
+            c = type_counts.get(pt.code, 0)
+            cols_to_show.append((pt.name.title(), c))
+
+    num_cols = len(cols_to_show)
 
     # Left: PROGRAMS
     y_prog_head = card_top - 150
@@ -495,59 +554,76 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pdf.setFillColor(HexColor('#4338CA'))
     pdf.drawString(card_x + 12, y_prog_head, 'PROGRAMS')
 
-    for idx, p_name in enumerate(programs_list[:4]):
+    max_char_len = 16 if num_cols >= 4 else 18
+    for idx, item in enumerate(programs_list[:4]):
+        p_name, p_obj = item if isinstance(item, tuple) else (item, None)
         y_item = y_prog_head - 9 - idx * 8.5
-        pdf.setFillColor(HexColor('#4F46E5'))
+
+        # Get color dot from program type if available
+        bullet_hex = '#4F46E5'
+        if p_obj:
+            p_type = getattr(p_obj, 'program_type', None) or ('stage' if getattr(p_obj, 'is_stage', False) else 'off_stage')
+            p_type_norm = (p_type or 'stage').lower().replace(' ', '_').replace('-', '_')
+            pt_obj = type_by_code.get(p_type_norm) or type_by_code.get(p_type)
+            if pt_obj and getattr(pt_obj, 'color', None):
+                bullet_hex = _normalize_color(pt_obj.color)
+
+        try:
+            pdf.setFillColor(HexColor(bullet_hex))
+        except Exception:
+            pdf.setFillColor(HexColor('#4F46E5'))
+
         pdf.circle(card_x + 15, y_item + 2, 1.2, stroke=0, fill=1)
         pdf.setFont('Helvetica', 5.5)
         pdf.setFillColor(HexColor('#0F172A'))
         display_name = p_name if len(programs_list) <= 4 or idx < 3 else f'+ {len(programs_list) - 3} more'
-        pdf.drawString(card_x + 19, y_item, display_name[:18])
+        pdf.drawString(card_x + 19, y_item, display_name[:max_char_len])
 
-    # Right: 3 Stats Columns
-    stats_left = card_x + 82
-    col_w = 29.0
+    # Right: Dynamic Stats Columns
+    if num_cols <= 3:
+        stats_left = card_x + 82.0
+        col_w = 29.0
+        num_font_size = 10.5
+        lbl_font_size = 4.5
+    else:
+        stats_left = card_x + 75.0
+        col_w = (card_w - 9.0 - 75.0) / float(num_cols)
+        num_font_size = 9.5
+        lbl_font_size = 3.8
+
     y_stat_num = y_prog_head - 10
 
-    # Col 1: Total Events
-    c1_cx = stats_left + col_w / 2.0
-    pdf.setFont('Helvetica-Bold', 10.5)
-    pdf.setFillColor(HexColor('#0F172A'))
-    pdf.drawCentredString(c1_cx, y_stat_num, str(total_count))
-    pdf.setFont('Helvetica', 4.5)
-    pdf.setFillColor(HexColor('#64748B'))
-    pdf.drawCentredString(c1_cx, y_stat_num - 7, 'Total')
-    pdf.drawCentredString(c1_cx, y_stat_num - 12, 'Events')
+    for i, (col_label, count_val) in enumerate(cols_to_show):
+        cx = stats_left + i * col_w + col_w / 2.0
 
-    # Divider 1
-    d1_x = stats_left + col_w
-    pdf.setStrokeColor(HexColor('#E2E8F0'))
-    pdf.setLineWidth(0.5)
-    pdf.line(d1_x, y_stat_num + 8, d1_x, y_stat_num - 14)
+        # Number
+        pdf.setFont('Helvetica-Bold', num_font_size)
+        pdf.setFillColor(HexColor('#0F172A'))
+        pdf.drawCentredString(cx, y_stat_num, str(count_val))
 
-    # Col 2: Stage Events
-    c2_cx = d1_x + col_w / 2.0
-    pdf.setFont('Helvetica-Bold', 10.5)
-    pdf.setFillColor(HexColor('#0F172A'))
-    pdf.drawCentredString(c2_cx, y_stat_num, str(stage_count))
-    pdf.setFont('Helvetica', 4.5)
-    pdf.setFillColor(HexColor('#64748B'))
-    pdf.drawCentredString(c2_cx, y_stat_num - 7, 'Stage')
-    pdf.drawCentredString(c2_cx, y_stat_num - 12, 'Events')
+        # Two-line label
+        pdf.setFont('Helvetica', lbl_font_size)
+        pdf.setFillColor(HexColor('#64748B'))
 
-    # Divider 2
-    d2_x = d1_x + col_w
-    pdf.line(d2_x, y_stat_num + 8, d2_x, y_stat_num - 14)
+        clean_lbl = col_label.strip()
+        if clean_lbl.lower().endswith('events') or clean_lbl.lower().endswith('programs'):
+            words = clean_lbl.split()
+            l1 = words[0]
+            l2 = ' '.join(words[1:]) if len(words) > 1 else ''
+        else:
+            l1 = clean_lbl
+            l2 = 'Events'
 
-    # Col 3: Off-Stage Events
-    c3_cx = d2_x + col_w / 2.0
-    pdf.setFont('Helvetica-Bold', 10.5)
-    pdf.setFillColor(HexColor('#0F172A'))
-    pdf.drawCentredString(c3_cx, y_stat_num, str(offstage_count))
-    pdf.setFont('Helvetica', 4.5)
-    pdf.setFillColor(HexColor('#64748B'))
-    pdf.drawCentredString(c3_cx, y_stat_num - 7, 'Off-Stage')
-    pdf.drawCentredString(c3_cx, y_stat_num - 12, 'Events')
+        pdf.drawCentredString(cx, y_stat_num - 7, l1)
+        if l2:
+            pdf.drawCentredString(cx, y_stat_num - 12, l2)
+
+        # Hairline divider between columns
+        if i > 0:
+            div_x = stats_left + i * col_w
+            pdf.setStrokeColor(HexColor('#E2E8F0'))
+            pdf.setLineWidth(0.4)
+            pdf.line(div_x, y_stat_num + 8, div_x, y_stat_num - 14)
 
     # 10. Official Verification QR Code in Bottom Right
     qr_box_w = 46.0
@@ -650,6 +726,7 @@ def render_certificates_pdf(event, templates_by_type, recipients, quality='stand
         badge_height = 266.0
         margin_x = (page_width - cols * badge_width) / 2.0   # ~18.64 pt
         margin_y = (page_height - rows * badge_height) / 2.0  # ~21.94 pt
+        event_program_types = list(event.get_program_types())
 
         for page_start in range(0, len(badge_recipients), badges_per_page):
             pdf.setPageSize((page_width, page_height))
@@ -680,7 +757,8 @@ def render_certificates_pdf(event, templates_by_type, recipients, quality='stand
 
                 _draw_paper_badge(
                     pdf, cell_x, cell_y, badge_width, badge_height,
-                    recipient, event, category_names, base_url=base_url
+                    recipient, event, category_names, base_url=base_url,
+                    event_program_types=event_program_types
                 )
 
             pdf.showPage()

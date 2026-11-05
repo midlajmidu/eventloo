@@ -28,8 +28,15 @@ const EventTopPerformers = () => {
 
   const fetchCategories = async () => {
     try {
-      const res = await categoriesAPI.list();
-      setCategories(res.data.results || res.data || []);
+      const res = await categoriesAPI.list({ standard_only: true });
+      const raw = res.data.results || res.data || [];
+      const standardCats = raw.filter(
+        (c) =>
+          !c.is_mixing &&
+          !['general', 'gen', 'gn', 'open', 'open category'].includes((c.code || '').toLowerCase()) &&
+          (c.name || '').toLowerCase() !== 'general'
+      );
+      setCategories(standardCats);
     } catch (err) {
       console.error('Error fetching categories:', err);
     }

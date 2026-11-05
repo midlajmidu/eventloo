@@ -11,7 +11,9 @@ import {
   Search,
   Eye,
   AlertCircle,
-  X
+  X,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 
 const EventsPage = () => {
@@ -218,7 +220,7 @@ const EventsPage = () => {
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3"><p className="text-sm font-semibold text-slate-900">Event directory</p><p className="text-xs text-slate-400">{filteredEvents.length} events</p></div>
         {filteredEvents.length === 0 ? <div className="py-16 text-center"><Calendar className="mx-auto h-6 w-6 text-slate-300" /><p className="mt-3 text-sm font-semibold text-slate-900">No events found</p><p className="mt-1 text-sm text-slate-400">Try changing the search or status filter.</p></div> : (
           <div className="overflow-x-auto"><table className="min-w-full"><thead className="bg-slate-50/80"><tr>{['Event', 'Schedule', 'Venue', 'Category', 'Status'].map(label => <th key={label} className="px-5 py-3 text-left text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">{label}</th>)}<th className="px-5 py-3 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Actions</th></tr></thead>
-          <tbody className="divide-y divide-slate-100">{filteredEvents.map(event => <tr key={event.id} className="transition hover:bg-indigo-50/30"><td className="px-5 py-3.5"><p className="max-w-[280px] truncate text-sm font-semibold text-slate-900">{event.title}</p><p className="max-w-[280px] truncate text-xs text-slate-400">{event.description || 'No description'}</p></td><td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">{formatDate(event.start_date)}{event.end_date && event.end_date !== event.start_date ? ` – ${formatDate(event.end_date)}` : ''}</td><td className="px-5 py-3.5 text-sm text-slate-600">{event.venue || event.location || '—'}</td><td className="px-5 py-3.5 text-sm text-slate-600 capitalize">{event.event_type || 'Competition'}</td><td className="px-5 py-3.5">{getStatusBadge(event.status)}</td><td className="px-5 py-3.5"><div className="flex justify-end gap-2"><button onClick={() => navigate(`/events/${event.id}/dashboard`)} className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"><Eye className="h-3.5 w-3.5" /> View</button><button onClick={() => handleEditEvent(event)} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-700" title="Edit event"><Edit className="h-4 w-4" /></button><button onClick={() => handleDeleteEvent(event.id)} className="rounded-lg border border-slate-200 p-1.5 text-slate-400 hover:border-red-100 hover:bg-red-50 hover:text-red-600" title="Delete event"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody></table></div>
+          <tbody className="divide-y divide-slate-100">{filteredEvents.map(event => <tr key={event.id} className="transition hover:bg-indigo-50/30"><td className="px-5 py-3.5"><div className="flex items-center gap-3">{(event.logo || event.event_logo) ? (<img src={event.logo || event.event_logo} alt={event.title} className="h-10 w-10 rounded-xl object-cover border border-slate-200 shrink-0 bg-white" onError={(e) => { e.currentTarget.style.display = 'none'; }} />) : (<div className="h-10 w-10 rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 flex items-center justify-center shrink-0"><Calendar className="h-5 w-5" /></div>)}<div className="min-w-0"><p className="max-w-[240px] truncate text-sm font-semibold text-slate-900">{event.title}</p><p className="max-w-[240px] truncate text-xs text-slate-400">{event.description || 'No description'}</p></div></div></td><td className="whitespace-nowrap px-5 py-3.5 text-sm text-slate-600">{formatDate(event.start_date)}{event.end_date && event.end_date !== event.start_date ? ` – ${formatDate(event.end_date)}` : ''}</td><td className="px-5 py-3.5 text-sm text-slate-600">{event.venue || event.location || '—'}</td><td className="px-5 py-3.5 text-sm text-slate-600 capitalize">{event.event_type || 'Competition'}</td><td className="px-5 py-3.5">{getStatusBadge(event.status)}</td><td className="px-5 py-3.5"><div className="flex justify-end gap-2"><button onClick={() => navigate(`/events/${event.id}/dashboard`)} className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100"><Eye className="h-3.5 w-3.5" /> View</button><button onClick={() => handleEditEvent(event)} className="rounded-lg border border-slate-200 p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-700" title="Edit event"><Edit className="h-4 w-4" /></button><button onClick={() => handleDeleteEvent(event.id)} className="rounded-lg border border-slate-200 p-1.5 text-slate-400 hover:border-red-100 hover:bg-red-50 hover:text-red-600" title="Delete event"><Trash2 className="h-4 w-4" /></button></div></td></tr>)}</tbody></table></div>
         )}
       </section>
 
@@ -262,8 +264,28 @@ const CreateEventModal = ({ onClose, onSave }) => {
     max_participants: '',
     registration_deadline: ''
   });
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Logo image must be smaller than 5MB');
+      return;
+    }
+    setLogoFile(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setLogoPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -301,10 +323,24 @@ const CreateEventModal = ({ onClose, onSave }) => {
         }
       });
 
-      console.log('Sending event data:', eventData);
+      let payload;
+      if (logoFile) {
+        const formDataPayload = new FormData();
+        Object.entries(eventData).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== '') {
+            formDataPayload.append(key, value);
+          }
+        });
+        formDataPayload.append('logo', logoFile);
+        payload = formDataPayload;
+      } else {
+        payload = eventData;
+      }
+
+      console.log('Sending event data:', payload);
       
       // Make the API call
-      const response = await eventsAPI.createEvent(eventData);
+      const response = await eventsAPI.createEvent(payload);
       console.log('Full API response:', response);
       console.log('Response status:', response.status);
       console.log('Response data:', response.data);
@@ -420,6 +456,50 @@ const CreateEventModal = ({ onClose, onSave }) => {
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Basic Information
               </h4>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Event Logo
+                </label>
+                <div className="flex items-center gap-4 p-3 bg-white border border-slate-200 rounded-xl">
+                  {logoPreview ? (
+                    <div className="relative shrink-0">
+                      <img
+                        src={logoPreview}
+                        alt="Event Logo Preview"
+                        className="h-16 w-16 rounded-xl object-cover border border-slate-200 shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="absolute -top-1.5 -right-1.5 p-1 bg-red-600 text-white rounded-full hover:bg-red-700 shadow-sm"
+                        title="Remove logo"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="h-16 w-16 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-slate-400 shrink-0">
+                      <ImageIcon className="h-6 w-6 text-slate-400" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg cursor-pointer transition">
+                      <Upload className="h-3.5 w-3.5" />
+                      <span>{logoPreview ? 'Change Event Logo' : 'Upload Event Logo'}</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        onChange={handleLogoChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      PNG, JPG, SVG or WEBP (max 5MB). Upload your official event badge/logo.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -660,8 +740,31 @@ const EditEventModal = ({ event, onClose, onUpdate }) => {
     max_participants: event.max_participants || '',
     registration_deadline: formatDateTimeForInput(event.registration_deadline)
   });
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(event.logo || event.event_logo || null);
+  const [removeLogoFlag, setRemoveLogoFlag] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const handleLogoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Logo image must be smaller than 5MB');
+      return;
+    }
+    setLogoFile(file);
+    setRemoveLogoFlag(false);
+    const reader = new FileReader();
+    reader.onloadend = () => setLogoPreview(reader.result);
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+    setRemoveLogoFlag(true);
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -699,10 +802,33 @@ const EditEventModal = ({ event, onClose, onUpdate }) => {
         }
       });
 
-      console.log('Sending updated event data:', updatedData);
+      let payload;
+      if (logoFile instanceof File) {
+        const formDataPayload = new FormData();
+        Object.entries(updatedData).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== '') {
+            formDataPayload.append(key, value);
+          }
+        });
+        formDataPayload.append('logo', logoFile);
+        payload = formDataPayload;
+      } else if (removeLogoFlag) {
+        const formDataPayload = new FormData();
+        Object.entries(updatedData).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== '') {
+            formDataPayload.append(key, value);
+          }
+        });
+        formDataPayload.append('logo', '');
+        payload = formDataPayload;
+      } else {
+        payload = updatedData;
+      }
+
+      console.log('Sending updated event data:', payload);
       
       // Make the API call
-      await onUpdate(updatedData);
+      await onUpdate(payload);
       console.log('Event updated successfully!');
       
     } catch (err) {
@@ -799,6 +925,50 @@ const EditEventModal = ({ event, onClose, onUpdate }) => {
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
                 Basic Information
               </h4>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Event Logo
+                </label>
+                <div className="flex items-center gap-4 p-3 bg-white border border-slate-200 rounded-xl">
+                  {logoPreview ? (
+                    <div className="relative shrink-0">
+                      <img
+                        src={logoPreview}
+                        alt="Event Logo Preview"
+                        className="h-16 w-16 rounded-xl object-cover border border-slate-200 shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRemoveLogo}
+                        className="absolute -top-1.5 -right-1.5 p-1 bg-red-600 text-white rounded-full hover:bg-red-700 shadow-sm"
+                        title="Remove logo"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="h-16 w-16 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 flex flex-col items-center justify-center text-slate-400 shrink-0">
+                      <ImageIcon className="h-6 w-6 text-slate-400" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <label className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg cursor-pointer transition">
+                      <Upload className="h-3.5 w-3.5" />
+                      <span>{logoPreview ? 'Change Event Logo' : 'Upload Event Logo'}</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                        onChange={handleLogoChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      PNG, JPG, SVG or WEBP (max 5MB). Upload your official event badge/logo.
+                    </p>
+                  </div>
+                </div>
+              </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">

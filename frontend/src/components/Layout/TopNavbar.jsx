@@ -32,7 +32,25 @@ import {
   Upload,
   Radio,
 } from 'lucide-react';
-import { authAPI } from '../../services/api';
+import { authAPI, schoolSettingsAPI } from '../../services/api';
+
+const resolveLogoUrl = (rawLogo) => {
+  if (!rawLogo || typeof rawLogo !== 'string') return null;
+  const trimmed = rawLogo.trim();
+  if (!trimmed) return null;
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:')
+  ) {
+    return trimmed;
+  }
+  if (trimmed.startsWith('/')) {
+    return trimmed;
+  }
+  return `/media/${trimmed}`;
+};
 
 const DEFAULT_NOTIFICATIONS = [
   {
@@ -230,15 +248,66 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
     })())
     : null;
 
-  const schoolData = isTeamManager
-    ? (user?.school || (() => {
-      try {
-        return JSON.parse(localStorage.getItem('school_data') || '{}');
-      } catch {
-        return {};
+  const rawSchoolData = user?.school || (() => {
+    try {
+      return JSON.parse(localStorage.getItem('school_data') || '{}');
+    } catch {
+      return {};
+    }
+  })();
+
+  const schoolData = rawSchoolData;
+
+  const [schoolLogo, setSchoolLogo] = useState(() => {
+    const raw = rawSchoolData?.school_logo || rawSchoolData?.logo || localStorage.getItem('school_logo');
+    return resolveLogoUrl(raw);
+  });
+  const [logoImgError, setLogoImgError] = useState(false);
+
+  useEffect(() => {
+    const raw = rawSchoolData?.school_logo || rawSchoolData?.logo || localStorage.getItem('school_logo');
+    const resolved = resolveLogoUrl(raw);
+    if (resolved) {
+      setSchoolLogo(resolved);
+      setLogoImgError(false);
+    } else if (!isTeamManager && userRole !== 'super_admin') {
+      schoolSettingsAPI.get()
+        .then((res) => {
+          const fetchedLogo = res.data?.school_logo;
+          if (fetchedLogo) {
+            const fullUrl = resolveLogoUrl(fetchedLogo);
+            setSchoolLogo(fullUrl);
+            setLogoImgError(false);
+            try {
+              const current = JSON.parse(localStorage.getItem('school_data') || '{}');
+              current.school_logo = fetchedLogo;
+              current.logo = fetchedLogo;
+              localStorage.setItem('school_data', JSON.stringify(current));
+              localStorage.setItem('school_logo', fetchedLogo);
+            } catch {
+              // ignore
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
+    const handleSchoolUpdated = (e) => {
+      const newLogo = e?.detail?.school_logo || localStorage.getItem('school_logo');
+      const resolvedNew = resolveLogoUrl(newLogo);
+      if (resolvedNew) {
+        setSchoolLogo(resolvedNew);
+        setLogoImgError(false);
       }
-    })())
-    : null;
+    };
+
+    window.addEventListener('eventloo_school_updated', handleSchoolUpdated);
+    window.addEventListener('storage', handleSchoolUpdated);
+    return () => {
+      window.removeEventListener('eventloo_school_updated', handleSchoolUpdated);
+      window.removeEventListener('storage', handleSchoolUpdated);
+    };
+  }, [user, userRole, isTeamManager]);
 
   const displayName = isTeamManager
     ? (teamData?.name || teamData?.team_name || 'Team Leader')
@@ -861,8 +930,17 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
                 }`}
               aria-label="User profile menu"
             >
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
-                {avatarInitial}
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-bold text-xs shadow-sm overflow-hidden border border-slate-200/80 bg-white shrink-0">
+                {schoolLogo && !logoImgError ? (
+                  <img
+                    src={schoolLogo}
+                    alt={schoolData?.name || displayName || 'School Logo'}
+                    className="w-full h-full object-contain p-0.5 bg-white"
+                    onError={() => setLogoImgError(true)}
+                  />
+                ) : (
+                  <span>{avatarInitial}</span>
+                )}
               </div>
               <div className="hidden md:block text-left mr-1">
                 <p className="text-xs font-semibold text-slate-800 truncate max-w-32">
@@ -880,19 +958,33 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
 
             {/* Dropdown menu */}
             {dropdownOpen && (
-              <div className="absolute right-0 mt-2 w-60 max-w-[calc(100vw-1.5rem)] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-                  <p className="text-xs text-gray-500 font-medium">Signed in as</p>
-                  <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
-                  <div className="flex items-center gap-1.5 mt-1.5">
-                    <span className="inline-block px-2 py-0.5 text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md capitalize">
-                      {displayRole}
-                    </span>
-                    {isTeamManager && schoolData?.code && (
-                      <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium text-slate-600 bg-slate-100 rounded">
-                        {schoolData.code}
-                      </span>
+              <div className="absolute right-0 mt-2 w-64 max-w-[calc(100vw-1.5rem)] bg-white rounded-2xl shadow-xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center font-bold text-sm shadow-sm overflow-hidden border border-slate-200/80 bg-white shrink-0">
+                    {schoolLogo && !logoImgError ? (
+                      <img
+                        src={schoolLogo}
+                        alt={schoolData?.name || displayName || 'School Logo'}
+                        className="w-full h-full object-contain p-0.5 bg-white"
+                        onError={() => setLogoImgError(true)}
+                      />
+                    ) : (
+                      <span>{avatarInitial}</span>
                     )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-gray-500 font-medium">Signed in as</p>
+                    <p className="text-sm font-semibold text-gray-900 truncate">{displayName}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="inline-block px-2 py-0.5 text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-md capitalize">
+                        {displayRole}
+                      </span>
+                      {schoolData?.code && (
+                        <span className="inline-block px-1.5 py-0.5 text-[10px] font-medium text-slate-600 bg-slate-100 rounded">
+                          {schoolData.code}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 

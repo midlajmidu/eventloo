@@ -24,6 +24,7 @@ import EventPrograms from '../Event/EventPrograms';
 import EventParticipants from '../Event/EventParticipants';
 import EventResults from '../Event/EventResults';
 import TeamEventDetail from './TeamEventDetail';
+import TeamDocuments from './TeamDocuments';
 
 const TeamEventDashboard = () => {
   const { eventId } = useParams();
@@ -75,12 +76,22 @@ const TeamEventDashboard = () => {
       const storedTeam = JSON.parse(localStorage.getItem('team_data') || '{}');
       const teamId = storedTeam.id || storedTeam.team_id;
 
-      let resolvedTeam = storedTeam;
+      let resolvedTeam = {
+        ...storedTeam,
+        name: storedTeam.name || storedTeam.team_name,
+      };
       if (teamId) {
         try {
           const profileRes = await teamManagerAPI.getTeamProfile(teamId);
           if (profileRes.data) {
-            resolvedTeam = { ...storedTeam, ...profileRes.data };
+            const pTeam = profileRes.data.team || profileRes.data;
+            resolvedTeam = {
+              ...resolvedTeam,
+              ...profileRes.data,
+              id: pTeam.id || resolvedTeam.id || teamId,
+              name: pTeam.name || pTeam.team_name || resolvedTeam.name,
+              team_name: pTeam.name || pTeam.team_name || resolvedTeam.team_name,
+            };
           }
         } catch (err) {
           console.warn('Could not refresh team profile:', err);
@@ -129,6 +140,77 @@ const TeamEventDashboard = () => {
         } catch (_) {}
       } else if (err?.response?.data?.error) {
         msg = err.response.data.error;
+      }
+
+      const isUnpublished =
+        err?.response?.status === 403 ||
+        msg.toLowerCase().includes('not been published') ||
+        msg.toLowerCase().includes('not published');
+
+      if (isUnpublished) {
+        // Automatically sync event state to unpublished so the UI cleanly displays Under Finalization
+        setEvent((prev) => (prev ? { ...prev, is_schedule_published: false } : prev));
+        setPdfUrl((prevUrl) => {
+          if (prevUrl) URL.revokeObjectURL(prevUrl);
+          return null;
+        });
+        setPdfError('');
+        return;
+      }
+
+      setPdfError(msg);
+    } finally {
+      setLoadingPdf(false);
+    }
+  };
+
+  const refreshScheduleState = async () => {
+    setLoadingPdf(true);
+    setPdfError('');
+    try {
+      const eventRes = await eventsAPI.getEvent(eventId);
+      const latestEvent = eventRes.data;
+      if (latestEvent && typeof latestEvent.status !== 'string') {
+        latestEvent.status = 'published';
+      }
+      setEvent(latestEvent);
+      if (latestEvent?.is_schedule_published) {
+        const response = await eventScheduleAPI.export(eventId, 'pdf');
+        const blob = new Blob([response.data], { type: 'application/pdf' });
+        setPdfUrl((prevUrl) => {
+          if (prevUrl) URL.revokeObjectURL(prevUrl);
+          return URL.createObjectURL(blob);
+        });
+      } else {
+        setPdfUrl((prevUrl) => {
+          if (prevUrl) URL.revokeObjectURL(prevUrl);
+          return null;
+        });
+      }
+    } catch (err) {
+      console.error('Error refreshing schedule state:', err);
+      let msg = 'Unable to refresh schedule.';
+      if (err?.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          const json = JSON.parse(text);
+          msg = json.detail || json.error || text || msg;
+        } catch (_) {}
+      } else if (err?.response?.data?.error) {
+        msg = err.response.data.error;
+      }
+      if (
+        err?.response?.status === 403 ||
+        msg.toLowerCase().includes('not published') ||
+        msg.toLowerCase().includes('not been published')
+      ) {
+        setEvent((prev) => (prev ? { ...prev, is_schedule_published: false } : prev));
+        setPdfUrl((prevUrl) => {
+          if (prevUrl) URL.revokeObjectURL(prevUrl);
+          return null;
+        });
+        setPdfError('');
+        return;
       }
       setPdfError(msg);
     } finally {
@@ -208,8 +290,9 @@ const TeamEventDashboard = () => {
       id: 'documents',
       name: 'Documents',
       icon: FileText,
-      badge: null,
-      description: 'Official certificates, forms, and event files',
+      badge: 'Call List',
+      badgeColor: 'bg-indigo-100 text-indigo-800',
+      description: 'Official team call lists, verified chest numbers & rosters',
     },
   ];
 
@@ -277,7 +360,7 @@ const TeamEventDashboard = () => {
                   </span>
 
                   <button
-                    onClick={loadSchedulePdf}
+                    onClick={refreshScheduleState}
                     disabled={loadingPdf}
                     className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
                   >
@@ -327,9 +410,20 @@ const TeamEventDashboard = () => {
                     The Event Managers and organizers are currently organizing program timings and stage allocations.
                     Once confirmed and published by the Event Manager, the full schedule and official printable PDF will appear here for you to view and download.
                   </p>
-                  <div className="mt-6 pt-5 border-t border-amber-200/60 flex items-center justify-center gap-2 text-xs text-slate-500">
-                    <CalendarClock className="h-4 w-4 text-slate-400" />
-                    <span>Please check back later or contact your event coordinator.</span>
+                  <div className="mt-6 pt-5 border-t border-amber-200/60 flex flex-col sm:flex-row items-center justify-center gap-3 text-xs text-slate-500">
+                    <div className="flex items-center gap-2">
+                      <CalendarClock className="h-4 w-4 text-slate-400" />
+                      <span>Please check back later or contact your event coordinator.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={refreshScheduleState}
+                      disabled={loadingPdf}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-amber-100/70 text-amber-900 font-semibold hover:bg-amber-200/70 cursor-pointer shadow-2xs transition-colors"
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${loadingPdf ? 'animate-spin' : ''}`} />
+                      <span>Check Status</span>
+                    </button>
                   </div>
                 </div>
               ) : pdfError ? (
@@ -337,7 +431,7 @@ const TeamEventDashboard = () => {
                   <AlertCircle className="h-8 w-8 text-rose-500 mx-auto mb-2" />
                   <p className="text-xs font-semibold text-rose-800">{pdfError}</p>
                   <button
-                    onClick={loadSchedulePdf}
+                    onClick={refreshScheduleState}
                     className="mt-3 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 shadow-2xs"
                   >
                     <RefreshCw className="h-3.5 w-3.5" /> Retry
@@ -391,18 +485,13 @@ const TeamEventDashboard = () => {
 
       case 'documents':
         return (
-          <div className="p-8 sm:p-12 text-center bg-white min-h-[480px] flex flex-col items-center justify-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 shadow-2xs mb-4">
-              <FileText className="h-8 w-8 text-indigo-500" />
-            </div>
-            <h3 className="text-lg font-bold text-slate-900">Event Documents</h3>
-            <p className="text-xs text-slate-500 max-w-md mt-1.5 leading-relaxed">
-              Official certificates, guidelines, evaluation forms, and circular documents will be made available here once released by the event organizers.
-            </p>
-            <div className="mt-6 inline-flex items-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50/70 px-4 py-2.5 text-xs font-medium text-slate-500">
-              <Layers className="h-4 w-4 text-slate-400" />
-              <span>No documents uploaded for this event currently</span>
-            </div>
+          <div className="min-h-[560px] p-4 sm:p-6 bg-white">
+            <TeamDocuments
+              eventId={eventId}
+              event={event}
+              teamData={teamData}
+              categories={categories}
+            />
           </div>
         );
 
@@ -461,12 +550,16 @@ const TeamEventDashboard = () => {
                 <ArrowLeft className="h-4 w-4" />
               </button>
 
-              {event.school_logo && (
+              {(event.logo || event.event_logo) ? (
                 <img
-                  src={event.school_logo}
-                  alt={event.school_name || 'School Logo'}
+                  src={event.logo || event.event_logo}
+                  alt={event.title || 'Event Logo'}
                   className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain bg-slate-50 border border-slate-200/80 p-0.5 shrink-0 shadow-2xs"
                 />
+              ) : (
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-200/70 flex items-center justify-center text-indigo-600 shrink-0 shadow-2xs">
+                  <Calendar className="w-5 h-5" />
+                </div>
               )}
 
               <div className="min-w-0">
@@ -536,7 +629,7 @@ const TeamEventDashboard = () => {
                 <img
                   src="/eventloo-loop-logo.svg"
                   alt="Eventloo"
-                  className="h-5 sm:h-6 w-auto object-contain"
+                  className="h-6 sm:h-7 w-auto object-contain"
                 />
               </a>
             </div>
@@ -625,7 +718,7 @@ const TeamEventDashboard = () => {
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500 font-medium">Your Team</span>
                   <span className="font-bold text-slate-900 truncate max-w-[120px]">
-                    {teamData?.name || 'Assigned Team'}
+                    {teamData?.name || teamData?.team_name || teamData?.team?.name || 'Assigned Team'}
                   </span>
                 </div>
                 <div className="flex justify-between items-center">

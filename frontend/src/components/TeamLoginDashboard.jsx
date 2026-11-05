@@ -1025,7 +1025,7 @@ const TeamLoginDashboard = () => {
                                 <p className="text-sm text-gray-600 mb-2">{program.description}</p>
                                 <div className="space-y-1 text-xs text-gray-600">
                                   <p>Category: <span className="font-medium">{program.category.toUpperCase()}</span></p>
-                                  <p>Type: <span className="font-medium">{program.program_type || 'Individual'}</span></p>
+                                  <p>Type: <span className="font-medium capitalize">{program.program_type_display || (program.program_type ? program.program_type.replace(/_/g, ' ') : 'Stage')}</span></p>
                                   <p>Slots: <span className="font-medium">{program.assigned_count}/{program.max_participants} per team</span></p>
                                   <p>Available: <span className="font-medium">{program.available_slots}</span></p>
                                 </div>
@@ -1234,7 +1234,7 @@ const TeamLoginDashboard = () => {
                           </td>
                           <td className="px-5 py-5">
                             <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold capitalize text-blue-700">
-                              {program.program_type || 'Stage'}
+                              {program.program_type_display || (program.program_type ? program.program_type.replace(/_/g, ' ') : 'Stage')}
                             </span>
                             <div className="mt-1.5 text-xs text-gray-500">
                               {program.is_team_based ? 'Team' : 'Individual'}

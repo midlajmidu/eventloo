@@ -192,12 +192,9 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
         alert(`${member.name} is not eligible for the ${getCategoryDisplay(activeModalProgram.category)} category.`);
         return;
       }
-      if (isStudentLimitReached(member, activeModalProgram)) {
-        const isTeam = Boolean(activeModalProgram.is_team_based);
-        const limit = isTeam
-          ? eventData?.max_group_programs_per_student
-          : eventData?.max_single_programs_per_student;
-        alert(`${member.name} has reached the event limit of ${limit} ${isTeam ? 'group' : 'single'} programs.`);
+      const limitCheck = checkStudentLimitForProgram(member, activeModalProgram);
+      if (limitCheck.reached) {
+        alert(limitCheck.reason || `${member.name} has reached the participation limit for this program.`);
         return;
       }
     }
@@ -215,7 +212,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
       await fetchEventData();
     } catch (err) {
       console.error('Error assigning student:', err);
-      alert(err.response?.data?.error || 'Failed to assign student');
+      alert(err.response?.data?.error || err.response?.data?.message || err.response?.data?.detail || 'Failed to assign student');
     } finally {
       setAssigningStudent(null);
     }
@@ -223,6 +220,18 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
 
   const handleAssignTeam = async (programId, studentIds, subTeamNumber, leaderId) => {
     if (!studentIds || studentIds.length === 0) return;
+    if (activeModalProgram && Array.isArray(studentIds)) {
+      for (const sId of studentIds) {
+        const member = teamMembers.find((m) => m.id === sId);
+        if (member) {
+          const limitCheck = checkStudentLimitForProgram(member, activeModalProgram);
+          if (limitCheck.reached) {
+            alert(limitCheck.reason || `${member.name} has reached the participation limit.`);
+            return;
+          }
+        }
+      }
+    }
     try {
       setAssigningStudent({ programId, studentId: 'team' });
       await teamManagerAPI.assignStudentsToProgram(
@@ -237,7 +246,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
       await fetchEventData();
     } catch (err) {
       console.error('Error assigning team:', err);
-      alert(err.response?.data?.error || err.response?.data?.message || 'Failed to assign team');
+      alert(err.response?.data?.error || err.response?.data?.message || err.response?.data?.detail || 'Failed to assign team');
     } finally {
       setAssigningStudent(null);
     }
@@ -424,19 +433,25 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
     return Boolean(matched?.is_mixing);
   };
 
-  // Get student's single, group, and total program participation counts in this event
+  // Get student's single, group, onstage, offstage, and total program participation counts in this event
   const getStudentProgramStats = (member) => {
-    if (!member) return { singleCount: 0, groupCount: 0, totalCount: 0 };
-    if (member.single_count !== undefined && member.single_count !== null) {
+    if (!member) {
       return {
-        singleCount: Number(member.single_count) || 0,
-        groupCount: Number(member.group_count) || 0,
-        totalCount: Number(member.total_count) || 0,
+        singleCount: 0,
+        groupCount: 0,
+        onstageCount: 0,
+        offstageCount: 0,
+        totalCount: 0,
+        byType: {},
       };
     }
 
     let sc = 0;
     let gc = 0;
+    let onstage = 0;
+    let offstage = 0;
+    const byType = {};
+
     programs.forEach((prog) => {
       const isAssigned = (prog.assigned_students || []).some(
         (s) => s.id === member.id || s.student_id === member.student_id
@@ -448,6 +463,15 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
           } else {
             sc += 1;
           }
+          const pTypeRaw = prog.program_type || 'stage';
+          const normType = pTypeRaw.toLowerCase().replace(/[\s-]/g, '_');
+          byType[normType] = (byType[normType] || 0) + 1;
+
+          if (normType === 'stage' || normType === 'onstage' || normType === 'on_stage') {
+            onstage += 1;
+          } else if (normType === 'off_stage' || normType === 'offstage') {
+            offstage += 1;
+          }
         }
       }
     });
@@ -455,26 +479,113 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
     return {
       singleCount: sc,
       groupCount: gc,
+      onstageCount: onstage,
+      offstageCount: offstage,
       totalCount: sc + gc,
+      byType,
     };
   };
 
-  // Check if a student has reached the participation limit for this program in this event
-  const isStudentLimitReached = (member, program) => {
-    if (!member || !program || !eventData) return false;
+  // Get student's category limits from eventData
+  const getStudentCategoryLimits = (categoryCode) => {
+    if (!eventData) return null;
+    const catLimitsMap = eventData.category_participation_limits || {};
+    const norm = (categoryCode || '').trim().toLowerCase();
+
+    let limits = catLimitsMap[categoryCode] || null;
+    if (!limits && norm) {
+      for (const [k, v] of Object.entries(catLimitsMap)) {
+        if (k.trim().toLowerCase() === norm) {
+          limits = v;
+          break;
+        }
+      }
+    }
+
+    const maxSingle = limits?.max_single !== undefined ? limits.max_single : (eventData.max_single_programs_per_student || 0);
+    const maxGroup = limits?.max_group !== undefined ? limits.max_group : (eventData.max_group_programs_per_student || 0);
+    const maxTotal = limits?.max_total !== undefined ? limits.max_total : 0;
+    const maxOnstage = limits?.max_onstage !== undefined ? limits.max_onstage : 0;
+    const maxOffstage = limits?.max_offstage !== undefined ? limits.max_offstage : 0;
+    const typeLimits = limits?.type_limits || {};
+
+    return {
+      maxTotal: Number(maxTotal) || 0,
+      maxOnstage: Number(maxOnstage) || 0,
+      maxOffstage: Number(maxOffstage) || 0,
+      maxSingle: Number(maxSingle) || 0,
+      maxGroup: Number(maxGroup) || 0,
+      typeLimits,
+    };
+  };
+
+  // Check whether a student has reached any participation limit for this program in this event
+  const checkStudentLimitForProgram = (member, program) => {
+    if (!member || !program || !eventData) return { reached: false };
     // General and combined/mixing programs are unlimited!
-    if (isProgramGeneralOrMixed(program)) return false;
+    if (isProgramGeneralOrMixed(program)) return { reached: false };
 
-    const isTeam = Boolean(program.is_team_based);
-    const applicableLimit = isTeam
-      ? eventData.max_group_programs_per_student
-      : eventData.max_single_programs_per_student;
-
-    if (!applicableLimit || applicableLimit <= 0) return false;
+    const limits = getStudentCategoryLimits(member.category);
+    if (!limits) return { reached: false };
 
     const stats = getStudentProgramStats(member);
-    const currentCount = isTeam ? stats.groupCount : stats.singleCount;
-    return currentCount >= applicableLimit;
+    const isTeam = Boolean(program.is_team_based);
+    const pTypeRaw = program.program_type || 'stage';
+    const normType = pTypeRaw.toLowerCase().replace(/[\s-]/g, '_');
+
+    // 1. Total Limit
+    if (limits.maxTotal > 0 && stats.totalCount >= limits.maxTotal) {
+      return {
+        reached: true,
+        limitType: 'total',
+        reason: `${member.name} has reached the total limit of ${limits.maxTotal} programs.`,
+      };
+    }
+
+    // 2. Dynamic Program Type Limit (supports ANY custom type, with fallback to onstage/offstage)
+    let dynamicTypeLimit = 0;
+    if (limits.typeLimits && limits.typeLimits[normType] !== undefined) {
+      dynamicTypeLimit = Number(limits.typeLimits[normType]) || 0;
+    } else if (normType === 'stage' || normType === 'onstage' || normType === 'on_stage') {
+      dynamicTypeLimit = limits.maxOnstage;
+    } else if (normType === 'off_stage' || normType === 'offstage') {
+      dynamicTypeLimit = limits.maxOffstage;
+    }
+
+    const currentTypeCount = stats.byType[normType] || 0;
+    if (dynamicTypeLimit > 0 && currentTypeCount >= dynamicTypeLimit) {
+      const typeDisplayName = program.program_type_display || program.program_type || normType;
+      return {
+        reached: true,
+        limitType: normType,
+        reason: `${member.name} has reached the ${typeDisplayName} limit of ${dynamicTypeLimit} programs.`,
+      };
+    }
+
+    // 3. Single Limit
+    if (!isTeam && limits.maxSingle > 0 && stats.singleCount >= limits.maxSingle) {
+      return {
+        reached: true,
+        limitType: 'single',
+        reason: `${member.name} has reached the single events limit of ${limits.maxSingle} programs.`,
+      };
+    }
+
+    // 4. Group Limit
+    if (isTeam && limits.maxGroup > 0 && stats.groupCount >= limits.maxGroup) {
+      return {
+        reached: true,
+        limitType: 'group',
+        reason: `${member.name} has reached the group events limit of ${limits.maxGroup} programs.`,
+      };
+    }
+
+    return { reached: false };
+  };
+
+  // Legacy boolean helper
+  const isStudentLimitReached = (member, program) => {
+    return checkStudentLimitForProgram(member, program).reached;
   };
 
   // Count how many programs each student is currently enrolled in
@@ -1177,9 +1288,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
 
         const filteredCandidates = allowedCategoryMembers.filter((m) => {
           // Check limit
-          const stats = getStudentProgramStats(m);
-          const studentCount = isTeam ? stats.groupCount : stats.singleCount;
-          const isLimitReached = !isUnlimited && studentCount >= applicableLimit;
+          const isLimitReached = isStudentLimitReached(m, activeModalProgram);
 
           if (drawerHideLimitReached && isLimitReached) {
             return false;
@@ -1223,25 +1332,21 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
         }).sort((a, b) => {
           const statsA = getStudentProgramStats(a);
           const statsB = getStudentProgramStats(b);
-          const countA = isTeam ? statsA.groupCount : statsA.singleCount;
-          const countB = isTeam ? statsB.groupCount : statsB.singleCount;
-          const limitReachedA = !isUnlimited && countA >= applicableLimit;
-          const limitReachedB = !isUnlimited && countB >= applicableLimit;
+          const limitReachedA = isStudentLimitReached(a, activeModalProgram);
+          const limitReachedB = isStudentLimitReached(b, activeModalProgram);
 
           // Available students first, limit-reached students last
           if (!limitReachedA && limitReachedB) return -1;
           if (limitReachedA && !limitReachedB) return 1;
 
-          // Then by count ascending (give chance to students with fewer programs)
-          if (countA !== countB) return countA - countB;
+          // Then by total program count ascending (give chance to students with fewer programs)
+          if (statsA.totalCount !== statsB.totalCount) return statsA.totalCount - statsB.totalCount;
 
           return (a.name || '').localeCompare(b.name || '');
         });
 
         const availableStudentsCount = allowedCategoryMembers.filter((m) => {
-          const stats = getStudentProgramStats(m);
-          const count = isTeam ? stats.groupCount : stats.singleCount;
-          return isUnlimited || count < applicableLimit;
+          return !isStudentLimitReached(m, activeModalProgram);
         }).length;
 
         const limitReachedCount = allowedCategoryMembers.length - availableStudentsCount;
@@ -1261,9 +1366,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
         // Quick auto-select helper for team
         const handleAutoSelectTeam = () => {
           const availableList = filteredCandidates.filter((m) => {
-            const stats = getStudentProgramStats(m);
-            const count = isTeam ? stats.groupCount : stats.singleCount;
-            return isUnlimited || count < applicableLimit;
+            return !isStudentLimitReached(m, activeModalProgram);
           });
           const picked = availableList.slice(0, neededForCurrentSubTeam);
           const pickedIds = picked.map((m) => m.id);
@@ -1318,7 +1421,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-600 mb-1">
-                        {progCatDisplay} · {isTeam ? `Team Program (${teamSize} members required)` : 'Single Program'} · {currentAssignedCount}/{maxAllowed} Slots{!isUnlimited ? ` · Max ${applicableLimit}/student` : ''}
+                        {progCatDisplay} · {isTeam ? `Team Program (${teamSize} members required)` : 'Single Program'} · {activeModalProgram.program_type_display || (activeModalProgram.program_type ? activeModalProgram.program_type.replace(/_/g, ' ') : 'Stage')} · {currentAssignedCount}/{maxAllowed} Slots
                       </p>
                       <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
                         {isTeam ? `Assign Team to ${activeModalProgram.name}` : `Assign Student to ${activeModalProgram.name}`}
@@ -1548,8 +1651,8 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                   ) : (
                     filteredCandidates.map((member) => {
                       const stats = getStudentProgramStats(member);
-                      const currentCount = isTeam ? stats.groupCount : stats.singleCount;
-                      const isLimitReached = !isUnlimited && currentCount >= applicableLimit;
+                      const limitCheck = checkStudentLimitForProgram(member, activeModalProgram);
+                      const isLimitReached = limitCheck.reached;
                       const isSelected = isTeam
                         ? modalSelectedStudents.includes(member.id)
                         : modalSelectedStudent === member.id;
@@ -1646,15 +1749,26 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                             <p className="text-[11px] text-slate-500 mt-0.5 truncate">
                               {member.grade ? `Class ${member.grade}${member.section ? `-${member.section.toUpperCase()}` : ''}` : 'Student'}
                               {member.gender ? ` · ${member.gender}` : ''}
-                              {!isUnlimited && ` · ${currentCount}/${applicableLimit} programs`}
+                              {(() => {
+                                const lim = getStudentCategoryLimits(member.category);
+                                const parts = [];
+                                if (lim?.maxTotal > 0) parts.push(`Tot: ${stats.totalCount}/${lim.maxTotal}`);
+                                else parts.push(`Tot: ${stats.totalCount}`);
+                                if (lim?.maxOnstage > 0) parts.push(`Stage: ${stats.onstageCount}/${lim.maxOnstage}`);
+                                if (lim?.maxOffstage > 0) parts.push(`Off: ${stats.offstageCount}/${lim.maxOffstage}`);
+                                return ` · ${parts.join(' · ')}`;
+                              })()}
                             </p>
                           </div>
 
                           {/* Status Badge & Leader selector */}
                           <div className="flex items-center gap-1.5 shrink-0">
                             {isLimitReached ? (
-                              <span className="text-[10px] font-medium text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded">
-                                Limit Reached
+                              <span
+                                className="text-[10px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded cursor-help"
+                                title={limitCheck.reason || 'Participation limit reached'}
+                              >
+                                {limitCheck.limitType ? `${limitCheck.limitType.toUpperCase()} LIMIT` : 'Limit Reached'}
                               </span>
                             ) : isSelected ? (
                               isTeam ? (

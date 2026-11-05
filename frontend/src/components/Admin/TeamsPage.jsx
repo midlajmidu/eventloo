@@ -108,8 +108,15 @@ const TeamsPage = () => {
 
   const fetchCategories = async () => {
     try {
-      const res = await categoriesAPI.list();
-      setCategories(res.data.results || res.data || []);
+      const res = await categoriesAPI.list({ standard_only: true });
+      const raw = res.data.results || res.data || [];
+      const standardCats = raw.filter(
+        (c) =>
+          !c.is_mixing &&
+          !['general', 'gen', 'gn', 'open', 'open category'].includes((c.code || '').toLowerCase()) &&
+          (c.name || '').toLowerCase() !== 'general'
+      );
+      setCategories(standardCats);
     } catch (err) {
       console.error('Error fetching categories:', err);
     }
@@ -784,9 +791,16 @@ const TeamsPage = () => {
                           className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300"
                         >
                           <option value="">All Categories</option>
-                          {categories.filter(c => !c.is_mixing).map(cat => (
-                            <option key={cat.code} value={cat.code}>{cat.name}</option>
-                          ))}
+                          {categories
+                            .filter(
+                              (c) =>
+                                !c.is_mixing &&
+                                !['general', 'gen', 'gn', 'open', 'open category'].includes((c.code || '').toLowerCase()) &&
+                                (c.name || '').toLowerCase() !== 'general'
+                            )
+                            .map((cat) => (
+                              <option key={cat.code} value={cat.code}>{cat.name}</option>
+                            ))}
                         </select>
                         <select
                           value={managementFilters.grade}

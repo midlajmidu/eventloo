@@ -57,6 +57,7 @@ const EventlooLogo = ({
   theme = 'light', // 'light' | 'dark'
   className = '',
   showSubtitle = false,
+  onClick,
 }) => {
   const sizeMap = {
     sm: { icon: 'w-6 h-6', text: 'text-lg', space: 'gap-2' },
@@ -74,7 +75,10 @@ const EventlooLogo = ({
   }
 
   return (
-    <div className={`inline-flex items-center ${currentSize.space} ${className}`}>
+    <div
+      onClick={onClick}
+      className={`inline-flex items-center ${currentSize.space} ${onClick ? 'cursor-pointer select-none' : ''} ${className}`}
+    >
       <div className="relative flex items-center justify-center">
         <EventlooIcon className={currentSize.icon} animated />
       </div>

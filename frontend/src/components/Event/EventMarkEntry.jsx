@@ -127,13 +127,53 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     setDrawerError('');
   };
 
-  const handleMarkChange = (participantId, field, value) => {
+  const handleMarkChange = (participantId, field, rawValue) => {
     if (drawerError) setDrawerError('');
-    const numValue = value === '' ? null : parseFloat(value);
     
+    // Clear mark if empty
+    if (rawValue === '' || rawValue === null || rawValue === undefined) {
+      setParticipants(prev => prev.map(p => {
+        if (p.id === participantId) {
+          const updatedParticipant = { ...p, [field]: '' };
+          
+          const judgeValues = [];
+          for (let i = 1; i <= numJudges; i++) {
+            const val = updatedParticipant[`judge${i}_marks`];
+            if (val !== null && val !== undefined && val !== '' && !isNaN(val)) {
+              judgeValues.push(parseFloat(val));
+            }
+          }
+          if (judgeValues.length > 0) {
+            const rawTotal = judgeValues.reduce((a, b) => a + b, 0);
+            const maxRawPossible = numJudges * maxMarkPerJudge;
+            updatedParticipant.total_marks = maxRawPossible > 0 ? Math.round(((rawTotal / maxRawPossible) * convertedTotalMark) * 100) / 100 : rawTotal;
+            updatedParticipant.average_marks = Math.round((rawTotal / judgeValues.length) * 100) / 100;
+          } else {
+            updatedParticipant.total_marks = null;
+            updatedParticipant.average_marks = null;
+          }
+          return updatedParticipant;
+        }
+        return p;
+      }));
+      return;
+    }
+
+    // Only allow positive numbers with at most 2 decimal places (e.g. "95", "95.", "95.5", "95.02")
+    const cleanStr = String(rawValue).trim();
+    if (!/^\d*(\.\d{0,2})?$/.test(cleanStr)) {
+      return;
+    }
+
+    // Check maximum mark allowed per judge
+    const num = parseFloat(cleanStr);
+    if (!isNaN(num) && num > maxMarkPerJudge) {
+      return;
+    }
+
     setParticipants(prev => prev.map(p => {
       if (p.id === participantId) {
-        const updatedParticipant = { ...p, [field]: numValue };
+        const updatedParticipant = { ...p, [field]: cleanStr };
         
         const judgeValues = [];
         for (let i = 1; i <= numJudges; i++) {
@@ -149,8 +189,8 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
           const convertedTotal = maxRawPossible > 0 ? (rawTotal / maxRawPossible) * convertedTotalMark : rawTotal;
           const averageMarks = rawTotal / judgeValues.length;
           
-          updatedParticipant.total_marks = convertedTotal;
-          updatedParticipant.average_marks = averageMarks;
+          updatedParticipant.total_marks = Math.round(convertedTotal * 100) / 100;
+          updatedParticipant.average_marks = Math.round(averageMarks * 100) / 100;
         } else {
           updatedParticipant.total_marks = null;
           updatedParticipant.average_marks = null;
@@ -233,6 +273,11 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     
     setSubmitting(true);
     try {
+      const formatCleanMark = (val) => {
+        if (val === null || val === undefined || val === '' || isNaN(val)) return null;
+        return Number(parseFloat(val).toFixed(2));
+      };
+
       const marksPayload = participants.map(p => {
         const isAttending = hasAnyJudgeMark(p);
         const judgeValues = [];
@@ -250,19 +295,19 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
         let averageMarks = null;
         
         if (judgeValues.length > 0) {
-          rawTotalMarks = judgeValues.reduce((a, b) => a + b, 0);
+          rawTotalMarks = Math.round(judgeValues.reduce((a, b) => a + b, 0) * 100) / 100;
           const maxRawPossible = numJudges * maxMarkPerJudge;
-          totalMarks = maxRawPossible > 0 ? (rawTotalMarks / maxRawPossible) * convertedTotalMark : rawTotalMarks;
-          averageMarks = rawTotalMarks / judgeValues.length;
+          totalMarks = maxRawPossible > 0 ? Math.round(((rawTotalMarks / maxRawPossible) * convertedTotalMark) * 100) / 100 : rawTotalMarks;
+          averageMarks = Math.round((rawTotalMarks / judgeValues.length) * 100) / 100;
         }
         
         const payloadItem = {
           id: p.id,
           code_letter: isAttending ? (p.code_letter || '') : '',
-          judge1_marks: isAttending && numJudges >= 1 ? (p.judge1_marks ?? null) : null,
-          judge2_marks: isAttending && numJudges >= 2 ? (p.judge2_marks ?? null) : null,
-          judge3_marks: isAttending && numJudges >= 3 ? (p.judge3_marks ?? null) : null,
-          judge4_marks: isAttending && numJudges >= 4 ? (p.judge4_marks ?? null) : null,
+          judge1_marks: isAttending && numJudges >= 1 ? formatCleanMark(p.judge1_marks) : null,
+          judge2_marks: isAttending && numJudges >= 2 ? formatCleanMark(p.judge2_marks) : null,
+          judge3_marks: isAttending && numJudges >= 3 ? formatCleanMark(p.judge3_marks) : null,
+          judge4_marks: isAttending && numJudges >= 4 ? formatCleanMark(p.judge4_marks) : null,
           raw_total_marks: rawTotalMarks,
           total_marks: totalMarks,
           average_marks: averageMarks,
@@ -631,14 +676,13 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                                 return (
                                   <td key={judgeNum} className="px-3 py-3 text-center border-r border-gray-200">
                                     <input
-                                      type="number"
-                                      min="0"
-                                      max={maxMarkPerJudge}
-                                      step="0.01"
+                                      type="text"
+                                      inputMode="decimal"
                                       value={participant[fieldName] ?? ''}
                                       onChange={(e) => handleMarkChange(participant.id, fieldName, e.target.value)}
-                                      placeholder={`0-${maxMarkPerJudge}`}
-                                      className={`w-16 px-2 py-1 text-center font-semibold text-xs border rounded-md focus:ring-2 focus:outline-none bg-white shadow-2xs transition-colors ${
+                                      onWheel={(e) => e.target.blur()}
+                                      placeholder="0.00"
+                                      className={`w-18 px-2 py-1 text-center font-semibold text-xs border rounded-md focus:ring-2 focus:outline-none bg-white shadow-2xs transition-colors no-spinner ${
                                         isInvalidMark || isMissingMark
                                           ? 'border-rose-400 text-rose-900 bg-rose-50/40 focus:ring-rose-400 ring-1 ring-rose-300'
                                           : 'border-gray-300 focus:ring-indigo-500'

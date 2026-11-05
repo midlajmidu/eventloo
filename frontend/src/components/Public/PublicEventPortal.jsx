@@ -27,51 +27,96 @@ import {
   X,
   Award,
   ShieldCheck,
-  BarChart3
+  BarChart3,
+  Printer,
+  GraduationCap,
+  Mic,
+  ChevronDown,
+  Download,
 } from 'lucide-react';
 import { publicEventAPI } from '../../services/api';
+import EventlooLogo from '../common/EventlooLogo';
+import { downloadEventQrPoster } from '../../utils/qrPosterGenerator';
 
-/**
- * 4-Petal Green Clover Logo for Eventloo Brand
- */
-const EventlooLogo = ({ onClick }) => (
-  <div
-    onClick={onClick}
-    className="flex items-center gap-2.5 cursor-pointer select-none group"
-    title="Eventloo Event Management Platform"
-  >
-    <div className="relative w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shrink-0">
+// Laurel Wreath Rank Badge for Positions 1, 2, 3
+const LaurelRankBadge = ({ rank }) => {
+  const isFirst = rank === 1;
+  const isSecond = rank === 2;
+  const isThird = rank === 3;
+
+  // Colors: Gold for 1st, Silver for 2nd, Bronze for 3rd
+  const strokeColor = isFirst
+    ? '#d97706' // amber-600 gold
+    : isSecond
+    ? '#64748b' // slate-500 silver
+    : isThird
+    ? '#b45309' // amber-700 bronze
+    : '#94a3b8';
+
+  const fillColor = strokeColor;
+
+  return (
+    <div className="relative flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 shrink-0 select-none">
       <svg
-        className="w-full h-full transform transition-transform group-hover:rotate-12 duration-300"
-        viewBox="0 0 40 40"
+        viewBox="0 0 54 48"
+        className="w-10 h-10 sm:w-12 sm:h-12"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        {/* Four rounded petals forming modern clover */}
-        <path
-          d="M20 18C16.6 18 14 15.4 14 12C14 8.6 16.6 6 20 6C23.4 6 26 8.6 26 12C26 15.4 23.4 18 20 18Z"
-          fill="#059669"
-        />
-        <path
-          d="M22 20C22 16.6 24.6 14 28 14C31.4 14 34 16.6 34 20C34 23.4 31.4 26 28 26C24.6 26 22 23.4 22 20Z"
-          fill="#10B981"
-        />
-        <path
-          d="M20 22C23.4 22 26 24.6 26 28C26 31.4 23.4 34 20 34C16.6 34 14 31.4 14 28C14 24.6 16.6 22 20 22Z"
-          fill="#047857"
-        />
-        <path
-          d="M18 20C18 23.4 15.4 26 12 26C8.6 26 6 23.4 6 20C6 16.6 8.6 14 12 14C15.4 14 18 16.6 18 20Z"
-          fill="#34D399"
-        />
-        <circle cx="20" cy="20" r="3.2" fill="#064E3B" />
+        {/* Left Laurel Branch */}
+        <g stroke={strokeColor} fill={fillColor}>
+          {/* Main Curved Stem */}
+          <path
+            d="M 15 41 C 6 32 6 17 17 7"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            fill="none"
+          />
+          {/* Leaves along left stem */}
+          <path d="M 15 40 C 10 42 7 39 7 36 C 7 34 11 36 15 40 Z" strokeWidth="0.5" />
+          <path d="M 12 36 C 7 36 4 32 5 29 C 7 29 11 32 12 36 Z" strokeWidth="0.5" />
+          <path d="M 9 30 C 4 29 2 24 4 21 C 6 22 9 26 9 30 Z" strokeWidth="0.5" />
+          <path d="M 8 23 C 3 21 2 16 5 13 C 7 15 8 19 8 23 Z" strokeWidth="0.5" />
+          <path d="M 9 16 C 5 13 6 8 9 6 C 10 9 10 13 9 16 Z" strokeWidth="0.5" />
+          <path d="M 12 11 C 11 6 13 3 16 2 C 17 5 15 9 12 11 Z" strokeWidth="0.5" />
+          <path d="M 17 7 C 18 4 21 3 22 5 C 21 7 19 8 17 7 Z" strokeWidth="0.5" />
+        </g>
+
+        {/* Right Laurel Branch */}
+        <g stroke={strokeColor} fill={fillColor}>
+          {/* Main Curved Stem */}
+          <path
+            d="M 39 41 C 48 32 48 17 37 7"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            fill="none"
+          />
+          {/* Leaves along right stem */}
+          <path d="M 39 40 C 44 42 47 39 47 36 C 47 34 43 36 39 40 Z" strokeWidth="0.5" />
+          <path d="M 42 36 C 47 36 50 32 49 29 C 47 29 43 32 42 36 Z" strokeWidth="0.5" />
+          <path d="M 45 30 C 50 29 52 24 50 21 C 48 22 45 26 45 30 Z" strokeWidth="0.5" />
+          <path d="M 46 23 C 51 21 52 16 49 13 C 47 15 46 19 46 23 Z" strokeWidth="0.5" />
+          <path d="M 45 16 C 49 13 48 8 45 6 C 44 9 44 13 45 16 Z" strokeWidth="0.5" />
+          <path d="M 42 11 C 43 6 41 3 38 2 C 37 5 39 9 42 11 Z" strokeWidth="0.5" />
+          <path d="M 37 7 C 36 4 33 3 32 5 C 33 7 35 8 37 7 Z" strokeWidth="0.5" />
+        </g>
+
+        {/* Centered Rank Number */}
+        <text
+          x="27"
+          y="29"
+          textAnchor="middle"
+          fontSize="20"
+          fontWeight="900"
+          fontFamily="system-ui, -apple-system, sans-serif"
+          fill={fillColor}
+        >
+          {rank}
+        </text>
       </svg>
     </div>
-    <span className="font-extrabold text-lg sm:text-xl tracking-tight text-slate-900 leading-none">
-      Event<span className="text-emerald-700 font-black">loo</span>
-    </span>
-  </div>
-);
+  );
+};
 
 const PublicEventPortal = () => {
   const { eventId } = useParams();
@@ -86,9 +131,9 @@ const PublicEventPortal = () => {
   const [activeTab, setActiveTab] = useState(initialTab);
 
   // Results & Programs tab state
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedProgramId, setSelectedProgramId] = useState(null);
+  const [selectedProgramId, setSelectedProgramId] = useState('');
 
   // Schedule tab state
   const [selectedDate, setSelectedDate] = useState('all');
@@ -98,6 +143,8 @@ const PublicEventPortal = () => {
   const [copied, setCopied] = useState(false);
   const [showQrModal, setShowQrModal] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [downloadingQr, setDownloadingQr] = useState(false);
+  const [expandedTeamId, setExpandedTeamId] = useState(null);
 
   useEffect(() => {
     fetchPortalData();
@@ -118,14 +165,6 @@ const PublicEventPortal = () => {
       setError('');
       const res = await publicEventAPI.getPublicPortal(eventId);
       setData(res.data);
-
-      // Auto-select first program
-      const published = (res.data?.programs || []).filter((p) => p.is_published);
-      if (published.length > 0) {
-        setSelectedProgramId(published[0].id);
-      } else if (res.data?.programs?.length > 0) {
-        setSelectedProgramId(res.data.programs[0].id);
-      }
     } catch (err) {
       console.error('Failed to load public portal data:', err);
       setError(err?.response?.data?.error || 'Event details could not be loaded.');
@@ -139,6 +178,24 @@ const PublicEventPortal = () => {
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleDownloadQrPoster = async () => {
+    try {
+      setDownloadingQr(true);
+      await downloadEventQrPoster({
+        event: data?.event,
+        portalData: data,
+        publicUrl: data?.public_url || window.location.href,
+        eventId,
+        filename: `${(data?.event?.title || 'Festival').replace(/[^a-zA-Z0-9_-]/g, '_')}_Official_QR_Poster.png`
+      });
+    } catch (err) {
+      console.error('Failed to download QR Poster PNG:', err);
+      alert('Unable to generate QR Poster. Please try again.');
+    } finally {
+      setDownloadingQr(false);
+    }
   };
 
   const event = data?.event;
@@ -158,11 +215,52 @@ const PublicEventPortal = () => {
     });
   }, [programs, selectedCategory, searchTerm]);
 
-  // Selected program details
+  // Current category programs for 2-step selector
+  const currentCategoryPrograms = useMemo(() => {
+    if (!selectedCategory) return [];
+    return programs.filter((p) => p.category === selectedCategory);
+  }, [programs, selectedCategory]);
+
+  // Selected program details: ONLY defined if user selected BOTH category AND program!
   const activeProgram = useMemo(() => {
-    if (!selectedProgramId) return filteredPrograms[0] || null;
-    return programs.find((p) => p.id === selectedProgramId) || filteredPrograms[0] || null;
-  }, [programs, selectedProgramId, filteredPrograms]);
+    if (!selectedCategory || !selectedProgramId) return null;
+    return programs.find((p) => String(p.id) === String(selectedProgramId)) || null;
+  }, [programs, selectedCategory, selectedProgramId]);
+
+  // Program index for watermark number
+  const activeProgramIndex = useMemo(() => {
+    if (!activeProgram) return 0;
+    const idx = programs.findIndex((p) => p.id === activeProgram.id);
+    return idx >= 0 ? idx : 0;
+  }, [programs, activeProgram]);
+
+  // Category switch handler: resets program selection so user must choose program next
+  const handleCategoryChange = (catCode) => {
+    setSelectedCategory(catCode);
+    setSelectedProgramId('');
+  };
+
+  // Previous & next program selectors
+  const handlePrevProgram = () => {
+    if (currentCategoryPrograms.length <= 1) return;
+    const currIdx = currentCategoryPrograms.findIndex((p) => String(p.id) === String(activeProgram?.id));
+    const prevIdx = currIdx > 0 ? currIdx - 1 : currentCategoryPrograms.length - 1;
+    setSelectedProgramId(String(currentCategoryPrograms[prevIdx].id));
+  };
+
+  const handleNextProgram = () => {
+    if (currentCategoryPrograms.length <= 1) return;
+    const currIdx = currentCategoryPrograms.findIndex((p) => String(p.id) === String(activeProgram?.id));
+    const nextIdx = currIdx < currentCategoryPrograms.length - 1 ? currIdx + 1 : 0;
+    setSelectedProgramId(String(currentCategoryPrograms[nextIdx].id));
+  };
+
+  // Helper to format stat values: REAL count from app + '+'
+  const formatStatCount = (val) => {
+    const num = Number(val);
+    if (isNaN(num)) return '0+';
+    return `${num}+`;
+  };
 
   // Generate date list for Schedule ribbon
   const scheduleDates = useMemo(() => {
@@ -273,7 +371,7 @@ const PublicEventPortal = () => {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-4">
         <div className="text-center space-y-3">
-          <div className="w-9 h-9 border-3 border-emerald-200 border-t-emerald-700 rounded-full animate-spin mx-auto" />
+          <div className="w-9 h-9 border-3 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mx-auto" />
           <p className="text-xs font-semibold text-slate-500 tracking-wide uppercase">
             Loading Official Event Portal...
           </p>
@@ -295,7 +393,7 @@ const PublicEventPortal = () => {
           </p>
           <a
             href="/"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold transition-colors shadow-2xs"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition-colors shadow-2xs"
           >
             Go to Eventloo Home
           </a>
@@ -305,99 +403,82 @@ const PublicEventPortal = () => {
   }
 
   const totalProgramsCount = stats.total_programs ?? programs.length;
-  const totalTeamsCount = stats.total_teams ?? (teamStandings.length || 2);
+  const totalTeamsCount = stats.total_teams ?? teamStandings.length;
   const totalPublishedResults =
     stats.published_results_count ?? programs.filter((p) => p.is_published).length;
+  const totalParticipantsCount = stats.total_participants ?? 0;
+  const totalStagesCount = stats.total_stages ?? stages.length;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-800 flex flex-col font-sans selection:bg-indigo-100 selection:text-indigo-900">
       
+      {/* Print Specific CSS to print only the Result Poster */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #result-poster-card, #result-poster-card * {
+            visibility: visible !important;
+          }
+          #result-poster-card {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            border: 1px solid #cbd5e1 !important;
+            box-shadow: none !important;
+            padding: 32px !important;
+            background: #ffffff !important;
+          }
+        }
+      `}</style>
+
       {/* ========================================================================= */}
-      {/* 1. TOP NAVBAR (EVENTLOO BRANDING + TAB LINKS + LIVE PORTAL CTA)           */}
+      {/* 1. TOP NAVBAR (EVENTLOO BRANDING + CLEAN STREAMLINED TABS)                 */}
       {/* ========================================================================= */}
       <header className="bg-white/95 backdrop-blur-md border-b border-slate-200/80 sticky top-0 z-40 transition-all">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
           
-          {/* Brand: Green Clover + Eventloo */}
-          <EventlooLogo onClick={() => handleTabChange('home')} />
+          {/* Brand Logo */}
+          <EventlooLogo size="sm" onClick={() => handleTabChange('home')} />
 
           {/* Desktop Nav Items */}
           <nav className="hidden md:flex items-center space-x-1 lg:space-x-2">
             {[
               { id: 'home', label: 'Home' },
-              { id: 'about', label: 'About' },
-              { id: 'programs', label: 'Programs' },
               { id: 'results', label: 'Results' },
               { id: 'points', label: 'Points' },
               { id: 'schedule', label: 'Schedule' },
             ].map((tab) => {
               const isActive =
                 activeTab === tab.id ||
-                (tab.id === 'results' && activeTab === 'programs') ||
-                (tab.id === 'programs' && activeTab === 'programs');
+                (tab.id === 'results' && activeTab === 'programs');
               return (
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
                   className={`px-3.5 py-1.5 text-xs lg:text-sm font-semibold transition-all rounded-lg cursor-pointer relative ${
                     isActive
-                      ? 'text-emerald-800 font-bold'
+                      ? 'text-indigo-600 font-bold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/70'
                   }`}
                 >
                   {tab.label}
                   {isActive && (
-                    <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-emerald-700 rounded-full" />
+                    <span className="absolute bottom-0 left-3 right-3 h-0.5 bg-indigo-600 rounded-full" />
                   )}
                 </button>
               );
             })}
           </nav>
 
-          {/* Right Header Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* QR Pass Button */}
-            <button
-              onClick={() => setShowQrModal(true)}
-              className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl border border-slate-200/80 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
-              title="Show QR Code"
-            >
-              <QrCode className="w-4 h-4 text-emerald-700" />
-              <span className="hidden lg:inline text-slate-700">QR Pass</span>
-            </button>
-
-            {/* Share / Copy Link */}
-            <button
-              onClick={handleCopy}
-              className="p-2 sm:px-3 sm:py-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl border border-slate-200/80 transition-colors text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-              title="Copy link"
-            >
-              {copied ? (
-                <>
-                  <Check className="w-4 h-4 text-emerald-600" />
-                  <span className="hidden sm:inline text-emerald-700">Copied</span>
-                </>
-              ) : (
-                <>
-                  <Share2 className="w-4 h-4 text-slate-600" />
-                  <span className="hidden sm:inline">Share</span>
-                </>
-              )}
-            </button>
-
-            {/* Live Portal Button */}
-            <button
-              onClick={() => handleTabChange('results')}
-              className="px-4 py-2 bg-emerald-800 hover:bg-emerald-900 text-white rounded-full transition-all text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-sm hover:shadow active:scale-95"
-            >
-              <span>Live Portal</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </button>
-
-            {/* Mobile menu toggle */}
+          {/* Right Header: Mobile menu toggle only */}
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl"
+              className="md:hidden p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -407,27 +488,32 @@ const PublicEventPortal = () => {
 
         {/* Mobile Nav Drawer */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-slate-200/80 bg-white px-4 py-3 space-y-1 shadow-lg animate-in slide-in-from-top-2">
+          <div className="md:hidden border-t border-slate-200/80 bg-white/95 backdrop-blur-md px-4 py-3 space-y-1 shadow-lg animate-in slide-in-from-top-2">
             {[
-              { id: 'home', label: 'Home' },
-              { id: 'about', label: 'About' },
-              { id: 'programs', label: 'Programs' },
-              { id: 'results', label: 'Results' },
-              { id: 'points', label: 'Points' },
-              { id: 'schedule', label: 'Schedule' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`w-full text-left px-3 py-2 text-xs font-semibold rounded-lg ${
-                  activeTab === tab.id
-                    ? 'bg-emerald-50 text-emerald-800 font-bold'
-                    : 'text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+              { id: 'home', label: 'Home', icon: Sparkles },
+              { id: 'results', label: 'Results', icon: Trophy },
+              { id: 'points', label: 'Points Table', icon: BarChart3 },
+              { id: 'schedule', label: 'Schedule', icon: Calendar },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive =
+                activeTab === tab.id ||
+                (tab.id === 'results' && activeTab === 'programs');
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`w-full text-left px-3.5 py-2.5 text-sm font-semibold rounded-xl flex items-center gap-3 transition-colors ${
+                    isActive
+                      ? 'bg-indigo-50 text-indigo-700 font-bold'
+                      : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  <Icon className={`w-4 h-4 ${isActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </header>
@@ -442,298 +528,341 @@ const PublicEventPortal = () => {
       {activeTab === 'home' && (
         <main className="flex-1 space-y-12 sm:space-y-16 pb-16">
           
-          {/* HERO SECTION WITH ORGANIC MINT GRADIENT & FESTIVAL CARD */}
-          <section className="relative overflow-hidden pt-8 sm:pt-12 pb-14 sm:pb-20 bg-gradient-to-b from-emerald-50/70 via-teal-50/30 to-[#f8fafc]">
-            {/* Subtle organic background curves */}
-            <div className="absolute top-0 right-0 w-[550px] h-[550px] bg-gradient-to-br from-emerald-200/40 via-teal-200/20 to-transparent rounded-full blur-3xl pointer-events-none -mr-28 -mt-28" />
-            <div className="absolute bottom-0 left-0 w-[450px] h-[450px] bg-gradient-to-tr from-emerald-100/30 via-slate-100/40 to-transparent rounded-full blur-3xl pointer-events-none -ml-24 -mb-24" />
+          {/* ========================================================================= */}
+          {/* PRIMARY VIEWPORT: HERO SECTION + ANALYTICS STATS STRIP                    */}
+          {/* ========================================================================= */}
+          <div className="relative bg-gradient-to-b from-[#f3f7fd] via-[#ecf3fc] to-[#f8fafc] border-b border-slate-100">
+            {/* Subtle organic background aura */}
+            <div className="absolute top-0 right-0 w-[550px] h-[550px] bg-gradient-to-br from-indigo-200/40 via-blue-200/25 to-transparent rounded-full blur-3xl pointer-events-none -mr-28 -mt-28" />
+            <div className="absolute bottom-0 left-0 w-[450px] h-[450px] bg-gradient-to-tr from-violet-100/40 via-indigo-100/30 to-transparent rounded-full blur-3xl pointer-events-none -ml-24 -mb-24" />
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 sm:pt-12 pb-6 sm:pb-8 relative z-10 space-y-6 sm:space-y-8">
+              
+              {/* HERO ROW: EVENT TITLE & INFO ON LEFT + ILLUSTRATION ON RIGHT */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 lg:gap-12 items-center">
                 
                 {/* Left Column: Festival Title, Date, Venue, CTAs */}
-                <div className="lg:col-span-7 space-y-5">
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-100/70 text-emerald-800 border border-emerald-200/60 text-[11px] font-bold uppercase tracking-[0.2em]">
-                    <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>{event.school_name ? `${event.school_name} FESTIVAL` : 'CAMPUS FESTIVAL'}</span>
+                <div className="lg:col-span-7 space-y-4 sm:space-y-5">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 sm:px-3.5 sm:py-1.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/80 text-[10px] sm:text-[11px] font-bold uppercase tracking-[0.18em] shadow-2xs">
+                    {event.school_logo ? (
+                      <img
+                        src={event.school_logo}
+                        alt="Logo"
+                        className="w-3.5 h-3.5 rounded-full object-contain shrink-0"
+                      />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                    )}
+                    <span className="truncate">{event.school_name ? `${event.school_name} FESTIVAL` : 'OFFICIAL FESTIVAL PORTAL'}</span>
                   </div>
 
-                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-[1.1]">
-                    {event.title}
+                  <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-slate-900 tracking-tight leading-[1.15] sm:leading-[1.1] break-words">
+                    Welcome to{' '}
+                    <span className="bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 bg-clip-text text-transparent">
+                      {event.title}
+                    </span>
                   </h1>
 
-                  <p className="text-base sm:text-lg text-slate-600 leading-relaxed max-w-xl">
+                  <p className="text-sm sm:text-lg text-slate-600 leading-relaxed max-w-xl">
                     {event.description ||
-                      'A celebration of talent, creativity, and campus spirit bringing together students across disciplines.'}
+                      'The official live hub for program schedules, stage announcements, real-time judge scoring, and team championship standings.'}
                   </p>
 
-                  {/* Dates & Venue pill */}
-                  <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-xs sm:text-sm text-slate-700 font-medium pt-1">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-emerald-700 shrink-0" />
+                  {/* Dates & Venue info */}
+                  <div className="flex flex-wrap items-center gap-y-2 gap-x-3 sm:gap-x-4 text-xs sm:text-sm text-slate-700 font-medium pt-0.5">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
                       <span>{formatDateRange(event.start_date, event.end_date)}</span>
                     </div>
                     <span className="text-slate-300 hidden sm:inline">|</span>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-emerald-700 shrink-0" />
-                      <span>{event.venue || 'Campus Main Grounds'}</span>
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <MapPin className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <span className="truncate max-w-[200px] sm:max-w-none">{event.venue || 'Campus Main Grounds'}</span>
                     </div>
                   </div>
 
-                  {/* Action buttons */}
-                  <div className="flex flex-wrap items-center gap-3 pt-3">
+                  {/* Action buttons: mobile-first balanced structure */}
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 pt-2">
                     <button
                       onClick={() => handleTabChange('results')}
-                      className="px-6 py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-sm rounded-full transition-all flex items-center gap-2 cursor-pointer shadow-sm hover:shadow-md active:scale-95"
+                      className="w-full sm:w-auto px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm rounded-full transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm hover:shadow-md hover:shadow-indigo-600/20 active:scale-95"
                     >
                       <span>Explore Results</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
-                    <button
-                      onClick={() => handleTabChange('schedule')}
-                      className="px-6 py-3 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-sm rounded-full border border-slate-200/90 transition-all cursor-pointer shadow-2xs hover:shadow-sm"
-                    >
-                      View Schedule
-                    </button>
-                  </div>
-                </div>
-
-                {/* Right Column: Festival Emblem Card (with School Logo or Vector Emblem) */}
-                <div className="lg:col-span-5 flex justify-center lg:justify-end">
-                  <div className="relative w-full max-w-sm sm:max-w-md aspect-4/3 sm:aspect-square rounded-3xl bg-gradient-to-br from-white via-emerald-50/50 to-teal-100/30 p-6 sm:p-8 border border-white/80 shadow-xl flex flex-col items-center justify-center text-center overflow-hidden">
-                    
-                    {/* Background artistic organic gradient blob */}
-                    <div className="absolute -top-12 -right-12 w-48 h-48 bg-emerald-400/20 rounded-full blur-2xl" />
-                    <div className="absolute -bottom-12 -left-12 w-48 h-48 bg-teal-300/20 rounded-full blur-2xl" />
-
-                    {event.school_logo ? (
-                      <div className="space-y-4 relative z-10 flex flex-col items-center">
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl bg-white p-3 border border-slate-200/70 shadow-sm flex items-center justify-center">
-                          <img
-                            src={event.school_logo}
-                            alt={event.school_name || 'Event Logo'}
-                            className="max-h-full max-w-full object-contain"
-                          />
-                        </div>
-                        <div>
-                          <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                            {event.title}
-                          </h2>
-                          <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-700 mt-1">
-                            CAMPUS FESTIVAL
-                          </p>
-                        </div>
-                      </div>
-                    ) : (
-                      /* Stylized vector leaf emblem from mockup */
-                      <div className="space-y-4 relative z-10 flex flex-col items-center">
-                        <div className="w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center">
-                          <svg
-                            viewBox="0 0 100 100"
-                            className="w-full h-full drop-shadow-md"
-                            fill="none"
-                            xmlns="http://www.w3.org/2000/svg"
-                          >
-                            <path
-                              d="M50 15 C70 15, 85 35, 80 65 C65 65, 55 55, 50 15 Z"
-                              fill="#059669"
-                            />
-                            <path
-                              d="M50 15 C30 25, 20 50, 35 80 C50 75, 55 60, 50 15 Z"
-                              fill="#10B981"
-                              opacity="0.85"
-                            />
-                            <path
-                              d="M35 80 C50 85, 75 80, 80 65 C60 65, 45 75, 35 80 Z"
-                              fill="#047857"
-                            />
-                          </svg>
-                        </div>
-                        <div>
-                          <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                            {event.title}
-                          </h2>
-                          <p className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-700 mt-1">
-                            CAMPUS FESTIVAL
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-            </div>
-          </section>
-
-          {/* STATS FLOATING CARD STRIP */}
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 sm:-mt-10 relative z-20">
-            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-md p-6 sm:p-8">
-              <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 gap-6 sm:gap-0">
-                
-                {/* Stat 1: Programs */}
-                <div className="flex flex-col items-center text-center space-y-2 py-2 sm:py-0">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <Box className="w-5 h-5" />
-                  </div>
-                  <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                    {totalProgramsCount}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Programs
-                  </span>
-                </div>
-
-                {/* Stat 2: Teams */}
-                <div className="flex flex-col items-center text-center space-y-2 py-2 sm:py-0">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <Users className="w-5 h-5" />
-                  </div>
-                  <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                    {totalTeamsCount}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Teams
-                  </span>
-                </div>
-
-                {/* Stat 3: Results Published */}
-                <div className="flex flex-col items-center text-center space-y-2 py-2 sm:py-0">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <Trophy className="w-5 h-5" />
-                  </div>
-                  <span className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-                    {totalPublishedResults}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Results Published
-                  </span>
-                </div>
-
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 1: ABOUT THE FESTIVAL (WHAT IS GRAVITAS?) */}
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
-            <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-10 shadow-2xs">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                
-                <div className="lg:col-span-7 space-y-4">
-                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-                    About the Festival
-                  </div>
-                  <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-slate-900 tracking-tight">
-                    What is {event.title}?
-                  </h2>
-                  <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
-                    {event.title} is {event.school_name || 'our campus'}&apos;s premier annual festival that
-                    brings together students across disciplines to showcase talent, creativity, and
-                    teamwork through a diverse range of cultural, artistic, and competitive events.
-                  </p>
-                  {event.description && (
-                    <p className="text-slate-500 text-xs sm:text-sm leading-relaxed border-l-2 border-emerald-500 pl-4 py-1 italic">
-                      &quot;{event.description}&quot;
-                    </p>
-                  )}
-                  <div className="pt-2">
-                    <button
-                      onClick={() => handleTabChange('about')}
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 cursor-pointer"
-                    >
-                      <span>Read full festival details</span>
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
-                <div className="lg:col-span-5 flex justify-center">
-                  <div className="relative rounded-2xl overflow-hidden border border-slate-200 shadow-md w-full aspect-4/3">
-                    <img
-                      src="/campus_festival_building.jpg"
-                      alt={event.school_name || 'Campus'}
-                      className="w-full h-full object-cover transform hover:scale-105 transition-transform duration-500"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 via-transparent to-transparent flex items-end p-4">
-                      <span className="text-xs font-semibold text-white/90">
-                        {event.school_name || 'Campus Festival Hub'}
-                      </span>
+                    <div className="grid grid-cols-2 gap-2.5 sm:flex sm:items-center sm:gap-3 w-full sm:w-auto">
+                      <button
+                        onClick={() => handleTabChange('points')}
+                        className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-xs sm:text-sm rounded-full border border-slate-200/90 transition-all cursor-pointer shadow-2xs hover:shadow-sm text-center justify-center"
+                      >
+                        Points Table
+                      </button>
+                      <button
+                        onClick={() => handleTabChange('schedule')}
+                        className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-xs sm:text-sm rounded-full border border-slate-200/90 transition-all cursor-pointer shadow-2xs hover:shadow-sm text-center justify-center"
+                      >
+                        View Schedule
+                      </button>
                     </div>
                   </div>
                 </div>
 
-              </div>
-            </div>
-          </section>
+                {/* Right Column: Hero Visual Image (Hidden on mobile screens, shown on desktop) */}
+                <div className="hidden lg:flex lg:col-span-5 justify-center lg:justify-end">
+                  <div className="relative w-full max-w-md rounded-2xl sm:rounded-3xl overflow-hidden shadow-xl sm:shadow-2xl shadow-indigo-950/15 border border-white/90 bg-white/60 backdrop-blur-xs transition-all duration-300 hover:shadow-indigo-900/20 group">
+                    
+                    {/* Floating Live Badge (Top-Left) */}
+                    <div className="absolute top-2.5 left-2.5 sm:top-3 sm:left-3 z-10">
+                      <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-slate-900/80 backdrop-blur-md text-white border border-white/20 text-[10px] sm:text-[11px] font-semibold shadow-lg">
+                        <span className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-emerald-400 animate-pulse" />
+                        <span>Live Festival Stage</span>
+                      </div>
+                    </div>
 
-          {/* SECTION 2: ABOUT EVENTLOO (POWERING CAMPUS EVENTS WITH EVENTLOO) */}
-          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="space-y-6">
-              
-              <div className="max-w-2xl space-y-2">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-                  About Eventloo
+                    {/* Event Logo Badge if present (Top-Right) */}
+                    {(event.logo || event.event_logo) ? (
+                      <div className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 z-10">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/90 backdrop-blur-md p-1 sm:p-1.5 border border-white/80 shadow-md flex items-center justify-center">
+                          <img
+                            src={event.logo || event.event_logo}
+                            alt={event.title || 'Event Logo'}
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </div>
+                      </div>
+                    ) : event.school_logo ? (
+                      <div className="absolute top-2.5 right-2.5 sm:top-3 sm:right-3 z-10">
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-white/90 backdrop-blur-md p-1 sm:p-1.5 border border-white/80 shadow-md flex items-center justify-center">
+                          <img
+                            src={event.school_logo}
+                            alt={event.school_name || 'Logo'}
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* Generated Illustration from Login Page - height constrained on mobile */}
+                    <img
+                      src="/event-checkin-illustration.jpg"
+                      alt={`${event.title} Stage & Live Results`}
+                      className="w-full h-44 sm:h-60 md:h-72 lg:h-[330px] object-cover object-center transform transition-transform duration-700 group-hover:scale-[1.02]"
+                      loading="eager"
+                    />
+
+                    {/* Floating Bottom Card Strip */}
+                    <div className="absolute bottom-2.5 left-2.5 right-2.5 sm:bottom-3 sm:left-3 sm:right-3 z-10 bg-white/95 backdrop-blur-md rounded-xl p-2.5 sm:p-3 border border-white/80 shadow-lg flex items-center justify-between gap-2">
+                      <div className="min-w-0 pr-1">
+                        <p className="text-xs font-bold text-slate-900 truncate">
+                          {event.title}
+                        </p>
+                        <p className="text-[9px] sm:text-[10px] text-indigo-600 font-semibold uppercase tracking-wider truncate">
+                          {event.school_name || 'Campus Event'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 px-2 py-0.5 sm:py-1 rounded-lg bg-indigo-50 border border-indigo-100 text-indigo-700 text-[10px] sm:text-[11px] font-bold">
+                        <Trophy className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-indigo-600" />
+                        <span>Official Portal</span>
+                      </div>
+                    </div>
+
+                  </div>
                 </div>
-                <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                  Powering Campus Events with Eventloo
+
+              </div>
+
+              {/* STATS ANALYTICS CARD STRIP (EMBEDDED IN PRIMARY VIEWPORT SCREEN) */}
+              <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-md p-3.5 sm:p-7">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-0 sm:divide-x sm:divide-slate-100">
+                  
+                  {/* Stat 1: Programs */}
+                  <div className="flex flex-col items-center text-center space-y-1 sm:space-y-1.5 p-2.5 sm:p-0 rounded-xl bg-slate-50/70 sm:bg-transparent border border-slate-100 sm:border-0">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <Box className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </div>
+                    <span className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                      {formatStatCount(totalProgramsCount)}
+                    </span>
+                    <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Programs
+                    </span>
+                  </div>
+
+                  {/* Stat 2: Teams */}
+                  <div className="flex flex-col items-center text-center space-y-1 sm:space-y-1.5 p-2.5 sm:p-0 rounded-xl bg-slate-50/70 sm:bg-transparent border border-slate-100 sm:border-0">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </div>
+                    <span className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                      {formatStatCount(totalTeamsCount)}
+                    </span>
+                    <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Teams
+                    </span>
+                  </div>
+
+                  {/* Stat 3: Participants */}
+                  <div className="flex flex-col items-center text-center space-y-1 sm:space-y-1.5 p-2.5 sm:p-0 rounded-xl bg-slate-50/70 sm:bg-transparent border border-slate-100 sm:border-0">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </div>
+                    <span className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                      {formatStatCount(totalParticipantsCount)}
+                    </span>
+                    <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Participants
+                    </span>
+                  </div>
+
+                  {/* Stat 4: Stages */}
+                  <div className="flex flex-col items-center text-center space-y-1 sm:space-y-1.5 p-2.5 sm:p-0 rounded-xl bg-slate-50/70 sm:bg-transparent border border-slate-100 sm:border-0">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                      <Mic className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </div>
+                    <span className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                      {formatStatCount(totalStagesCount)}
+                    </span>
+                    <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Stages
+                    </span>
+                  </div>
+
+                  {/* Stat 5: Results Published */}
+                  <div className="flex flex-col items-center text-center space-y-1 sm:space-y-1.5 p-2.5 sm:p-0 rounded-xl bg-indigo-50/60 sm:bg-transparent border border-indigo-100 sm:border-0 col-span-2 sm:col-span-1">
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-100/80 text-indigo-700 flex items-center justify-center">
+                      <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-indigo-600" />
+                    </div>
+                    <span className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
+                      {formatStatCount(totalPublishedResults)}
+                    </span>
+                    <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                      Results Published
+                    </span>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Subtle Scroll Down Prompt for users who wish to explore Eventloo details */}
+              <div className="flex flex-col items-center justify-center pt-1 pb-1 text-slate-400 select-none">
+                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">
+                  Scroll to explore Eventloo
+                </span>
+                <ChevronDown className="w-4 h-4 animate-bounce text-indigo-500" />
+              </div>
+
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* SECTION 1: ABOUT EVENTLOO (COMPREHENSIVE FULL-WIDTH CONTENT & FEATURES)   */}
+          {/* ========================================================================= */}
+          <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-10 shadow-2xs space-y-8">
+              
+              {/* Header: Title, Subtitle, Comprehensive Intro */}
+              <div className="space-y-3 max-w-4xl">
+                <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-indigo-600">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>About Eventloo</span>
+                </div>
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-slate-900 tracking-tight">
+                  The Complete Operating System for Campus Events & Festivals
                 </h2>
-                <p className="text-slate-600 text-sm leading-relaxed">
-                  Eventloo is a modern event management system designed for colleges, schools, and
-                  organizations to plan, manage, and showcase events seamlessly.
+                <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                  Eventloo is a state-of-the-art event management and live fest orchestration platform engineered specifically for schools, colleges, and educational institutions. From organizing multiple concurrent campus fests to automating conflict-free schedules, real-time judge scoring, and live championship standings, Eventloo replaces outdated manual spreadsheets with a unified, transparent digital ecosystem.
                 </p>
               </div>
 
-              {/* 4 Feature Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Full-Width Feature Cards Grid (No Photo, Content Everywhere) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                 
-                {/* Feature 1 */}
-                <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs hover:shadow-md transition-shadow space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                {/* Feature 1: Multiple Event Management */}
+                <div className="bg-slate-50/70 hover:bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-2xs hover:shadow-md transition-all space-y-3 group">
+                  <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                     <Layers className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900">Event Management</h3>
-                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                      End-to-end program scheduling, team allocations, and stage coordination.
+                    <h3 className="text-base font-extrabold text-slate-900">
+                      Multiple Event Management
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 leading-relaxed">
+                      Configure and orchestrate multiple festivals, inter-collegiate tournaments, arts meets, and sports competitions concurrently under one school workspace with isolated rules, categories, and leaderboards.
                     </p>
                   </div>
                 </div>
 
-                {/* Feature 2 */}
-                <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs hover:shadow-md transition-shadow space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <BarChart3 className="w-5 h-5" />
+                {/* Feature 2: Conflict-Free Scheduling */}
+                <div className="bg-slate-50/70 hover:bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-2xs hover:shadow-md transition-all space-y-3 group">
+                  <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <Calendar className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900">Live Results</h3>
-                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                      Instant judge score computation, real-time publishing, and ranking feeds.
+                    <h3 className="text-base font-extrabold text-slate-900">
+                      Smart Stage Scheduling
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 leading-relaxed">
+                      Coordinate hundreds of programs across multiple physical stages and auditoriums. Intelligent clash-detection algorithms prevent double-booking participants across simultaneous events.
                     </p>
                   </div>
                 </div>
 
-                {/* Feature 3 */}
-                <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs hover:shadow-md transition-shadow space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                {/* Feature 3: Digital Judged Scoring */}
+                <div className="bg-slate-50/70 hover:bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-2xs hover:shadow-md transition-all space-y-3 group">
+                  <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <Award className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900">
+                      Live Judge Scoring & Tabulation
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 leading-relaxed">
+                      Judges enter criteria-based scores on tablets or mobile phones. Mark verification, penalty deductions, grade allocations (Grade A, B), and tie-breaker computations happen automatically.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 4: Live Team Championship Standings */}
+                <div className="bg-slate-50/70 hover:bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-2xs hover:shadow-md transition-all space-y-3 group">
+                  <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                     <Trophy className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900">Team & Points</h3>
-                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                      Automated leaderboard calculation, grade points tracking, and trophy tallies.
+                    <h3 className="text-base font-extrabold text-slate-900">
+                      Automated Championship Points
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 leading-relaxed">
+                      Every approved program score immediately updates team standings in real time. Campus leaderboards display live positions, gold/silver/bronze medals, and championship points instantly.
                     </p>
                   </div>
                 </div>
 
-                {/* Feature 4 */}
-                <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-2xs hover:shadow-md transition-shadow space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+                {/* Feature 5: Roster & Chest Number System */}
+                <div className="bg-slate-50/70 hover:bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-2xs hover:shadow-md transition-all space-y-3 group">
+                  <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                    <Users className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-extrabold text-slate-900">
+                      Roster & Chest Numbering
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 leading-relaxed">
+                      Automated chest number allocation, bulk participant registration, team manager delegation, and real-time student check-in verify legitimate participants and streamline event flow.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Feature 6: Public Transparency & Digital Recognition */}
+                <div className="bg-slate-50/70 hover:bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-6 shadow-2xs hover:shadow-md transition-all space-y-3 group">
+                  <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                     <QrCode className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-slate-900">Digital Access</h3>
-                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                      Quick QR pass sharing, participant verification, and instant mobile portal access.
+                    <h3 className="text-base font-extrabold text-slate-900">
+                      Public Portal & Digital Passes
+                    </h3>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-1.5 leading-relaxed">
+                      Mobile-responsive live portal with instant winner declaration cards, official printable result posters, public QR access passes, and verifiable digital certificate generation.
                     </p>
                   </div>
                 </div>
@@ -743,94 +872,96 @@ const PublicEventPortal = () => {
             </div>
           </section>
 
-          {/* SECTION 3: VISION & MISSION */}
+          {/* ========================================================================= */}
+          {/* SECTION 2: VISION & MISSION                                               */}
+          {/* ========================================================================= */}
           <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               
               {/* Vision Card */}
-              <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-7 shadow-2xs space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-2xs space-y-3">
+                <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                   <Flag className="w-5 h-5" />
                 </div>
-                <h3 className="text-base font-bold text-slate-900">Our Vision</h3>
+                <h3 className="text-lg font-extrabold text-slate-900">Our Vision</h3>
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                  To make campus events more organized, transparent, and engaging through simple,
-                  reliable, and state-of-the-art event technology.
+                  To establish Eventloo as the gold standard in educational event technology—making every school and college festival organized, highly transparent, and universally exciting for students and organizers alike.
                 </p>
               </div>
 
               {/* Mission Card */}
-              <div className="bg-white rounded-2xl border border-slate-200/80 p-6 sm:p-7 shadow-2xs space-y-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-2xs space-y-3">
+                <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
                   <Target className="w-5 h-5" />
                 </div>
-                <h3 className="text-base font-bold text-slate-900">Our Mission</h3>
+                <h3 className="text-lg font-extrabold text-slate-900">Our Mission</h3>
                 <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                  To empower colleges, schools, and student communities with a unified platform for
-                  planning, seamless participation, and instant public recognition.
+                  To eliminate administrative bottlenecks through intuitive software that empowers administrators, inspires student competitors, ensures fair judging, and delivers instant public celebration.
                 </p>
               </div>
 
             </div>
           </section>
 
-          {/* SECTION 4: HOW IT WORKS (FROM REGISTRATION TO RESULTS) */}
+          {/* ========================================================================= */}
+          {/* SECTION 3: HOW IT WORKS (END-TO-END WORKFLOW)                             */}
+          {/* ========================================================================= */}
           <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-10 shadow-2xs space-y-8">
               
               <div className="space-y-1">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">
                   How It Works
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                  From Registration to Results
+                  From Event Creation to Live Winner Declaration
                 </h2>
               </div>
 
-              {/* 4 Steps with arrows */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 relative">
+              {/* 4 Steps Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 
                 {/* Step 1 */}
-                <div className="space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <Calendar className="w-5 h-5" />
+                <div className="space-y-3 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
+                    1
                   </div>
-                  <h4 className="text-sm font-bold text-slate-900">Create Event</h4>
+                  <h4 className="text-sm font-bold text-slate-900">Create & Configure</h4>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Set up programs, teams, rules, and stages in seconds.
+                    Set up competition programs, categories, stages, teams, and point calculation rules in seconds.
                   </p>
                 </div>
 
                 {/* Step 2 */}
-                <div className="space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <Layers className="w-5 h-5" />
+                <div className="space-y-3 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
+                    2
                   </div>
-                  <h4 className="text-sm font-bold text-slate-900">Manage</h4>
+                  <h4 className="text-sm font-bold text-slate-900">Register & Assign</h4>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Handle registrations, student assignments, and participation.
+                    Auto-generate unique chest numbers, import participant rosters, and delegate to team managers.
                   </p>
                 </div>
 
                 {/* Step 3 */}
-                <div className="space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <Activity className="w-5 h-5" />
+                <div className="space-y-3 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
+                    3
                   </div>
-                  <h4 className="text-sm font-bold text-slate-900">Track</h4>
+                  <h4 className="text-sm font-bold text-slate-900">Stage & Score Live</h4>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Monitor live stage flow, scoring, and points updates.
+                    Coordinate live stage timelines while judges submit marks securely with automated tabulation.
                   </p>
                 </div>
 
                 {/* Step 4 */}
-                <div className="space-y-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">
-                    <Trophy className="w-5 h-5" />
+                <div className="space-y-3 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm">
+                    4
                   </div>
-                  <h4 className="text-sm font-bold text-slate-900">Publish</h4>
+                  <h4 className="text-sm font-bold text-slate-900">Publish & Celebrate</h4>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Share results, certificates, and rankings instantly with the campus.
+                    Instantly broadcast official results, live team points table, and printable winner posters.
                   </p>
                 </div>
 
@@ -839,32 +970,51 @@ const PublicEventPortal = () => {
             </div>
           </section>
 
-          {/* SECTION 5: DARK EMERALD EXPLORE BANNER */}
+          {/* ========================================================================= */}
+          {/* SECTION 4: EXPLORE BANNER (CRYSTAL CLEAR HIGH-CONTRAST BRAND INDIGO)       */}
+          {/* ========================================================================= */}
           <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="rounded-3xl bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 text-white p-8 sm:p-14 text-center space-y-6 shadow-xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-600/20 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute bottom-0 left-0 w-80 h-80 bg-teal-500/20 rounded-full blur-3xl pointer-events-none" />
+            <div className="rounded-3xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-violet-800 text-white p-8 sm:p-14 text-center space-y-6 shadow-xl shadow-indigo-600/20 relative overflow-hidden border border-indigo-500/40">
+              
+              {/* Vibrant ambient lighting */}
+              <div className="absolute top-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-80 h-80 bg-violet-400/20 rounded-full blur-3xl pointer-events-none" />
 
-              <div className="relative z-10 max-w-xl mx-auto space-y-3">
-                <h3 className="text-2xl sm:text-4xl font-black tracking-tight">
+              <div className="relative z-10 max-w-2xl mx-auto space-y-4">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-white text-[11px] font-bold uppercase tracking-widest border border-white/20 shadow-sm">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Official Event Hub</span>
+                </div>
+
+                <h3 className="text-3xl sm:text-5xl font-black text-white tracking-tight drop-shadow-sm leading-tight">
                   Explore {event.title}
                 </h3>
-                <p className="text-xs sm:text-sm text-emerald-200/90 leading-relaxed">
-                  Check live results, points table, and the complete official program schedule.
+                
+                <p className="text-sm sm:text-base text-indigo-100 font-medium max-w-lg mx-auto leading-relaxed">
+                  Browse official program winner declarations, real-time championship points standings, and complete multi-stage schedules.
                 </p>
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-3 pt-2 w-full max-w-md mx-auto sm:max-w-none">
                   <button
                     onClick={() => handleTabChange('results')}
-                    className="px-6 py-2.5 bg-white hover:bg-slate-100 text-emerald-950 font-bold text-xs sm:text-sm rounded-full transition-all cursor-pointer shadow-sm active:scale-95"
+                    className="w-full sm:w-auto px-6 py-3 bg-white hover:bg-slate-50 text-indigo-700 font-extrabold text-sm rounded-full transition-all cursor-pointer shadow-lg hover:shadow-xl active:scale-95 text-center"
                   >
                     View Results →
                   </button>
-                  <button
-                    onClick={() => handleTabChange('schedule')}
-                    className="px-6 py-2.5 bg-white/10 hover:bg-white/20 text-white border border-white/25 font-semibold text-xs sm:text-sm rounded-full transition-all cursor-pointer"
-                  >
-                    See Schedule
-                  </button>
+                  <div className="grid grid-cols-2 gap-2.5 w-full sm:w-auto sm:flex sm:items-center sm:gap-3">
+                    <button
+                      onClick={() => handleTabChange('points')}
+                      className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-indigo-900/40 hover:bg-indigo-900/60 text-white border border-white/30 font-bold text-xs sm:text-sm rounded-full transition-all cursor-pointer shadow-sm hover:border-white/50 text-center"
+                    >
+                      Points Table
+                    </button>
+                    <button
+                      onClick={() => handleTabChange('schedule')}
+                      className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 bg-indigo-900/40 hover:bg-indigo-900/60 text-white border border-white/30 font-bold text-xs sm:text-sm rounded-full transition-all cursor-pointer shadow-sm hover:border-white/50 text-center"
+                    >
+                      See Schedule
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -880,7 +1030,7 @@ const PublicEventPortal = () => {
         <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 flex-1 w-full space-y-10">
           
           <div className="space-y-2 text-center max-w-2xl mx-auto">
-            <span className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-700">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-600">
               {event.school_name || 'Campus Event'}
             </span>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
@@ -900,12 +1050,12 @@ const PublicEventPortal = () => {
                 </p>
                 <div className="space-y-2 text-xs text-slate-600 pt-2">
                   <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <Calendar className="w-4 h-4 text-indigo-600 shrink-0" />
                     <span className="font-semibold text-slate-800">Event Dates:</span>
                     <span>{formatDateRange(event.start_date, event.end_date)}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <MapPin className="w-4 h-4 text-indigo-600 shrink-0" />
                     <span className="font-semibold text-slate-800">Official Venue:</span>
                     <span>{event.venue || 'Campus Main Stage & Indoor Venues'}</span>
                   </div>
@@ -922,16 +1072,16 @@ const PublicEventPortal = () => {
           </div>
 
           {/* Quick jump to results / schedule */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-4">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 sm:gap-3 pt-4 w-full max-w-md mx-auto sm:max-w-none">
             <button
               onClick={() => handleTabChange('results')}
-              className="px-6 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm rounded-full transition-colors"
+              className="w-full sm:w-auto px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs sm:text-sm rounded-full transition-colors cursor-pointer text-center"
             >
               Explore Program Results →
             </button>
             <button
               onClick={() => handleTabChange('points')}
-              className="px-6 py-2.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 font-semibold text-xs sm:text-sm rounded-full transition-colors"
+              className="w-full sm:w-auto px-6 py-2.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 font-semibold text-xs sm:text-sm rounded-full transition-colors cursor-pointer text-center"
             >
               View Points Table
             </button>
@@ -943,372 +1093,464 @@ const PublicEventPortal = () => {
       {/* ------------------------------------------------------------------------- */}
       {/* TAB C: PROGRAMS & RESULTS TAB (2-COL LAYOUT WITH CATEGORY PILLS)           */}
       {/* ------------------------------------------------------------------------- */}
+      {/* ------------------------------------------------------------------------- */}
+      {/* TAB C: PROGRAMS & RESULTS (SIMPLE, NON-SCROLLABLE 2-STEP & POSTER CARD)   */}
+      {/* ------------------------------------------------------------------------- */}
       {(activeTab === 'results' || activeTab === 'programs') && (
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex-1 w-full space-y-6">
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 flex-1 w-full space-y-5 sm:space-y-6">
           
-          {/* Header Tag + Title */}
-          <div className="space-y-1">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-              {event.title}
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Program Results
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500">
-              Official results and winners for all programs.
-            </p>
-          </div>
-
-          {/* Category Filter Pills & Search Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            {/* Category Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0 no-scrollbar">
-              <button
-                onClick={() => setSelectedCategory('all')}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                  selectedCategory === 'all'
-                    ? 'bg-emerald-800 text-white shadow-2xs'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-                }`}
-              >
-                All Categories
-              </button>
-              {categories.map((cat) => {
-                const isSelected = selectedCategory === cat.code;
-                return (
-                  <button
-                    key={cat.code}
-                    onClick={() => setSelectedCategory(cat.code)}
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                      isSelected
-                        ? 'bg-emerald-800 text-white font-bold shadow-2xs'
-                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
-                    }`}
-                  >
-                    {cat.name}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Search Input */}
-            <div className="relative w-full sm:w-64 shrink-0">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Search programs..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 bg-white border border-slate-200/90 rounded-xl text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all shadow-2xs"
-              />
-            </div>
-          </div>
-
-          {/* 2-Column Layout: Left List + Right Detail */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Top Header: Trophy Squircle Icon + Title & Subtitle */}
+          <div className="relative overflow-hidden bg-white/80 backdrop-blur-sm p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs flex items-center gap-3 sm:gap-4">
+            {/* Subtle decorative background wave in Eventloo indigo palette */}
+            <div className="absolute right-0 top-0 w-72 h-full bg-gradient-to-l from-indigo-50/60 via-indigo-50/20 to-transparent pointer-events-none rounded-r-3xl" />
             
-            {/* Left Column: Programs List (4 cols) */}
-            <div className="lg:col-span-5 xl:col-span-4 bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                  Programs ({filteredPrograms.length})
-                </span>
-                <span className="text-[10px] text-slate-400 font-medium">Select to view</span>
+            <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs shrink-0 relative z-10">
+              <Trophy className="w-5 h-5 sm:w-7 sm:h-7 text-indigo-600" />
+            </div>
+            <div className="relative z-10 min-w-0">
+              <h1 className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-tight truncate">
+                Program Results
+              </h1>
+              <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5 truncate">
+                Official results and winners
+              </p>
+            </div>
+          </div>
+
+          {/* TWO-STEP DROPDOWN SELECTORS: CATEGORY & PROGRAM SIDE-BY-SIDE */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            
+            {/* Dropdown 1: Category */}
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">
+                Category
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
+                  className="w-full bg-white border border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 rounded-xl sm:rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-base font-semibold text-slate-900 appearance-none cursor-pointer transition-all pr-10 shadow-2xs"
+                >
+                  <option value="">Select Category</option>
+                  {categories.map((cat) => (
+                    <option key={cat.code} value={cat.code}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 sm:px-4 text-slate-500">
+                  <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+            </div>
+
+            {/* Dropdown 2: Program (Enabled once category is selected) */}
+            <div>
+              <label className="block text-xs sm:text-sm font-semibold text-slate-600 mb-1.5">
+                Program
+              </label>
+              <div className="relative">
+                <select
+                  value={selectedProgramId}
+                  onChange={(e) => setSelectedProgramId(e.target.value)}
+                  disabled={!selectedCategory || currentCategoryPrograms.length === 0}
+                  className={`w-full border rounded-xl sm:rounded-2xl px-3.5 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-base font-semibold appearance-none transition-all pr-10 shadow-2xs ${
+                    !selectedCategory
+                      ? 'bg-slate-50/80 border-slate-200 text-slate-400 cursor-not-allowed'
+                      : currentCategoryPrograms.length === 0
+                      ? 'bg-slate-50/80 border-slate-200 text-slate-400'
+                      : 'bg-white border-slate-200 hover:border-slate-300 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-500/10 text-slate-900 cursor-pointer'
+                  }`}
+                >
+                  <option value="">
+                    {!selectedCategory
+                      ? 'Select category first'
+                      : currentCategoryPrograms.length === 0
+                      ? 'No programs available'
+                      : 'Select Program'}
+                  </option>
+                  {currentCategoryPrograms.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.is_published ? ' ✓' : ''}
+                    </option>
+                  ))}
+                </select>
+                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3.5 sm:px-4 text-slate-500">
+                  <ChevronDown className="w-4 h-4 sm:w-5 sm:h-5" />
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          {/* RESULT AREA: ONLY SHOWN AFTER CHOOSING BOTH CATEGORY AND PROGRAM */}
+          {activeProgram ? (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              
+              {/* Main Result Card */}
+              <div
+                id="result-card-container"
+                className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 p-4 sm:p-7 shadow-xs space-y-4 sm:space-y-5"
+              >
+                {/* Card Top: Event Title Overline, Program Name, Subtitle, and Published Badge */}
+                <div className="flex items-start justify-between gap-3 sm:gap-4">
+                  <div className="space-y-1 min-w-0 flex-1">
+                    {/* Overline in Eventloo Brand Color (NOT green) */}
+                    <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-indigo-600 block">
+                      {event.title || 'GRAVITAS'}
+                    </span>
+                    <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight break-words">
+                      {activeProgram.name}
+                    </h2>
+                    <p className="text-xs sm:text-sm font-medium text-slate-500 truncate">
+                      {activeProgram.category_name || activeProgram.category}
+                      <span className="mx-1.5 sm:mx-2 text-slate-300">•</span>
+                      {formatDateRange(event.start_date, event.end_date)}
+                    </p>
+                  </div>
+
+                  {/* Status Badge in Eventloo Brand Color (NOT green) */}
+                  <div className="shrink-0">
+                    {activeProgram.is_published ? (
+                      <span className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-xl bg-indigo-50 border border-indigo-200/90 text-indigo-700 text-xs sm:text-sm font-bold shadow-2xs">
+                        <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
+                        <span>Published</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 text-xs sm:text-sm font-bold shadow-2xs">
+                        <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600" />
+                        <span>Pending</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Winner Ranking Rows */}
+                {activeProgram.results && activeProgram.results.length > 0 ? (
+                  <div className="space-y-2.5 sm:space-y-3 pt-1">
+                    {activeProgram.results.map((res, idx) => {
+                      const position = res.position || idx + 1;
+                      const isFirst = position === 1;
+                      const isSecond = position === 2;
+                      const isThird = position === 3;
+
+                      const rowStyle = isFirst
+                        ? 'bg-indigo-50/40 border border-indigo-100/90'
+                        : isSecond
+                        ? 'bg-slate-50/80 border border-slate-200/80'
+                        : isThird
+                        ? 'bg-[#fffbf5] border border-amber-100/80'
+                        : 'bg-white border border-slate-200/70';
+
+                      return (
+                        <div
+                          key={idx}
+                          className={`rounded-xl sm:rounded-2xl p-2.5 sm:p-4 flex items-center justify-between gap-2 sm:gap-4 transition-all ${rowStyle}`}
+                        >
+                          {/* Left: Laurel Wreath Rank Badge + Participant Details */}
+                          <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
+                            {position <= 3 ? (
+                              <LaurelRankBadge rank={position} />
+                            ) : (
+                              <div className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center shrink-0">
+                                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 text-slate-600 font-extrabold text-xs sm:text-sm flex items-center justify-center">
+                                  #{position}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="min-w-0 flex-1">
+                              <h4 className="text-xs sm:text-base font-extrabold text-slate-900 truncate leading-snug">
+                                {res.student_name || 'Participant'}
+                              </h4>
+                              <p className="text-[11px] sm:text-sm font-medium text-slate-500 mt-0.5 truncate">
+                                {res.team_name}
+                                {res.chest_number && (
+                                  <>
+                                    <span className="mx-1 text-slate-300">•</span>
+                                    <span>#{res.chest_number}</span>
+                                  </>
+                                )}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Right: Grade Pill + Vertical Divider + Points */}
+                          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                            {res.grade && res.grade !== '-' && (
+                              <span className="bg-indigo-100/70 text-indigo-700 font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-lg sm:rounded-xl text-[10px] sm:text-sm border border-indigo-200/60 shadow-2xs shrink-0">
+                                {res.grade.startsWith('Grade') ? res.grade : `Grade ${res.grade}`}
+                              </span>
+                            )}
+
+                            {/* Vertical Divider */}
+                            <div className="w-px h-5 sm:h-6 bg-slate-200/90 shrink-0" />
+
+                            {/* Points */}
+                            <div className="min-w-[34px] sm:min-w-[44px] text-right shrink-0">
+                              <span className="text-xs sm:text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
+                                {res.points || 0} pts
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="py-8 sm:py-10 text-center space-y-2 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200 p-4">
+                    <Clock className="w-7 h-7 sm:w-8 sm:h-8 text-amber-500 mx-auto" />
+                    <h4 className="text-sm sm:text-base font-bold text-slate-800">
+                      Results Under Evaluation
+                    </h4>
+                    <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                      Official scores for this program are being tabulated by judges. Please check back shortly.
+                    </p>
+                  </div>
+                )}
               </div>
 
-              {filteredPrograms.length === 0 ? (
-                <div className="text-center py-10 space-y-2">
-                  <Box className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p className="text-xs font-medium text-slate-500">No programs match your filter</p>
+              {/* Action Buttons: Print & Share */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 pt-1">
+                <div className="text-[11px] sm:text-xs text-slate-400 font-medium text-center sm:text-left">
+                  Official Result · Generated by Eventloo
                 </div>
-              ) : (
-                <div className="space-y-1.5 max-h-[600px] overflow-y-auto pr-1">
-                  {filteredPrograms.map((p) => {
-                    const isSelected = activeProgram?.id === p.id;
-                    return (
-                      <button
-                        key={p.id}
-                        onClick={() => setSelectedProgramId(p.id)}
-                        className={`w-full text-left p-3 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-3 border ${
-                          isSelected
-                            ? 'bg-emerald-50/80 border-emerald-300 shadow-2xs'
-                            : 'bg-white hover:bg-slate-50/80 border-slate-100'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div
-                            className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                              isSelected
-                                ? 'bg-emerald-700 text-white'
-                                : 'bg-slate-100 text-slate-500'
-                            }`}
-                          >
-                            <Box className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <h4
-                              className={`text-xs sm:text-sm font-bold truncate ${
-                                isSelected ? 'text-emerald-950' : 'text-slate-800'
-                              }`}
-                            >
-                              {p.name}
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+                  <button
+                    onClick={() => window.print()}
+                    className="w-full sm:w-auto px-3.5 py-2 sm:px-4 sm:py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                  >
+                    <Printer className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>Print Result</span>
+                  </button>
+                  <button
+                    onClick={handleCopy}
+                    className="w-full sm:w-auto px-3.5 py-2 sm:px-4 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    {copied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Link Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Share2 className="w-3.5 h-3.5" />
+                        <span>Share Result</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          ) : (
+            <div className="bg-white rounded-3xl border border-slate-200/80 p-8 sm:p-12 text-center space-y-3 shadow-2xs">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto border border-indigo-100">
+                <Trophy className="w-6 h-6" />
+              </div>
+              <h3 className="text-base sm:text-lg font-bold text-slate-900">
+                {!selectedCategory
+                  ? 'Choose a Category'
+                  : 'Choose a Program'}
+              </h3>
+              <p className="text-xs sm:text-sm text-slate-500 max-w-md mx-auto leading-relaxed">
+                {!selectedCategory
+                  ? 'Select a category from the dropdown above to view the available programs.'
+                  : 'Please select a program from the dropdown above to view the official results and winners.'}
+              </p>
+            </div>
+          )}
+
+        </main>
+      )}
+
+      {/* ------------------------------------------------------------------------- */}
+      {/* TAB D: POINTS TABLE TAB (MATCHING RESULTS CARD DESIGN IN OUR BRAND COLOR) */}
+      {/* ------------------------------------------------------------------------- */}
+      {activeTab === 'points' && (
+        <main className="max-w-4xl mx-auto px-4 sm:px-6 py-4 sm:py-6 flex-1 w-full space-y-5 sm:space-y-6">
+          
+          {/* Top Header: Trophy / BarChart Squircle Icon + Title & Subtitle */}
+          <div className="relative overflow-hidden bg-white/80 backdrop-blur-sm p-3.5 sm:p-5 rounded-2xl sm:rounded-3xl border border-slate-200/80 shadow-2xs flex items-center gap-3 sm:gap-4">
+            {/* Subtle decorative background wave in Eventloo indigo palette */}
+            <div className="absolute right-0 top-0 w-72 h-full bg-gradient-to-l from-indigo-50/60 via-indigo-50/20 to-transparent pointer-events-none rounded-r-3xl" />
+            
+            <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs shrink-0 relative z-10">
+              <Trophy className="w-5 h-5 sm:w-7 sm:h-7 text-indigo-600" />
+            </div>
+            <div className="relative z-10 min-w-0">
+              <h1 className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight leading-tight truncate">
+                Points Table
+              </h1>
+              <p className="text-xs sm:text-sm font-medium text-slate-500 mt-0.5 truncate">
+                Official team championship standings and leaderboard
+              </p>
+            </div>
+          </div>
+
+          {/* Main Championship Standings Card (matching results card layout) */}
+          <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 p-4 sm:p-7 shadow-xs space-y-4 sm:space-y-5 animate-in fade-in duration-200">
+            
+            {/* Card Top: Event Title Overline, Standings Headline, Subtitle, and Live Badge */}
+            <div className="flex items-start justify-between gap-3 sm:gap-4">
+              <div className="space-y-1 min-w-0 flex-1">
+                {/* Overline in Eventloo Brand Color (NOT green) */}
+                <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-indigo-600 block">
+                  {event.title || 'GRAVITAS'}
+                </span>
+                <h2 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight break-words">
+                  Team Standings
+                </h2>
+                <p className="text-xs sm:text-sm font-medium text-slate-500 truncate">
+                  {teamStandings.length} Teams Competing
+                  <span className="mx-1.5 sm:mx-2 text-slate-300">•</span>
+                  Ranked by Total Points
+                </p>
+              </div>
+
+              {/* Status Badge in Eventloo Brand Color (NOT green) */}
+              <div className="shrink-0">
+                <span className="inline-flex items-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3.5 sm:py-1.5 rounded-xl bg-indigo-50 border border-indigo-200/90 text-indigo-700 text-xs sm:text-sm font-bold shadow-2xs">
+                  <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
+                  <span>Official Scores</span>
+                </span>
+              </div>
+            </div>
+
+            {/* Team Ranking Rows with Laurel Wreaths (Matching Reference Design) */}
+            {teamStandings && teamStandings.length > 0 ? (
+              <div className="space-y-2.5 sm:space-y-3 pt-1">
+                {teamStandings.map((team, idx) => {
+                  const position = team.rank || idx + 1;
+                  const isFirst = position === 1;
+                  const isSecond = position === 2;
+                  const isThird = position === 3;
+
+                  const rowStyle = isFirst
+                    ? 'bg-indigo-50/40 border border-indigo-100/90'
+                    : isSecond
+                    ? 'bg-slate-50/80 border border-slate-200/80'
+                    : isThird
+                    ? 'bg-[#fffbf5] border border-amber-100/80'
+                    : 'bg-white border border-slate-200/70';
+
+                  const teamKey = team.team_id || idx;
+                  const isExpanded = expandedTeamId === teamKey;
+                  const hasBreakdown = team.program_results && team.program_results.length > 0;
+
+                  return (
+                    <div
+                      key={teamKey}
+                      className={`rounded-xl sm:rounded-2xl p-2.5 sm:p-4 transition-all ${rowStyle} ${hasBreakdown ? 'cursor-pointer' : ''}`}
+                      onClick={() => hasBreakdown && setExpandedTeamId(isExpanded ? null : teamKey)}
+                    >
+                      <div className="flex items-center justify-between gap-2 sm:gap-4">
+                        {/* Left: Laurel Wreath Rank Badge + Team Name & Stats */}
+                        <div className="flex items-center gap-2 sm:gap-3.5 min-w-0 flex-1">
+                          {position <= 3 ? (
+                            <LaurelRankBadge rank={position} />
+                          ) : (
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center shrink-0">
+                              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-100 text-slate-600 font-extrabold text-xs sm:text-sm flex items-center justify-center">
+                                #{position}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="min-w-0 flex-1">
+                            <h4 className="text-xs sm:text-base font-extrabold text-slate-900 uppercase tracking-tight truncate leading-snug">
+                              {team.team_name}
                             </h4>
-                            <span className="text-[10px] text-slate-400 block truncate font-medium">
-                              {p.category_name || p.category}
-                            </span>
+                            <p className="text-[11px] sm:text-xs font-semibold text-slate-500 mt-0.5 truncate">
+                              {team.first_places > 0 ? `${team.first_places} ${team.first_places === 1 ? 'Win' : 'Wins'}` : 'Participant'}
+                              {team.programs_count > 0 && ` • ${team.programs_count} Competed`}
+                              {hasBreakdown && (
+                                <span className="ml-1.5 text-indigo-600 font-bold hover:underline">
+                                  {isExpanded ? 'Hide Breakdown ▲' : 'View Breakdown ▼'}
+                                </span>
+                              )}
+                            </p>
                           </div>
                         </div>
 
-                        {p.is_published ? (
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Results Published" />
-                        ) : (
-                          <span className="w-2 h-2 rounded-full bg-slate-200 shrink-0" title="Pending" />
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
+                        {/* Right: Vertical Divider + Total Points */}
+                        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
+                          <div className="w-px h-5 sm:h-6 bg-slate-200/90 shrink-0" />
+                          <div className="min-w-[34px] sm:min-w-[48px] text-right shrink-0">
+                            <span className="text-xs sm:text-base font-black text-slate-900 tracking-tight whitespace-nowrap">
+                              {team.total_points ?? 0} pts
+                            </span>
+                          </div>
+                        </div>
+                      </div>
 
-            {/* Right Column: Selected Program Detail View (7-8 cols) */}
-            <div className="lg:col-span-7 xl:col-span-8 bg-white rounded-2xl border border-slate-200/80 p-5 sm:p-7 shadow-2xs space-y-6">
-              {activeProgram ? (
-                <>
-                  {/* Program Header */}
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 pb-4 border-b border-slate-100">
-                    <div className="space-y-1">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                        {activeProgram.category_name || activeProgram.category}
-                      </span>
-                      <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight pt-1">
-                        {activeProgram.name}
-                      </h2>
-                      {(activeProgram.venue || activeProgram.stage_name) && (
-                        <p className="text-xs text-slate-500 flex items-center gap-1.5 pt-0.5">
-                          <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{activeProgram.stage_name || activeProgram.venue}</span>
-                          {activeProgram.start_time && (
-                            <>
-                              <span>·</span>
-                              <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              <span>{formatTimeSlot(activeProgram.start_time, activeProgram.end_time)}</span>
-                            </>
-                          )}
-                        </p>
-                      )}
-                    </div>
-
-                    {activeProgram.is_published ? (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 self-start">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>Results Published</span>
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200 self-start">
-                        <Clock className="w-3.5 h-3.5 text-amber-600" />
-                        <span>In Progress / Scheduled</span>
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Winners & Rankings */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                      Winners & Rankings
-                    </h3>
-
-                    {activeProgram.results && activeProgram.results.length > 0 ? (
-                      <div className="space-y-2.5">
-                        {activeProgram.results.map((res, idx) => {
-                          const isGold = res.position === 1 || idx === 0;
-                          const isSilver = res.position === 2 || idx === 1;
-                          const isBronze = res.position === 3 || idx === 2;
-
-                          return (
-                            <div
-                              key={idx}
-                              className={`p-3.5 sm:p-4 rounded-xl border flex items-center justify-between gap-3 transition-colors ${
-                                isGold
-                                  ? 'bg-amber-50/50 border-amber-200/80 shadow-2xs'
-                                  : isSilver
-                                  ? 'bg-slate-50/60 border-slate-200/80'
-                                  : isBronze
-                                  ? 'bg-amber-50/20 border-amber-200/50'
-                                  : 'bg-white border-slate-100'
-                              }`}
-                            >
-                              <div className="flex items-center gap-3.5 min-w-0">
-                                {/* Position badge */}
-                                <div
-                                  className={`w-9 h-9 rounded-xl font-black text-xs flex items-center justify-center shrink-0 ${
-                                    isGold
-                                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                      : isSilver
-                                      ? 'bg-slate-100 text-slate-700 border border-slate-300'
-                                      : isBronze
-                                      ? 'bg-amber-50 text-amber-900 border border-amber-200'
-                                      : 'bg-slate-50 text-slate-600'
-                                  }`}
-                                >
-                                  {res.position ? `#${res.position}` : `#${idx + 1}`}
-                                </div>
-
-                                <div className="min-w-0">
-                                  <h4 className="text-sm font-bold text-slate-900 truncate">
-                                    {res.student_name || 'Participant'}
-                                  </h4>
-                                  <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                                    <span className="font-semibold uppercase tracking-wider text-slate-600">
-                                      {res.team_name || 'General'}
-                                    </span>
-                                    {res.chest_number && (
-                                      <>
-                                        <span>·</span>
-                                        <span className="text-slate-400">Chest #{res.chest_number}</span>
-                                      </>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Grade & Points pills */}
-                              <div className="flex items-center gap-2 shrink-0">
-                                {res.grade && res.grade !== '-' && (
-                                  <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                    Grade {res.grade}
-                                  </span>
-                                )}
-                                <span className="px-3 py-1 rounded-lg text-xs font-black bg-slate-100 text-slate-800">
-                                  {res.points} pts
+                      {/* Expandable Score Breakdown */}
+                      {isExpanded && hasBreakdown && (
+                        <div className="mt-3 pt-3 border-t border-slate-200/60 space-y-1.5 animate-in fade-in duration-150">
+                          <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            Score Breakdown
+                          </p>
+                          <div className="grid grid-cols-1 gap-1.5">
+                            {team.program_results.map((pr, pIdx) => (
+                              <div key={pIdx} className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-lg bg-white/80 border border-slate-200/60 shadow-2xs">
+                                <span className="font-medium text-slate-700 truncate">
+                                  {pr.program_name} {pr.participant_name ? `• ${pr.participant_name}` : ''}
+                                </span>
+                                <span className="font-bold text-indigo-700 shrink-0 ml-2">
+                                  {pr.position ? `${pr.position === 1 ? '1st' : pr.position === 2 ? '2nd' : '3rd'} Place • ` : ''}+{pr.points_earned} pts
                                 </span>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="bg-slate-50/70 rounded-2xl border border-dashed border-slate-200 p-8 text-center space-y-2">
-                        <Clock className="w-8 h-8 text-slate-400 mx-auto" />
-                        <h4 className="text-sm font-bold text-slate-700">Results Pending</h4>
-                        <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                          Results have not been officially published for this program yet. Check back soon for live updates.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-16 space-y-3">
-                  <Box className="w-10 h-10 text-slate-300 mx-auto" />
-                  <p className="text-xs text-slate-500">Select a program on the left to view details</p>
-                </div>
-              )}
-            </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="py-8 sm:py-10 text-center space-y-2 bg-slate-50/60 rounded-2xl border border-dashed border-slate-200 p-4">
+                <Clock className="w-7 h-7 sm:w-8 sm:h-8 text-amber-500 mx-auto" />
+                <h4 className="text-sm sm:text-base font-bold text-slate-800">
+                  No Points Tabulated Yet
+                </h4>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                  Team standings will automatically populate as program results are published.
+                </p>
+              </div>
+            )}
 
           </div>
 
-        </main>
-      )}
-
-      {/* ------------------------------------------------------------------------- */}
-      {/* TAB D: POINTS TABLE TAB (CLEAN STANDINGS TABLE LIKE MOCKUP)               */}
-      {/* ------------------------------------------------------------------------- */}
-      {activeTab === 'points' && (
-        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex-1 w-full space-y-6">
-          
-          {/* Header */}
-          <div className="space-y-1">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
-              {event.title}
+          {/* Action Buttons: Print & Share */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 pt-1">
+            <div className="text-[11px] sm:text-xs text-slate-400 font-medium text-center sm:text-left">
+              Official Points Standings · Generated by Eventloo
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Points Table
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-500">
-              Team standings based on official published results.
-            </p>
-          </div>
-
-          {/* Standings Table Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200/80 bg-slate-50/70 text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    <th className="py-3.5 px-4 w-16 text-center">#</th>
-                    <th className="py-3.5 px-4">Team</th>
-                    <th className="py-3.5 px-4 text-center">Programs</th>
-                    <th className="py-3.5 px-4 text-center">Wins</th>
-                    <th className="py-3.5 px-4 text-right">Points</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-xs sm:text-sm">
-                  {teamStandings.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" className="py-12 text-center text-slate-400">
-                        No team scores recorded yet. Results will update automatically.
-                      </td>
-                    </tr>
-                  ) : (
-                    teamStandings.map((team, idx) => {
-                      const isRank1 = team.rank === 1 || idx === 0;
-                      const isRank2 = team.rank === 2 || idx === 1;
-                      const isRank3 = team.rank === 3 || idx === 2;
-
-                      return (
-                        <tr
-                          key={team.team_id || idx}
-                          className={`hover:bg-slate-50/70 transition-colors ${
-                            isRank1 ? 'bg-emerald-50/20' : ''
-                          }`}
-                        >
-                          {/* Rank # */}
-                          <td className="py-4 px-4 text-center">
-                            <span
-                              className={`inline-flex items-center justify-center w-7 h-7 rounded-lg text-xs font-black ${
-                                isRank1
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : isRank2
-                                  ? 'bg-slate-100 text-slate-700'
-                                  : isRank3
-                                  ? 'bg-amber-50 text-amber-900'
-                                  : 'text-slate-500'
-                              }`}
-                            >
-                              {team.rank || idx + 1}
-                            </span>
-                          </td>
-
-                          {/* Team Name */}
-                          <td className="py-4 px-4">
-                            <div className="font-bold text-slate-900 uppercase tracking-tight">
-                              {team.team_name}
-                            </div>
-                          </td>
-
-                          {/* Programs Count */}
-                          <td className="py-4 px-4 text-center text-slate-600 font-semibold">
-                            {team.programs_count ?? team.programs_won ?? 0}
-                          </td>
-
-                          {/* Wins (1st places) */}
-                          <td className="py-4 px-4 text-center text-slate-600 font-semibold">
-                            {team.first_places ?? team.programs_won ?? 0}
-                          </td>
-
-                          {/* Total Points */}
-                          <td className="py-4 px-4 text-right">
-                            <span className="font-black text-sm sm:text-base text-slate-900">
-                              {team.total_points ?? 0}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+              <button
+                onClick={() => window.print()}
+                className="w-full sm:w-auto px-3.5 py-2 sm:px-4 sm:py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <Printer className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Print Standings</span>
+              </button>
+              <button
+                onClick={handleCopy}
+                className="w-full sm:w-auto px-3.5 py-2 sm:px-4 sm:py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                {copied ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Link Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Share Standings</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
@@ -1316,17 +1558,17 @@ const PublicEventPortal = () => {
       )}
 
       {/* ------------------------------------------------------------------------- */}
-      {/* TAB E: SCHEDULE TAB (DATE SELECTOR RIBBON + TIMELINE TABLE LIKE MOCKUP)    */}
+      {/* TAB E: SCHEDULE TAB (DATE SELECTOR RIBBON + TIMELINE TABLE)                */}
       {/* ------------------------------------------------------------------------- */}
       {activeTab === 'schedule' && (
-        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 flex-1 w-full space-y-6">
+        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 flex-1 w-full space-y-5 sm:space-y-6">
           
           {/* Header */}
           <div className="space-y-1">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-700">
+            <div className="text-[10px] sm:text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">
               {event.title}
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
               Program Schedule
             </h1>
             <p className="text-xs sm:text-sm text-slate-500">
@@ -1334,15 +1576,15 @@ const PublicEventPortal = () => {
             </p>
           </div>
 
-          {/* Date Picker Ribbon */}
+          {/* Date Picker Ribbon with smooth mobile horizontal swipe */}
           {scheduleDates.length > 0 && (
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            <div className="flex items-center gap-2 overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar touch-pan-x">
               <button
                 onClick={() => setSelectedDate('all')}
-                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                className={`px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs font-bold transition-all shrink-0 cursor-pointer ${
                   selectedDate === 'all'
-                    ? 'bg-emerald-800 text-white shadow-2xs'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80 shadow-2xs'
                 }`}
               >
                 All Days
@@ -1353,14 +1595,14 @@ const PublicEventPortal = () => {
                   <button
                     key={item.iso}
                     onClick={() => setSelectedDate(item.iso)}
-                    className={`px-4 py-2 rounded-xl text-xs transition-all shrink-0 cursor-pointer flex flex-col items-center min-w-[76px] ${
+                    className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs transition-all shrink-0 cursor-pointer flex flex-col items-center min-w-[64px] sm:min-w-[76px] ${
                       isSelected
-                        ? 'bg-emerald-800 text-white font-bold shadow-2xs'
-                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80'
+                        ? 'bg-indigo-600 text-white font-bold shadow-2xs'
+                        : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200/80 shadow-2xs'
                     }`}
                   >
                     <span className="font-bold">{item.labelMonth}</span>
-                    <span className={`text-[10px] ${isSelected ? 'text-emerald-200' : 'text-slate-400'}`}>
+                    <span className={`text-[10px] ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
                       {item.labelDay}
                     </span>
                   </button>
@@ -1369,8 +1611,44 @@ const PublicEventPortal = () => {
             </div>
           )}
 
-          {/* Schedule Table Card */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+          {/* MOBILE VIEW: SLEEK PROGRAM SCHEDULE CARDS */}
+          <div className="block md:hidden space-y-3">
+            {schedulePrograms.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 bg-white rounded-2xl border border-slate-200/80 p-6">
+                No schedule entries found for the selected filter.
+              </div>
+            ) : (
+              schedulePrograms.map((prog) => (
+                <div
+                  key={prog.id}
+                  className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs space-y-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-100/80 text-indigo-700 text-xs font-bold">
+                      <Clock className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>{formatTimeSlot(prog.start_time, prog.end_time)}</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 text-[11px] font-medium">
+                      <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                      <span className="truncate max-w-[120px]">{prog.stage_name || prog.venue || 'Main Stage'}</span>
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900 leading-snug">
+                      {prog.name}
+                    </h4>
+                    <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                      {prog.category_name || prog.category}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* DESKTOP VIEW: CLEAN SCHEDULE TABLE CARD */}
+          <div className="hidden md:block bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -1431,39 +1709,68 @@ const PublicEventPortal = () => {
       {/* ========================================================================= */}
       {showQrModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 text-center space-y-4 shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95">
-            <div className="space-y-1">
-              <h3 className="text-base font-bold text-slate-900">
-                Official Event QR Pass
-              </h3>
-              <p className="text-xs text-slate-500">
-                Scan with any smartphone camera to open live results and standings.
-              </p>
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 sm:p-7 text-center shadow-2xl border border-slate-100 animate-in fade-in zoom-in-95 relative">
+            {/* Top Close Button */}
+            <button
+              onClick={() => setShowQrModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            {/* Official Eventloo Logo on Pure White Background (Matches Login Page) */}
+            <div className="flex justify-center pt-1">
+              <EventlooLogo size="md" />
             </div>
 
-            {/* QR SVG */}
-            <div className="w-48 h-48 mx-auto p-3 bg-white rounded-2xl border border-slate-200 shadow-2xs flex items-center justify-center">
+            {/* Accent Bar in Eventloo Indigo */}
+            <div className="w-9 h-1 rounded-full bg-indigo-600 mx-auto mt-3 mb-2" />
+
+            {/* Event Title & Subtitle */}
+            <h3 className="text-2xl font-extrabold tracking-tight text-slate-900">
+              {event?.title || 'Gravitas'}
+            </h3>
+            <p className="text-[11px] font-bold text-slate-400 tracking-[0.22em] uppercase mt-0.5">
+              {event?.venue || 'CAMPUS FESTIVAL'}
+            </p>
+
+            {/* Rounded QR Code Frame with Camera Focus Brackets */}
+            <div className="w-64 h-64 mx-auto p-4 bg-white rounded-2xl border border-indigo-100/80 shadow-xs flex items-center justify-center relative my-4">
+              <div className="absolute top-3 left-3 w-6 h-6 border-t-[3.5px] border-l-[3.5px] border-indigo-600 rounded-tl-md pointer-events-none" />
+              <div className="absolute top-3 right-3 w-6 h-6 border-t-[3.5px] border-r-[3.5px] border-indigo-600 rounded-tr-md pointer-events-none" />
+              <div className="absolute bottom-3 left-3 w-6 h-6 border-b-[3.5px] border-l-[3.5px] border-indigo-600 rounded-bl-md pointer-events-none" />
+              <div className="absolute bottom-3 right-3 w-6 h-6 border-b-[3.5px] border-r-[3.5px] border-indigo-600 rounded-br-md pointer-events-none" />
+
               {data?.qr_code_svg ? (
                 <div
                   dangerouslySetInnerHTML={{ __html: data.qr_code_svg }}
-                  className="w-full h-full flex items-center justify-center"
+                  className="w-full h-full flex items-center justify-center p-1.5"
                 />
               ) : (
                 <div className="text-xs text-slate-400">Generating QR...</div>
               )}
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
+            {/* Two-Line Clean Sentence */}
+            <div className="text-sm font-semibold text-slate-600 leading-snug mb-5">
+              <p>Scan to view results,</p>
+              <p>schedule & points table.</p>
+            </div>
+
+            {/* Primary Action: Download Poster (PNG) */}
+            <div className="space-y-3">
               <button
-                onClick={handleCopy}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                onClick={handleDownloadQrPoster}
+                disabled={downloadingQr}
+                className="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
               >
-                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                <span>{copied ? 'Link Copied' : 'Copy Page Link'}</span>
+                <Download className={`w-4 h-4 ${downloadingQr ? 'animate-bounce' : ''}`} />
+                <span>{downloadingQr ? 'Generating Poster...' : 'Download QR Poster (PNG)'}</span>
               </button>
+
               <button
                 onClick={() => setShowQrModal(false)}
-                className="py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-semibold cursor-pointer"
+                className="text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors"
               >
                 Close
               </button>
@@ -1481,7 +1788,7 @@ const PublicEventPortal = () => {
             
             {/* Col 1: Brand & Tagline */}
             <div className="md:col-span-5 space-y-3">
-              <EventlooLogo onClick={() => handleTabChange('home')} />
+              <EventlooLogo size="sm" onClick={() => handleTabChange('home')} />
               <p className="text-xs text-slate-500 max-w-sm leading-relaxed">
                 A complete event management system designed for colleges, schools, and organizations to plan, track, and publish events seamlessly.
               </p>
@@ -1496,7 +1803,7 @@ const PublicEventPortal = () => {
                 <li>
                   <button
                     onClick={() => handleTabChange('home')}
-                    className="hover:text-emerald-700 transition-colors cursor-pointer"
+                    className="hover:text-indigo-600 transition-colors cursor-pointer"
                   >
                     Home
                   </button>
@@ -1504,7 +1811,7 @@ const PublicEventPortal = () => {
                 <li>
                   <button
                     onClick={() => handleTabChange('programs')}
-                    className="hover:text-emerald-700 transition-colors cursor-pointer"
+                    className="hover:text-indigo-600 transition-colors cursor-pointer"
                   >
                     Programs & Results
                   </button>
@@ -1512,7 +1819,7 @@ const PublicEventPortal = () => {
                 <li>
                   <button
                     onClick={() => handleTabChange('points')}
-                    className="hover:text-emerald-700 transition-colors cursor-pointer"
+                    className="hover:text-indigo-600 transition-colors cursor-pointer"
                   >
                     Points Table
                   </button>
@@ -1520,7 +1827,7 @@ const PublicEventPortal = () => {
                 <li>
                   <button
                     onClick={() => handleTabChange('schedule')}
-                    className="hover:text-emerald-700 transition-colors cursor-pointer"
+                    className="hover:text-indigo-600 transition-colors cursor-pointer"
                   >
                     Program Schedule
                   </button>
@@ -1537,7 +1844,7 @@ const PublicEventPortal = () => {
                 <li>
                   <button
                     onClick={() => handleTabChange('about')}
-                    className="hover:text-emerald-700 transition-colors cursor-pointer"
+                    className="hover:text-indigo-600 transition-colors cursor-pointer"
                   >
                     About Platform
                   </button>
@@ -1545,7 +1852,7 @@ const PublicEventPortal = () => {
                 <li>
                   <button
                     onClick={() => setShowQrModal(true)}
-                    className="hover:text-emerald-700 transition-colors cursor-pointer"
+                    className="hover:text-indigo-600 transition-colors cursor-pointer"
                   >
                     Digital QR Pass
                   </button>
@@ -1553,7 +1860,7 @@ const PublicEventPortal = () => {
                 <li>
                   <a
                     href="/"
-                    className="hover:text-emerald-700 transition-colors cursor-pointer"
+                    className="hover:text-indigo-600 transition-colors cursor-pointer"
                   >
                     Host Your Event
                   </a>

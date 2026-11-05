@@ -191,18 +191,96 @@ def _check_student_limits(student, program):
         if not program_is_general_or_mixed(assignment.program)
     ]
 
-    if program.is_team_based:
-        limit = event.max_group_programs_per_student
-        count = len({a.program_id for a in standard_existing if a.program.is_team_based})
-        label = 'group/team'
-    else:
-        limit = event.max_single_programs_per_student
-        count = len({a.program_id for a in standard_existing if not a.program.is_team_based})
-        label = 'single/individual'
-    if limit and count >= limit:
+    # If the student is already assigned to this program, don't double count
+    assigned_prog_ids = {a.program_id for a in standard_existing}
+    if program.id in assigned_prog_ids:
+        return
+
+    cat_code = (student.category or '').strip()
+    category_limits = event.category_participation_limits or {}
+
+    # Look up category-specific limits if configured
+    cat_limits = None
+    if isinstance(category_limits, dict):
+        cat_limits = category_limits.get(cat_code)
+        if not cat_limits and cat_code:
+            for k, v in category_limits.items():
+                if str(k).strip().lower() == cat_code.lower():
+                    cat_limits = v
+                    break
+
+    cat_label = f"category '{cat_code}'" if cat_code else "their category"
+
+    # Distinct unique programs currently assigned
+    unique_programs_map = {a.program_id: a.program for a in standard_existing}
+    unique_programs = list(unique_programs_map.values())
+
+    # 1. Check Total Programs Limit ("totally only this much")
+    max_total = None
+    if cat_limits and isinstance(cat_limits, dict) and 'max_total' in cat_limits:
+        max_total = int(cat_limits.get('max_total') or 0)
+
+    if max_total and max_total > 0 and len(unique_programs) >= max_total:
         raise ValidationError(
-            f'{student.display_name} has reached the limit of {limit} {label} programs for their category.'
+            f"{student.display_name} has reached the limit of {max_total} total programs for {cat_label}."
         )
+
+    # 2. Check Program Type Limits (dynamically supports ANY type, including stage, off_stage, sports, etc.)
+    p_type = getattr(program, 'program_type', None) or 'stage'
+    p_type_norm = str(p_type).lower().replace(' ', '_').replace('-', '_')
+
+    if cat_limits and isinstance(cat_limits, dict):
+        raw_type_limits = cat_limits.get('type_limits')
+        type_limits = raw_type_limits if isinstance(raw_type_limits, dict) else {}
+
+        # Resolve limit for this specific type (checking type_limits or legacy max_onstage/max_offstage)
+        max_type_limit = type_limits.get(p_type_norm)
+        if max_type_limit is None:
+            max_type_limit = type_limits.get(p_type)
+
+        if max_type_limit is None:
+            if p_type_norm in ('stage', 'onstage', 'on_stage'):
+                max_type_limit = cat_limits.get('max_onstage')
+            elif p_type_norm in ('off_stage', 'offstage'):
+                max_type_limit = cat_limits.get('max_offstage')
+
+        if max_type_limit is not None and int(max_type_limit or 0) > 0:
+            allowed_max = int(max_type_limit)
+            type_count = len([
+                p for p in unique_programs
+                if (getattr(p, 'program_type', None) or 'stage').lower().replace(' ', '_').replace('-', '_') == p_type_norm
+            ])
+            if type_count >= allowed_max:
+                type_label = getattr(program, 'program_type_display', None) or p_type.replace('_', ' ').title()
+                raise ValidationError(
+                    f"{student.display_name} has reached the limit of {allowed_max} {type_label} programs for {cat_label}."
+                )
+
+    # 3. Check Single vs Group Limits
+    if program.is_team_based:
+        max_group = None
+        if cat_limits and isinstance(cat_limits, dict) and 'max_group' in cat_limits:
+            max_group = int(cat_limits.get('max_group') or 0)
+        else:
+            max_group = int(event.max_group_programs_per_student or 0)
+
+        group_count = len([p for p in unique_programs if p.is_team_based])
+        if max_group and max_group > 0 and group_count >= max_group:
+            raise ValidationError(
+                f"{student.display_name} has reached the limit of {max_group} group/team programs for {cat_label}."
+            )
+    else:
+        max_single = None
+        if cat_limits and isinstance(cat_limits, dict) and 'max_single' in cat_limits:
+            max_single = int(cat_limits.get('max_single') or 0)
+        else:
+            max_single = int(event.max_single_programs_per_student or 0)
+
+        single_count = len([p for p in unique_programs if not p.is_team_based])
+        if max_single and max_single > 0 and single_count >= max_single:
+            raise ValidationError(
+                f"{student.display_name} has reached the limit of {max_single} single/individual programs for {cat_label}."
+            )
 
 
 @transaction.atomic
@@ -489,11 +567,12 @@ def _position_points(program, position):
 def _grade_for_result(result):
     event = result.program.event
     if not event.enable_grading_system:
-        return '', None
+        return '', 0
     converted_total = float(event.converted_total_mark or 100)
     if converted_total <= 0:
-        return '', None
-    score_percentage = (float(result.total_marks or 0) / converted_total) * 100
+        return '', 0
+    total_marks = float(result.total_marks or 0)
+    score_percentage = (total_marks / converted_total) * 100 if converted_total > 0 else 0
     rules = sorted(
         event.get_effective_grading_rules(),
         key=lambda rule: float(rule.get('max_mark', 0)),
@@ -502,11 +581,20 @@ def _grade_for_result(result):
     for rule in rules:
         minimum = float(rule.get('min_mark', 0))
         maximum = float(rule.get('max_mark', 100))
-        if minimum <= score_percentage <= maximum:
+        # Match either by direct converted marks (e.g. 45 to 50 out of 50)
+        # or by percentage (e.g. 90% to 100%)
+        is_match = (minimum <= total_marks <= maximum) or (minimum <= score_percentage <= maximum)
+        if is_match:
             grade = str(rule.get('name', '')).strip()
+            # If program specifically configured a bonus override for this grade, use it;
+            # otherwise fall back to event rule's bonus_points (or legacy points)
             configured = (result.program.grading_points or {}).get(grade)
-            return grade, int(configured) if configured is not None else None
-    return '', None
+            if configured is not None:
+                bonus = int(configured or 0)
+            else:
+                bonus = int(rule.get('bonus_points', rule.get('points', 0)) or 0)
+            return grade, max(0, bonus)
+    return '', 0
 
 
 def _refresh_recipient_totals(team_ids=None, student_ids=None):
@@ -602,22 +690,24 @@ def recalculate_program_results(program):
         total_marks__isnull=False,
     ).order_by('-total_marks', '-raw_total_marks', 'id'))
 
+    current_position = 0
     previous_score = None
-    previous_position = None
-    for index, result in enumerate(results, 1):
+    for result in results:
         score = result.total_marks
-        position = previous_position if previous_score == score else index
-        grade, grade_points = _grade_for_result(result)
+        if previous_score is None or score != previous_score:
+            current_position += 1
+        position = current_position
+        grade, grade_bonus = _grade_for_result(result)
         placement_points = _position_points(program, position)
-        points = grade_points if grade_points is not None else placement_points
+        bonus_points = grade_bonus or 0
+        total_points = placement_points + bonus_points
         ProgramResult.objects.filter(pk=result.pk).update(
             position=position,
-            points_earned=points,
+            points_earned=total_points,
             grade=grade,
-            grade_extra_points=grade_points or 0,
+            grade_extra_points=bonus_points,
         )
         previous_score = score
-        previous_position = position
 
     rebuild_program_points(program)
     return results

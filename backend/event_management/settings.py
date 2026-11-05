@@ -378,3 +378,24 @@ if not DEBUG:
     # Set maximum file size for temporary uploads
     FILE_UPLOAD_TEMP_DIR = os.path.join(BASE_DIR, 'temp_uploads')
     os.makedirs(FILE_UPLOAD_TEMP_DIR, exist_ok=True) 
+
+# Email Configuration
+EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'accounts.email_backend.SSLContextEmailBackend')
+EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.zoho.in')
+EMAIL_PORT = int(os.environ.get('EMAIL_PORT', 587))
+EMAIL_USE_TLS = os.environ.get('EMAIL_USE_TLS', 'True').lower() == 'true'
+
+# Default noreply credentials (Security OTPs, Password Resets)
+NOREPLY_EMAIL_HOST = os.environ.get('NOREPLY_EMAIL_HOST', 'smtp.zoho.in')
+NOREPLY_EMAIL_PORT = int(os.environ.get('NOREPLY_EMAIL_PORT', 587))
+NOREPLY_EMAIL_USER = os.environ.get('NOREPLY_EMAIL_USER', 'noreply@eventloo.in')
+NOREPLY_EMAIL_PASSWORD = os.environ.get('NOREPLY_EMAIL_PASSWORD', 'EyqVrVAGVEYP')
+NOREPLY_FROM_EMAIL = os.environ.get('NOREPLY_FROM_EMAIL', 'Eventloo Security <noreply@eventloo.in>')
+
+# Default contact credentials (Welcome emails, Staff invitations)
+CONTACT_EMAIL_HOST = os.environ.get('CONTACT_EMAIL_HOST', 'smtp.zoho.in')
+CONTACT_EMAIL_PORT = int(os.environ.get('CONTACT_EMAIL_PORT', 587))
+CONTACT_EMAIL_USER = os.environ.get('CONTACT_EMAIL_USER', 'contact@eventloo.in')
+CONTACT_EMAIL_PASSWORD = os.environ.get('CONTACT_EMAIL_PASSWORD', '9HfUJjAK07t5')
+CONTACT_FROM_EMAIL = os.environ.get('CONTACT_FROM_EMAIL', 'Eventloo Team <contact@eventloo.in>')
+
