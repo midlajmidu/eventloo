@@ -341,7 +341,7 @@ REQUIRE_SUPER_ADMIN_MFA = os.environ.get(
     'REQUIRE_SUPER_ADMIN_MFA', 'False'
 ).lower() == 'true'
 REQUIRE_SCHOOL_STAFF_MFA = os.environ.get(
-    'REQUIRE_SCHOOL_STAFF_MFA', 'False' if DEBUG or _is_test_run else 'True'
+    'REQUIRE_SCHOOL_STAFF_MFA', 'False'
 ).lower() == 'true'
 
 MEDIA_URL = '/media/'

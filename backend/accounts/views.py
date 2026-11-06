@@ -82,7 +82,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
         if settings.REQUIRE_AJAX_AUTH_HEADER and request.headers.get('X-Requested-With') != 'XMLHttpRequest':
             return Response({'error': 'Invalid authentication request.'}, status=400)
         candidate = _authenticate_school_staff_credentials(request)
-        if candidate and (settings.REQUIRE_SCHOOL_STAFF_MFA or candidate.mfa_enabled):
+        if candidate and settings.REQUIRE_SCHOOL_STAFF_MFA:
             if not candidate.mfa_enabled:
                 audit_security_event(request, 'school_login', 'mfa_setup_required', actor=candidate)
                 return Response({

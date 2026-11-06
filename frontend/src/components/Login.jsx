@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, AlertCircle, Users, User, ShieldCheck, X, KeyRound, CheckCircle2, ArrowLeft, RefreshCw } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, AlertCircle, Users, User, X, KeyRound, CheckCircle2, ArrowLeft, RefreshCw } from 'lucide-react';
 import { authAPI } from '../services/api';
 import EventlooLogo from './common/EventlooLogo';
 
@@ -15,10 +15,7 @@ const Login = () => {
     password: '',
     team_username: '',
     team_password: '',
-    otp: '',
   });
-  const [mfaSetup, setMfaSetup] = useState(null);
-  const [showOtp, setShowOtp] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -183,15 +180,8 @@ const Login = () => {
 
     try {
       if (loginType === 'user') {
-        if (mfaSetup) {
-          await authAPI.confirmMfa({ ...schoolCredentials(), otp: formData.otp });
-          setMfaSetup(null);
-        }
         // Admin or Event Manager login
-        const { data } = await authAPI.login({
-          ...schoolCredentials(),
-          otp: formData.otp,
-        });
+        const { data } = await authAPI.login(schoolCredentials());
 
         if (data.user) {
           localStorage.removeItem('team_data');
@@ -241,21 +231,6 @@ const Login = () => {
       }
     } catch (err) {
       const responseData = err.response?.data;
-      if (loginType === 'user' && responseData?.code === 'mfa_setup_required') {
-        try {
-          const { data } = await authAPI.setupMfa(schoolCredentials());
-          setMfaSetup(data);
-          setShowOtp(true);
-          setError('Set up your authenticator app, then enter the 6-digit code.');
-          return;
-        } catch (setupError) {
-          setError(setupError.response?.data?.error || 'Unable to start authenticator setup.');
-          return;
-        }
-      }
-      if (loginType === 'user' && responseData?.code === 'mfa_required') {
-        setShowOtp(true);
-      }
       const validationMessage = responseData && typeof responseData === 'object'
         ? Object.values(responseData).flat().find((value) => typeof value === 'string')
         : null;
@@ -708,46 +683,6 @@ const Login = () => {
                         </button>
                       </div>
                     </div>
-
-                    {/* MFA / 2FA Block */}
-                    {(showOtp || mfaSetup) && (
-                      <div className="space-y-3 rounded-xl border border-indigo-100 bg-indigo-50/60 p-3.5 text-xs">
-                        <div className="flex items-start gap-2.5">
-                          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-indigo-600" />
-                          <div className="min-w-0">
-                            <p className="font-semibold text-slate-900">Authenticator verification</p>
-                            {mfaSetup && (
-                              <>
-                                <p className="mt-1 text-[11px] text-slate-600">
-                                  Add this key into your authenticator app:
-                                </p>
-                                <code className="mt-1.5 block break-all rounded-md bg-white border border-indigo-100 px-2.5 py-1 text-[11px] text-indigo-700 font-mono">
-                                  {mfaSetup.secret}
-                                </code>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                            6-digit verification code
-                          </label>
-                          <input
-                            type="text"
-                            name="otp"
-                            value={formData.otp}
-                            onChange={handleChange}
-                            className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none"
-                            placeholder="000000"
-                            inputMode="numeric"
-                            autoComplete="one-time-code"
-                            pattern="[0-9]{6}"
-                            maxLength={6}
-                            required
-                          />
-                        </div>
-                      </div>
-                    )}
                   </>
                 ) : (
                   <>
