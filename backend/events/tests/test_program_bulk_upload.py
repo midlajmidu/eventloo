@@ -47,6 +47,9 @@ class ProgramBulkUploadTests(APITestCase):
         cls.cat_senior = StudentCategory.objects.create(
             school=cls.school, name="Senior", code="SR"
         )
+        cls.cat_general = StudentCategory.objects.create(
+            school=cls.school, name="General", code="general", is_mixing=True
+        )
 
         # 3. Admin user
         cls.admin = User.objects.create_user(
@@ -364,3 +367,19 @@ class ProgramBulkUploadTests(APITestCase):
         self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
         struct = res.data["structured_errors"]
         self.assertEqual(struct[0]["field"], "judges")
+
+    def test_12_category_not_in_school_settings_rejected(self):
+        """Uploading a category not configured in School Settings returns an error."""
+        rows = [
+            ["Unconfigured Program", "Alpha Cadre", "Stage Event", "Individual", 15, "", "", "", 5, 3]
+        ]
+        upload_file = self._create_program_excel_file(rows)
+        res = self.client.post(
+            f"/api/events/{self.event.id}/bulk_upload_programs/",
+            {"file": upload_file},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        struct = res.data["structured_errors"]
+        self.assertEqual(struct[0]["field"], "category")
+        self.assertIn("not configured for your school", struct[0]["reason"])

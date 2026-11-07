@@ -982,10 +982,8 @@ class EventViewSet(viewsets.ModelViewSet):
                 matched_cat_code = cat_lookup.get(norm_cat)
                 if matched_cat_code:
                     category_val = matched_cat_code
-                elif norm_cat in ('general', 'open', 'gen', 'gn', 'all'):
-                    category_val = 'general'
                 else:
-                    allowed_cats = ', '.join([f'"{c.name}"' for c in school_categories] + ['"General"'])
+                    allowed_cats = ', '.join([f'"{c.name}"' for c in school_categories])
                     record_error(
                         row_num=row_num,
                         program_name=name,
@@ -994,7 +992,7 @@ class EventViewSet(viewsets.ModelViewSet):
                         value=raw_category,
                         issue='Invalid Category',
                         reason=f'Category "{raw_category}" is not configured for your school.',
-                        suggestion=f'Select an active school category ({allowed_cats}).'
+                        suggestion=f'Select an active school category ({allowed_cats}) or configure this category in School Settings first.'
                     )
                     continue
 
@@ -1297,8 +1295,6 @@ class EventViewSet(viewsets.ModelViewSet):
             event_types = list(event.get_program_types())
             
             cat_options = [c.name for c in school_categories]
-            if 'General' not in cat_options:
-                cat_options.insert(0, 'General')
             
             type_options = [pt.name for pt in event_types]
             if not type_options:
@@ -3243,7 +3239,7 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
                 # Validation: Check category compatibility dynamically
                 from accounts.models import StudentCategory
                 try:
-                    program_cat = StudentCategory.objects.get(code=program.category)
+                    program_cat = StudentCategory.objects.get(code=program.category, school=program.event.school)
                     is_compatible = True
                     if program_cat.is_mixing:
                         allowed_cats = list(program_cat.mixed_categories.values_list('code', flat=True))
@@ -3253,7 +3249,7 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
                         if student.category != program.category:
                             is_compatible = False
                 except StudentCategory.DoesNotExist:
-                    is_compatible = (program.category == 'open' or student.category == program.category)
+                    is_compatible = (program.category.lower() in ('open', 'general') or student.category == program.category)
 
                 if not is_compatible:
                     errors.append(f'Student {student.get_full_name()} ({student.student_id}) category "{student.category}" is not compatible with program category "{program.category}"')
@@ -3781,7 +3777,7 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
                 # Validation: Check category compatibility dynamically
                 from accounts.models import StudentCategory
                 try:
-                    program_cat = StudentCategory.objects.get(code=program.category)
+                    program_cat = StudentCategory.objects.get(code=program.category, school=program.event.school)
                     is_compatible = True
                     if program_cat.is_mixing:
                         allowed_cats = list(program_cat.mixed_categories.values_list('code', flat=True))
@@ -3791,7 +3787,7 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
                         if student.category != program.category:
                             is_compatible = False
                 except StudentCategory.DoesNotExist:
-                    is_compatible = (program.category == 'open' or student.category == program.category)
+                    is_compatible = (program.category.lower() in ('open', 'general') or student.category == program.category)
 
                 if not is_compatible:
                     errors.append(f'Student {student.get_full_name()} ({student.student_id}) category "{student.category}" is not compatible with program category "{program.category}"')
