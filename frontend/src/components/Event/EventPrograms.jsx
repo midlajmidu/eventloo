@@ -82,6 +82,14 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
     total: 0
   });
 
+  const displayCategories = useMemo(() => {
+    const list = [...(categories || [])];
+    if (!list.some((c) => (c.code || '').toLowerCase() === 'general')) {
+      list.push({ code: 'general', name: 'General' });
+    }
+    return list;
+  }, [categories]);
+
   const getProgramTypeObj = (typeCode) => {
     return programTypes.find((pt) => pt.code === typeCode) || null;
   };
@@ -385,7 +393,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
 
   // Get event-configured default placement points for a category and format
   const getDefaultPlacementPoints = (category, isTeamBased) => {
-    const cat = categories.find(c => c.code === category);
+    const cat = displayCategories.find(c => c.code === category);
     const isMixing = cat?.is_mixing || ['general', 'gen', 'gn', 'open'].includes((category || '').toLowerCase());
     if (isMixing) {
       if (isTeamBased) {
@@ -488,12 +496,13 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
   };
 
   const getCategoryDisplay = (category) => {
-    const cat = categories.find(c => c.code === category);
+    if ((category || '').toLowerCase() === 'general') return 'General';
+    const cat = displayCategories.find(c => c.code === category);
     return cat ? cat.name : (category?.toUpperCase() || category);
   };
 
   const getCategoryBadge = (category) => {
-    const cat = categories.find(c => c.code === category);
+    const cat = displayCategories.find(c => c.code === category);
     if (category === 'hs') return 'bg-indigo-100 text-indigo-800 border-indigo-200';
     if (category === 'hss') return 'bg-green-100 text-green-800 border-green-200';
     if (category === 'general' || (cat && cat.is_mixing)) return 'bg-purple-100 text-purple-800 border-purple-200';
@@ -610,7 +619,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                 className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs font-medium text-gray-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="all">All Categories</option>
-                {categories.map(cat => (
+                {displayCategories.map(cat => (
                   <option key={cat.code} value={cat.code}>{cat.name}</option>
                 ))}
               </select>
@@ -686,7 +695,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
             <div className="flex items-center space-x-3">
               {(() => {
                 const counts = getCategoryCounts();
-                return categories.map(cat => (
+                return displayCategories.map(cat => (
                   <span key={cat.code} className="flex items-center space-x-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
                     <span>{cat.name}: <strong className="text-gray-700">{counts[cat.code] || 0}</strong></span>
@@ -1086,7 +1095,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                       className="w-full px-3.5 py-2 text-xs border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                     >
                       <option value="">Select Category</option>
-                      {categories.map(cat => (
+                      {displayCategories.map(cat => (
                         <option key={cat.code} value={cat.code}>{cat.name}</option>
                       ))}
                     </select>

@@ -2822,6 +2822,7 @@ class ProgramViewSet(viewsets.ModelViewSet):
             
             from accounts.models import StudentCategory
             counts = {c.code: 0 for c in StudentCategory.objects.filter(school_id=request.user.school_id)}
+            counts.setdefault('general', 0)  # General is a built-in implicit category
             counts['total'] = 0
             
             for category_data in category_counts:
