@@ -273,10 +273,10 @@ class ProgramBulkUploadTests(APITestCase):
         self.assertEqual(struct[0]["field"], "max_participants")
 
     def test_09_bulk_upload_intra_file_duplicate(self):
-        """Duplicate program title within the uploaded spreadsheet is detected and flagged."""
+        """Duplicate program title with the SAME category within the uploaded spreadsheet is detected and flagged."""
         rows = [
             ["Clay Modeling", "Junior", "Off-Stage Event", "Individual", 25, "", "", "", 60, 2],
-            ["Clay Modeling", "Senior", "Off-Stage Event", "Individual", 25, "", "", "", 60, 2],  # Duplicate on row 3
+            ["Clay Modeling", "Junior", "Off-Stage Event", "Individual", 25, "", "", "", 60, 2],  # Duplicate on row 3 (same category)
         ]
         upload_file = self._create_program_excel_file(rows)
         res = self.client.post(
@@ -291,18 +291,41 @@ class ProgramBulkUploadTests(APITestCase):
         self.assertEqual(dup_err["row"], 3)
         self.assertIn("previously on row 2", dup_err["reason"])
 
+    def test_09b_bulk_upload_same_name_different_category_allowed(self):
+        """Same program title across DIFFERENT categories is allowed and creates both programs."""
+        rows = [
+            ["Elocution English", "Junior", "Stage Event", "Individual", 20, "", "", "", 5, 3],
+            ["Elocution English", "Senior", "Stage Event", "Individual", 20, "", "", "", 5, 3],
+        ]
+        upload_file = self._create_program_excel_file(rows)
+        res = self.client.post(
+            f"/api/events/{self.event.id}/bulk_upload_programs/",
+            {"file": upload_file},
+            format="multipart",
+        )
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertTrue(res.data["success"])
+        self.assertEqual(res.data["summary"]["successful_creations"], 2)
+
+        jr_prog = Program.objects.get(event=self.event, name="Elocution English", category="JR")
+        sr_prog = Program.objects.get(event=self.event, name="Elocution English", category="SR")
+        self.assertIsNotNone(jr_prog)
+        self.assertIsNotNone(sr_prog)
+        self.assertNotEqual(jr_prog.id, sr_prog.id)
+
     def test_10_bulk_upload_database_duplicate_program(self):
-        """Program title that already exists in the event database is detected and reported."""
+        """Program title that already exists in the same category is detected, but different category succeeds."""
         Program.objects.create(
             event=self.event,
             name="Kathakali Solo Existing",
             category="JR",
             program_type="stage",
         )
-        rows = [
+        # 1. Same name in same category (Junior / JR) -> should fail
+        rows_dup = [
             ["Kathakali Solo Existing", "Junior", "Stage Event", "Individual", 15, "", "", "", 10, 3]
         ]
-        upload_file = self._create_program_excel_file(rows)
+        upload_file = self._create_program_excel_file(rows_dup)
         res = self.client.post(
             f"/api/events/{self.event.id}/bulk_upload_programs/",
             {"file": upload_file},
@@ -312,6 +335,20 @@ class ProgramBulkUploadTests(APITestCase):
         struct = res.data["structured_errors"]
         self.assertTrue(any(e["field"] == "duplicate" for e in struct))
         self.assertIn("already exists", struct[0]["reason"])
+
+        # 2. Same name in different category (Senior / SR) -> should succeed
+        rows_diff_cat = [
+            ["Kathakali Solo Existing", "Senior", "Stage Event", "Individual", 15, "", "", "", 10, 3]
+        ]
+        upload_file_sr = self._create_program_excel_file(rows_diff_cat)
+        res_sr = self.client.post(
+            f"/api/events/{self.event.id}/bulk_upload_programs/",
+            {"file": upload_file_sr},
+            format="multipart",
+        )
+        self.assertEqual(res_sr.status_code, status.HTTP_200_OK)
+        self.assertTrue(res_sr.data["success"])
+        self.assertTrue(Program.objects.filter(event=self.event, name="Kathakali Solo Existing", category="SR").exists())
 
     def test_11_bulk_upload_invalid_judges_count(self):
         """Judge count exceeding 4 or less than 1 returns validation issue."""

@@ -976,36 +976,63 @@ class EventViewSet(viewsets.ModelViewSet):
                 name = str(raw_name).strip()
                 norm_name = name.casefold()
 
-                # 1. Intra-file duplicate check
-                if norm_name in seen_in_file:
+                # Category check (validate category first so uniqueness is scoped to category)
+                raw_category = str(row[column_mapping['category']]).strip()
+                norm_cat = raw_category.lower()
+                matched_cat_code = cat_lookup.get(norm_cat)
+                if matched_cat_code:
+                    category_val = matched_cat_code
+                elif norm_cat in ('general', 'open', 'gen', 'gn', 'all'):
+                    category_val = 'general'
+                else:
+                    allowed_cats = ', '.join([f'"{c.name}"' for c in school_categories] + ['"General"'])
                     record_error(
                         row_num=row_num,
                         program_name=name,
-                        field='duplicate',
-                        field_label='Duplicate Name',
-                        value=name,
-                        issue='Duplicate in Spreadsheet',
-                        reason=f'Program "{name}" appears multiple times in this file (previously on row {seen_in_file[norm_name]}).',
-                        suggestion='Program titles must be unique within an event. Rename or remove the duplicate row.'
+                        field='category',
+                        field_label='Category',
+                        value=raw_category,
+                        issue='Invalid Category',
+                        reason=f'Category "{raw_category}" is not configured for your school.',
+                        suggestion=f'Select an active school category ({allowed_cats}).'
                     )
                     continue
-                seen_in_file[norm_name] = row_num
 
-                # 2. Database duplicate check
-                if Program.objects.filter(event=event, name__iexact=name).exists():
+                dup_key = (norm_name, category_val.casefold())
+
+                # 1. Intra-file duplicate check (same program name AND same category)
+                if dup_key in seen_in_file:
                     record_error(
                         row_num=row_num,
                         program_name=name,
                         field='duplicate',
-                        field_label='Duplicate Name',
-                        value=name,
+                        field_label='Duplicate Name & Category',
+                        value=f'{name} ({raw_category})',
+                        issue='Duplicate in Spreadsheet',
+                        reason=f'Program "{name}" in category "{raw_category}" appears multiple times in this file (previously on row {seen_in_file[dup_key]}).',
+                        suggestion='Program titles must be unique within the same category. Rename or remove the duplicate row.'
+                    )
+                    continue
+                seen_in_file[dup_key] = row_num
+
+                # 2. Database duplicate check (same program name AND same category in this event)
+                if Program.objects.filter(event=event, name__iexact=name, category__iexact=category_val).exists():
+                    record_error(
+                        row_num=row_num,
+                        program_name=name,
+                        field='duplicate',
+                        field_label='Duplicate Name & Category',
+                        value=f'{name} ({raw_category})',
                         issue='Already Exists in Event',
-                        reason=f'A program named "{name}" already exists in this event.',
+                        reason=f'A program named "{name}" already exists in category "{raw_category}" for this event.',
                         suggestion='Choose a different program title or modify the existing program in the Programs tab.'
                     )
                     continue
 
-                program_data = {'name': name}
+                program_data = {
+                    'name': name,
+                    'category': category_val,
+                }
 
                 # 3. Program Type check
                 raw_type = str(row[column_mapping['program_type']]).strip().lower()
@@ -1028,28 +1055,6 @@ class EventViewSet(viewsets.ModelViewSet):
                         issue='Invalid Program Type',
                         reason=f'Program type "{raw_type}" is not recognized for this event.',
                         suggestion=f'Allowed types for this event: {allowed_names}.'
-                    )
-                    continue
-
-                # 4. Category check
-                raw_category = str(row[column_mapping['category']]).strip()
-                norm_cat = raw_category.lower()
-                matched_cat_code = cat_lookup.get(norm_cat)
-                if matched_cat_code:
-                    program_data['category'] = matched_cat_code
-                elif norm_cat in ('general', 'open', 'gen', 'gn', 'all'):
-                    program_data['category'] = 'general'
-                else:
-                    allowed_cats = ', '.join([f'"{c.name}"' for c in school_categories] + ['"General"'])
-                    record_error(
-                        row_num=row_num,
-                        program_name=name,
-                        field='category',
-                        field_label='Category',
-                        value=raw_category,
-                        issue='Invalid Category',
-                        reason=f'Category "{raw_category}" is not configured for your school.',
-                        suggestion=f'Select an active school category ({allowed_cats}).'
                     )
                     continue
 
@@ -1422,7 +1427,7 @@ class EventViewSet(viewsets.ModelViewSet):
             ws_instructions.sheet_view.showGridLines = True
             
             instructions_data = [
-                ("Name", "Yes", "Both", "Unique title of the program/event (e.g. English Elocution, Folk Dance)."),
+                ("Name", "Yes", "Both", "Title of the program/event (e.g. English Elocution, Folk Dance). Must be unique within the same category."),
                 ("Category", "Yes", "Both", "Select category from dropdown (e.g. Junior, Senior, or General for open events)."),
                 ("Type", "Yes", "Both", "Select program type from dropdown (e.g. Stage Event, Off-Stage Event)."),
                 ("Mode", "Yes", "Both", "Must be 'Individual' (solo performer) or 'Group' (team performers)."),

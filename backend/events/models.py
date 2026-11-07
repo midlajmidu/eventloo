@@ -866,7 +866,7 @@ class Program(models.Model):
 
     class Meta:
         ordering = ['start_time', 'name']
-        unique_together = ['event', 'name']
+        unique_together = ['event', 'name', 'category']
     
     def __str__(self):
         return f"{self.name} - {self.event.title}"
