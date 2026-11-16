@@ -31,12 +31,28 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
   const [sortOrder, setSortOrder] = useState('asc'); // 'asc' | 'desc'
   const [completedPrograms, setCompletedPrograms] = useState(new Set());
 
-  // Judging Rules from Program Override or Event Fallback Settings
-  const numJudges = selectedProgram?.effective_num_judges
-    ? parseInt(selectedProgram.effective_num_judges, 10)
-    : (selectedProgram?.num_judges
-      ? parseInt(selectedProgram.num_judges, 10)
-      : (event?.num_judges ? parseInt(event.num_judges, 10) : 3));
+  // Judging Rules: Prioritize event settings from Settings tab, unless program has already submitted marks with custom judges
+  const numJudges = (() => {
+    // If the program already has submitted/published marks, keep the judge count it was scored with
+    if (['submitted', 'published'].includes(selectedProgram?.result_status) && selectedProgram?.effective_num_judges) {
+      return parseInt(selectedProgram.effective_num_judges, 10);
+    }
+    // If program has an explicit custom judge count different from both default 3 and event default
+    if (selectedProgram?.num_judges && selectedProgram.num_judges !== (event?.num_judges || 3)) {
+      return parseInt(selectedProgram.num_judges, 10);
+    }
+    // Otherwise, always prioritize the event's configured judge count from Settings
+    if (event?.num_judges) {
+      return parseInt(event.num_judges, 10);
+    }
+    if (selectedProgram?.effective_num_judges) {
+      return parseInt(selectedProgram.effective_num_judges, 10);
+    }
+    if (selectedProgram?.num_judges) {
+      return parseInt(selectedProgram.num_judges, 10);
+    }
+    return 3;
+  })();
   const maxMarkPerJudge = event?.max_mark_per_judge ? parseFloat(event.max_mark_per_judge) : 100;
   const convertedTotalMark = event?.converted_total_mark ? parseFloat(event.converted_total_mark) : 100;
 
@@ -551,7 +567,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
             onClick={closeDrawer}
           />
 
-          <div className="fixed inset-y-0 right-0 max-w-2xl w-full bg-white shadow-2xl flex flex-col z-50 transform transition-transform duration-300 ease-in-out">
+          <div className="fixed inset-y-0 right-0 max-w-4xl lg:max-w-5xl w-full bg-white shadow-2xl flex flex-col z-50 transform transition-transform duration-300 ease-in-out">
             
             {/* Drawer Header */}
             <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-white sticky top-0 z-10">
@@ -611,18 +627,18 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                 </div>
               ) : (
                 <>
-                  <div className="border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
-                    <table className="w-full text-left border-collapse">
+                  <div className="border border-gray-200 rounded-xl overflow-x-auto shadow-2xs">
+                    <table className="w-full text-left border-collapse min-w-[600px]">
                       <thead className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600">
                         <tr>
-                          <th className="px-4 py-3 text-center border-r border-gray-200 min-w-[140px]">Chest #</th>
-                          <th className="px-4 py-3 text-center border-r border-gray-200 w-32">Code Letter</th>
+                          <th className="px-4 py-3 text-center border-r border-gray-200 min-w-[120px]">Chest #</th>
+                          <th className="px-4 py-3 text-center border-r border-gray-200 min-w-[90px] w-24">Code Letter</th>
                           {Array.from({ length: numJudges }).map((_, idx) => (
-                            <th key={idx} className="px-3 py-3 text-center border-r border-gray-200">
+                            <th key={idx} className="px-3 py-3 text-center border-r border-gray-200 min-w-[110px]">
                               Judge {idx + 1}
                             </th>
                           ))}
-                          <th className="px-4 py-3 text-right">Final Mark</th>
+                          <th className="px-4 py-3 text-center min-w-[110px]">Final Mark</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 text-sm bg-white">

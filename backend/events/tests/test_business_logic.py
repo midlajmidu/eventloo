@@ -1979,6 +1979,47 @@ class EventBusinessLogicTests(TestCase):
         self.assertIsNone(def_data['num_judges'])
         self.assertEqual(def_data['effective_num_judges'], 2)
 
+    def test_event_settings_judge_count_syncs_to_pending_programs(self):
+        from rest_framework.test import APIClient
+        # 1. Program created when event had 3 judges
+        event = Event.objects.create(
+            title='Judge Sync Fest', school=self.school,
+            start_date=self.event.start_date, end_date=self.event.end_date,
+            num_judges=3, max_mark_per_judge=Decimal('100.00'),
+            converted_total_mark=Decimal('100.00'),
+            created_by=self.admin
+        )
+        prog = Program.objects.create(
+            event=event, name='Dance Single', category='junior',
+            max_participants=2, num_judges=3
+        )
+        self.assertEqual(prog.effective_num_judges, 3)
+
+        # 2. Admin updates event in Settings to 2 judges via API
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        response = client.patch(
+            f'/api/events/{event.id}/',
+            {'num_judges': 2},
+            format='json'
+        )
+        self.assertEqual(response.status_code, 200)
+
+        prog.refresh_from_db()
+        self.assertEqual(prog.num_judges, 2)
+        self.assertEqual(prog.effective_num_judges, 2)
+
+        # 3. Mark entry and submission with 2 judges succeeds
+        res = ProgramResult.objects.create(
+            program=prog,
+            participant=self.students[0],
+            judge1_marks=Decimal('32.00'),
+            judge2_marks=Decimal('1.00'),
+            entry_status='submitted'
+        )
+        res.clean()
+        self.assertEqual(res.raw_total_marks, Decimal('33.00'))
+
     def test_schedule_auto_calculated_ending_time_without_mandatory_end_time(self):
         stage = EventStage.objects.create(
             event=self.event, number=1, name='Main Stage'

@@ -151,7 +151,15 @@ class EventViewSet(viewsets.ModelViewSet):
             'count_general_individual_points_for_students',
         }
         should_reconcile = bool(scoring_fields.intersection(serializer.validated_data))
+        new_num_judges = serializer.validated_data.get('num_judges')
         event = serializer.save()
+        if new_num_judges is not None:
+            # Sync all programs in this event that do not have submitted marks so they inherit the new judge count
+            for prog in event.programs.all():
+                has_submitted = prog.results.filter(average_marks__isnull=False).exists()
+                if not has_submitted:
+                    prog.num_judges = new_num_judges
+                    prog.save(update_fields=['num_judges'])
         if should_reconcile:
             from .services import reconcile_event_official_points
             reconcile_event_official_points(event)
@@ -3921,6 +3929,12 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        # Align program judge count with event settings if no marks were previously entered
+        if not program.results.filter(average_marks__isnull=False).exists() and getattr(program.event, 'num_judges', None):
+            if program.num_judges != program.event.num_judges:
+                program.num_judges = program.event.num_judges
+                program.save(update_fields=['num_judges'])
+        
         # Get all assignments for this program
         assignments = ProgramAssignment.objects.filter(program=program)
         
@@ -4046,6 +4060,12 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_409_CONFLICT)
         if not isinstance(marks_data, list) or not marks_data:
             return Response({'error': 'At least one mark row is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Align program judge count with event setting if no marks were previously submitted
+        if not program.results.filter(average_marks__isnull=False).exists() and getattr(program.event, 'num_judges', None):
+            if program.num_judges != program.event.num_judges:
+                program.num_judges = program.event.num_judges
+                program.save(update_fields=['num_judges'])
 
         active_judge_count = program.effective_num_judges
         active_judge_keys = [f'judge{i}_marks' for i in range(1, active_judge_count + 1)]
