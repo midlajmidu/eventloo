@@ -12,7 +12,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.exceptions import ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 import django_filters
-from .models import Event, EventStage, EventProgramType, Team, IndividualParticipation, EventAnnouncement, Program, ProgramAssignment, ProgramResult, PointsRecord, TeamProfile, ChestNumber, CertificateTemplate
+from .models import (
+    Event, EventStage, EventProgramType, Team, IndividualParticipation,
+    EventAnnouncement, Program, ProgramAssignment, ProgramResult,
+    PointsRecord, TeamProfile, ChestNumber, CertificateTemplate
+)
 from .serializers import (
     EventListSerializer, EventDetailSerializer, EventCreateUpdateSerializer,
     TeamSerializer, TeamCreateSerializer, TeamCreateUpdateSerializer, IndividualParticipationSerializer,
@@ -39,7 +43,7 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from collections import defaultdict
-# from .pdf_utils import build_pdf_header
+from .pdf_utils import add_eventloo_footer, build_pdf_header
 from .pagination import StandardPagination, LargePagination, SmallPagination, CustomPagination
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter, A4
@@ -49,7 +53,7 @@ from reportlab.lib.units import inch
 from reportlab.pdfgen import canvas
 import json
 import csv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from html import escape
 from django.utils.text import slugify
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -326,7 +330,7 @@ class EventViewSet(viewsets.ModelViewSet):
                     ]))
                     story.extend([table, Spacer(1, 4 * mm)])
 
-        document.build(story)
+        document.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
         response['Content-Disposition'] = f'attachment; filename="{filename}-schedule.pdf"'
@@ -4446,7 +4450,7 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
             story.append(table)
         else:
             story.append(Paragraph("No results available for this program.", styles['Normal']))
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         
         buffer.seek(0)
         response = HttpResponse(buffer.read(), content_type='application/pdf')
@@ -4687,7 +4691,7 @@ def generate_formatted_calling_sheet(request, program_id):
         else:
             elements.append(Paragraph("No participants assigned to this program.", styles['Normal']))
         
-        doc.build(elements)
+        doc.build(elements, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         pdf_data = buffer.getvalue()
         buffer.close()
         
@@ -4897,7 +4901,24 @@ def generate_formatted_evaluation_sheet(request, program_id):
         elements.append(Paragraph(f"<b>{program_type}</b>", program_info_style))
         elements.append(Spacer(1, 15))
         if assignments.exists():
-            table_data = [['Chest No.', 'Judge 1', 'Judge 2', 'Judge 3', 'Remarks']]
+            assigned_judges_map = {}
+            if hasattr(program, 'judge_assignments'):
+                try:
+                    assigned_judges_map = {
+                        a.judge_number: a.judge.name
+                        for a in program.judge_assignments.select_related('judge').all()
+                    }
+                except Exception:
+                    assigned_judges_map = {}
+            assigned_max = max(assigned_judges_map.keys()) if assigned_judges_map else 0
+            judge_count = max(1, min(max(program.effective_num_judges, assigned_max), 6))
+
+            judge_headers = [
+                f'Judge {j+1}' + (f'\n({assigned_judges_map[j+1]})' if (j+1) in assigned_judges_map else '')
+                for j in range(judge_count)
+            ]
+            table_data = [['Chest No.'] + judge_headers + ['Remarks']]
+            empty_judge_cells = [''] * judge_count
             
             # For all programs, group by team and show only main name with "and team" suffix
             team_groups = {}
@@ -4927,7 +4948,7 @@ def generate_formatted_evaluation_sheet(request, program_id):
                             except ChestNumber.DoesNotExist:
                                 chest_no = ''
                         chest_no_display = str(chest_no) if chest_no else 'N/A'
-                        table_data.append([chest_no_display, '', '', '', ''])
+                        table_data.append([chest_no_display] + empty_judge_cells + [''])
                 else:
                     grouped_entry = get_grouped_assignments_for_report(
                         program,
@@ -4937,8 +4958,13 @@ def generate_formatted_evaluation_sheet(request, program_id):
                         program.event,
                     )[0]
                     chest_no_display = grouped_entry['chest_no'] or 'N/A'
-                    table_data.append([chest_no_display, '', '', '', ''])
-            table = Table(table_data, colWidths=[1.5*inch, 1.5*inch, 1.5*inch, 1.5*inch, 2*inch])
+                    table_data.append([chest_no_display] + empty_judge_cells + [''])
+            total_w = 6.4 * inch
+            chest_w = 1.3 * inch
+            remarks_w = 1.5 * inch
+            judge_w = (total_w - chest_w - remarks_w) / judge_count
+            col_widths = [chest_w] + [judge_w] * judge_count + [remarks_w]
+            table = Table(table_data, colWidths=col_widths)
             table.setStyle(TableStyle([
                 # Header styling
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#27AE60')),
@@ -4967,12 +4993,12 @@ def generate_formatted_evaluation_sheet(request, program_id):
                 ('LINEBELOW', (0, 0), (-1, 0), 2, colors.HexColor('#2C3E50')),
                 
                 # Judge columns highlighting
-                ('BACKGROUND', (1, 1), (3, -1), colors.HexColor('#F8F9FA')),
+                ('BACKGROUND', (1, 1), (judge_count, -1), colors.HexColor('#F8F9FA')),
             ]))
             elements.append(table)
         else:
             elements.append(Paragraph("No participants assigned to this program.", styles['Normal']))
-        doc.build(elements)
+        doc.build(elements, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         pdf_data = buffer.getvalue()
         buffer.close()
         response = HttpResponse(pdf_data, content_type='application/pdf')
@@ -5758,21 +5784,22 @@ def generate_team_list_pdf(request, event_id, team_id):
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib import colors
-        from reportlab.lib.units import inch
+        from reportlab.lib.units import mm
         from reportlab.platypus import Table, TableStyle
         from io import BytesIO
         from accounts.models import SchoolSettings
         from .pdf_utils import build_custom_pdf_template
         from collections import defaultdict
         
+        PAGE_WIDTH = 182 * mm
         buffer = BytesIO()
         doc = SimpleDocTemplate(
             buffer, 
             pagesize=A4, 
-            rightMargin=50, 
-            leftMargin=50, 
-            topMargin=50, 
-            bottomMargin=50
+            rightMargin=14 * mm, 
+            leftMargin=14 * mm, 
+            topMargin=12 * mm, 
+            bottomMargin=12 * mm
         )
         
         # Get school settings and create template
@@ -5799,7 +5826,8 @@ def generate_team_list_pdf(request, event_id, team_id):
         story.extend(template.create_data_table(
             headers=['Information', 'Details'],
             data=team_info,
-            title='Team Information'
+            title='Team Information',
+            col_widths=[60 * mm, 122 * mm]
         ))
         
         # Group assignments by category and grade
@@ -5949,7 +5977,7 @@ def generate_team_list_pdf(request, event_id, team_id):
                     
                     # Create table using custom template
                     if data:
-                        col_widths = [1*inch, 2*inch, 2.5*inch, 1.5*inch]
+                        col_widths = [24 * mm, 54 * mm, 66 * mm, 38 * mm]
                         story.extend(template.create_data_table(
                             headers=headers,
                             data=data,
@@ -5957,7 +5985,7 @@ def generate_team_list_pdf(request, event_id, team_id):
                         ))
         
         # Build PDF
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.read(), content_type='application/pdf')
@@ -6056,7 +6084,7 @@ def generate_custom_template_demo(request):
         ))
         
         # Generate PDF
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.read(), content_type='application/pdf')
@@ -6205,7 +6233,7 @@ def generate_program_details_report(request, event_id):
                 story.append(Paragraph("=" * 80, styles['Normal']))
                 story.append(Spacer(1, 10))
         
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
@@ -6275,7 +6303,7 @@ def generate_all_events_report(request):
         ]))
         story.append(table)
         
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
@@ -6454,7 +6482,7 @@ def generate_complete_results_report(request, event_id):
                 ]))
                 story.append(KeepTogether([program_heading, table, Spacer(1, 14)]))
         
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
@@ -6553,7 +6581,7 @@ def generate_first_place_report(request, event_id):
                 story.append(Paragraph("=" * 80, styles['Normal']))
                 story.append(Spacer(1, 10))
         
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
@@ -6652,7 +6680,7 @@ def generate_second_place_report(request, event_id):
                 story.append(Paragraph("=" * 80, styles['Normal']))
                 story.append(Spacer(1, 10))
         
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
@@ -6751,7 +6779,7 @@ def generate_third_place_report(request, event_id):
                 story.append(Paragraph("=" * 80, styles['Normal']))
                 story.append(Spacer(1, 10))
         
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
@@ -6923,7 +6951,7 @@ def generate_participants_team_report(request, event_id):
             
             story.append(Spacer(1, 20))
         
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
@@ -7082,7 +7110,7 @@ def test_pdf_generation(request, event_id):
         ]))
         story.append(table)
         
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
@@ -7196,7 +7224,7 @@ def generate_all_results_report(request, event_id):
                 story.append(Paragraph("=" * 80, styles['Normal']))
                 story.append(Spacer(1, 10))
         
-        doc.build(story)
+        doc.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
@@ -7334,17 +7362,17 @@ def get_grouped_assignments_for_report(program, assignments, event):
 def generate_green_room_sign_sheet(request, event_id):
     """
     Generate Green Room Sign Sheet PDF:
-    - Top Left: Event Title
-    - Top Right: Date & Time
-    - Header: PROGRAM NAME | Individual/Group | CATEGORY
-    - Table: Chest No | Participant (Leader + Members in 1 row for group) | Code Letter | Participant Signature
+    - Top Left: School & Green Room Sign Sheet title
+    - Top Right: Event Title, Date & Time
+    - Header: PROGRAM NAME | CATEGORY | Individual/Group | Stage
+    - Table: Chest No | Participant | Gender | Code Letter | Participant Signature
     """
     try:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, HRFlowable
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
         from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
         from io import BytesIO
         from datetime import datetime
@@ -7358,7 +7386,7 @@ def generate_green_room_sign_sheet(request, event_id):
         category = request.query_params.get('category', 'all')
         program_id = request.query_params.get('program_id', 'all')
 
-        programs = Program.objects.filter(event=event)
+        programs = Program.objects.filter(event=event).order_by('category', 'name')
         if category != 'all':
             programs = programs.filter(category=category)
         if program_id != 'all':
@@ -7367,110 +7395,120 @@ def generate_green_room_sign_sheet(request, event_id):
             except (TypeError, ValueError):
                 programs = programs.none()
 
+        PAGE_WIDTH = 182 * mm
         buffer = BytesIO()
         doc = SimpleDocTemplate(
             buffer,
             pagesize=A4,
-            leftMargin=36,
-            rightMargin=36,
-            topMargin=34,
-            bottomMargin=34
+            leftMargin=14 * mm,
+            rightMargin=14 * mm,
+            topMargin=12 * mm,
+            bottomMargin=12 * mm
         )
 
         elements = []
         styles = getSampleStyleSheet()
 
         title_style = ParagraphStyle(
-            'GreenRoomTitle',
-            parent=styles['Heading1'],
+            'GreenRoomDocTitle',
+            parent=styles['Title'],
             fontName='Helvetica-Bold',
-            fontSize=22,
-            leading=25,
-            textColor=colors.HexColor('#0F172A'),
-            spaceAfter=8
-        )
-
-        event_name_style = ParagraphStyle(
-            'EventNameStyle',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=11,
+            fontSize=18,
+            leading=21,
             alignment=TA_LEFT,
-            textColor=colors.HexColor('#312E81')
+            textColor=colors.HexColor('#0F172A'),
         )
 
         datetime_style = ParagraphStyle(
-            'DateTimeStyle',
+            'GreenRoomMetaRight',
             parent=styles['Normal'],
             fontName='Helvetica',
-            fontSize=10,
+            fontSize=8.5,
+            leading=11,
             alignment=TA_RIGHT,
-            textColor=colors.HexColor('#64748B')
+            textColor=colors.HexColor('#475569'),
         )
 
-        prog_name_style = ParagraphStyle(
-            'ProgNameStyle',
+        prog_box_left = ParagraphStyle(
+            'GRProgBoxLeft',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=11,
+            fontSize=9.5,
+            leading=12,
             alignment=TA_LEFT,
-            textColor=colors.HexColor('#0F172A')
+            textColor=colors.HexColor('#312E81'),
         )
 
-        prog_type_style = ParagraphStyle(
-            'ProgTypeStyle',
-            parent=styles['Normal'],
-            fontName='Helvetica',
-            fontSize=10,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor('#475569')
-        )
-
-        prog_cat_style = ParagraphStyle(
-            'ProgCatStyle',
+        prog_box_center = ParagraphStyle(
+            'GRProgBoxCenter',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=11,
+            fontSize=9.5,
+            leading=12,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#312E81'),
+        )
+
+        prog_box_right = ParagraphStyle(
+            'GRProgBoxRight',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=9.5,
+            leading=12,
             alignment=TA_RIGHT,
-            textColor=colors.HexColor('#312E81')
+            textColor=colors.HexColor('#312E81'),
         )
 
         table_header_style = ParagraphStyle(
-            'TableHeaderStyle',
+            'GRTableHeaderStyle',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=10,
+            fontSize=9,
+            leading=11,
             alignment=TA_LEFT,
             textColor=colors.white
         )
 
         table_header_center = ParagraphStyle(
-            'TableHeaderCenter',
+            'GRTableHeaderCenter',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=10,
+            fontSize=9,
+            leading=11,
             alignment=TA_CENTER,
             textColor=colors.white
         )
 
         table_body_style = ParagraphStyle(
-            'TableBodyStyle',
+            'GRTableBodyStyle',
             parent=styles['Normal'],
             fontName='Helvetica',
-            fontSize=10,
+            fontSize=9,
+            leading=12,
             alignment=TA_LEFT,
             textColor=colors.HexColor('#1E293B')
         )
 
         table_body_center = ParagraphStyle(
-            'TableBodyCenter',
+            'GRTableBodyCenter',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=10,
+            fontSize=9.5,
+            leading=12,
             alignment=TA_CENTER,
             textColor=colors.HexColor('#1E293B')
         )
 
+        footer_note_style = ParagraphStyle(
+            'GRFooterNote',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=8.5,
+            leading=11,
+            textColor=colors.HexColor('#475569'),
+        )
+
+        school_name = escape(event.school.name.upper()) if (event.school and event.school.name) else 'EVENTLOO'
         current_dt_str = datetime.now().strftime("%d/%m/%Y %I:%M %p")
         program_count = 0
 
@@ -7484,65 +7522,71 @@ def generate_green_room_sign_sheet(request, event_id):
             if program_count > 1 and layout == 'single':
                 elements.append(PageBreak())
 
-            # Top Header Row: Event Name (Left) | Date & Time (Right)
-            top_header_table = Table(
-                [[Paragraph(escape(event.title), event_name_style), Paragraph(current_dt_str, datetime_style)]],
-                colWidths=[4.0 * inch, 3.2 * inch]
-            )
-            top_header_table.setStyle(TableStyle([
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('LEFTPADDING', (0,0), (-1,-1), 0),
-                ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                ('TOPPADDING', (0,0), (-1,-1), 0),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-                ('LINEBELOW', (0,0), (-1,-1), 0.7, colors.HexColor('#CBD5E1')),
+            # 1. Clean Unified Top Header Table (matching Schedule PDF)
+            header_table = Table([[
+                Paragraph(
+                    f'<font size="9" color="#4F46E5"><b>{school_name}</b></font><br/>'
+                    f'<font size="18" color="#0F172A"><b>Green Room Sign Sheet</b></font>',
+                    title_style,
+                ),
+                Paragraph(
+                    f'<font size="10" color="#0F172A"><b>{escape(event.title)}</b></font><br/>'
+                    f'<font size="8" color="#64748B">Printed {current_dt_str}</font>',
+                    datetime_style,
+                ),
+            ]], colWidths=[118 * mm, 64 * mm])
+            header_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LINEBELOW', (0, 0), (-1, -1), 1.2, colors.HexColor('#4F46E5')),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
             ]))
-            elements.append(top_header_table)
-            elements.append(Spacer(1, 4))
+            elements.append(header_table)
+            elements.append(Spacer(1, 3.5 * mm))
 
-            # Main Title
-            elements.append(Paragraph("Green Room Sign Sheet", title_style))
-            
-            # Black divider line
-            elements.append(HRFlowable(width="100%", thickness=1.2, color=colors.HexColor('#4F46E5'), spaceBefore=4, spaceAfter=10))
-
-            # Program Sub-Header: PROGRAM NAME (Left) | Individual/Group (Center) | CATEGORY NAME (Right)
+            # 2. Program Info Box Table (182mm width)
             prog_type = "Group" if program.is_team_based else "Individual"
             cat_display = program.get_category_display().upper() if hasattr(program, 'get_category_display') and callable(getattr(program, 'get_category_display', None)) else program.category.upper()
+            stage_display = f"Stage: {program.stage.display_name if program.stage else (program.venue or '_______')}"
 
-            sub_header_table = Table(
+            prog_info_table = Table(
                 [[
-                    Paragraph(f"<b>{escape(program.name.upper())}</b>", prog_name_style),
-                    Paragraph(prog_type, prog_type_style),
-                    Paragraph(f"<b>{cat_display}</b>", prog_cat_style)
+                    Paragraph(f"<b>{escape(program.name.upper())}</b>", prog_box_left),
+                    Paragraph(f"<b>{cat_display}</b>", prog_box_center),
+                    Paragraph(f"<b>{prog_type}</b>", prog_box_center),
+                    Paragraph(f"<b>{stage_display}</b>", prog_box_right)
                 ]],
-                colWidths=[2.8 * inch, 1.8 * inch, 2.6 * inch]
+                colWidths=[66 * mm, 44 * mm, 36 * mm, 36 * mm]
             )
-            sub_header_table.setStyle(TableStyle([
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('LEFTPADDING', (0,0), (-1,-1), 0),
-                ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                ('TOPPADDING', (0,0), (-1,-1), 2),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
-                ('BOX', (0,0), (-1,-1), 0.6, colors.HexColor('#CBD5E1')),
+            prog_info_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#EEF2FF')),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#C7D2FE')),
+                ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#A5B4FC')),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
             ]))
-            elements.append(sub_header_table)
-            elements.append(Spacer(1, 6))
+            elements.append(prog_info_table)
+            elements.append(Spacer(1, 4 * mm))
 
-            # Table Header Row
+            # 3. Main Participant Table (Chest No: 24mm, Participant: 64mm, Gender: 26mm, Code Letter: 28mm, Signature: 40mm = 182mm)
             table_data = [
                 [
                     Paragraph("<b>Chest No</b>", table_header_center),
                     Paragraph("<b>Participant</b>", table_header_style),
                     Paragraph("<b>Gender</b>", table_header_center),
                     Paragraph("<b>Code Letter</b>", table_header_center),
-                    Paragraph("<b>Participants Signature</b>", table_header_style)
+                    Paragraph("<b>Participant Signature</b>", table_header_style)
                 ]
             ]
 
+            entry_count = 0
             if assignments.exists():
                 entries = get_grouped_assignments_for_report(program, assignments, event)
+                entry_count = len(entries)
                 for entry in entries:
                     table_data.append([
                         Paragraph(escape(entry['chest_no']), table_body_center),
@@ -7552,32 +7596,50 @@ def generate_green_room_sign_sheet(request, event_id):
                         Paragraph("", table_body_style)
                     ])
 
-            # Append 2 extra empty rows so it looks like a clean tabular form
-            table_data.append([Paragraph("", table_body_style)] * 5)
-            table_data.append([Paragraph("", table_body_style)] * 5)
+            # Ensure minimum 6 rows so it's spacious and looks like an official sign sheet
+            if entry_count < 6:
+                for _ in range(6 - entry_count):
+                    table_data.append([
+                        Paragraph("", table_body_center),
+                        Paragraph("", table_body_style),
+                        Paragraph("", table_body_center),
+                        Paragraph("", table_body_center),
+                        Paragraph("", table_body_style)
+                    ])
 
-            # Build Participant Table with exact widths and black border box matching image
-            main_table = Table(table_data, colWidths=[0.9 * inch, 2.7 * inch, 1.0 * inch, 1.0 * inch, 1.6 * inch])
+            main_table = Table(table_data, colWidths=[24 * mm, 64 * mm, 26 * mm, 28 * mm, 40 * mm], repeatRows=1)
             main_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
-                ('GRID', (0, 0), (-1, -1), 0.55, colors.HexColor('#CBD5E1')),
-                ('BOX', (0, 0), (-1, -1), 0.9, colors.HexColor('#94A3B8')),
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#312E81')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+                ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor('#64748B')),
                 ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
-                ('TOPPADDING', (0, 0), (-1, -1), 6),
-                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-                ('LEFTPADDING', (0, 0), (-1, -1), 8),
-                ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ('TOPPADDING', (0, 0), (-1, -1), 8),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+                ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 6),
             ]))
-
             elements.append(main_table)
-            elements.append(Spacer(1, 15))
+            elements.append(Spacer(1, 6 * mm))
+
+            # 4. Green Room In-Charge Verification Strip
+            footer_table = Table([[
+                Paragraph(f"<b>Total Participants:</b> {entry_count}", footer_note_style),
+                Paragraph("<b>Green Room In-charge Signature:</b> ___________________________", ParagraphStyle('GRSig', parent=footer_note_style, alignment=TA_RIGHT)),
+            ]], colWidths=[60 * mm, 122 * mm])
+            footer_table.setStyle(TableStyle([
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            elements.append(footer_table)
 
         if not elements or program_count == 0:
             elements.append(Paragraph("No matching programs or participants found for Green Room Sign Sheet.", styles['Normal']))
 
-        doc.build(elements)
+        doc.build(elements, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         pdf_data = buffer.getvalue()
         buffer.close()
 
@@ -7614,8 +7676,8 @@ def generate_valuation_sheet(request, event_id):
         from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, HRFlowable
+        from reportlab.lib.units import mm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
         from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
         from io import BytesIO
         from datetime import datetime
@@ -7642,83 +7704,110 @@ def generate_valuation_sheet(request, event_id):
             except ValueError:
                 programs = programs.none()
 
+        PAGE_WIDTH = 182 * mm
         buffer = BytesIO()
         doc = SimpleDocTemplate(
             buffer,
             pagesize=A4,
-            leftMargin=36,
-            rightMargin=36,
-            topMargin=34,
-            bottomMargin=34
+            leftMargin=14 * mm,
+            rightMargin=14 * mm,
+            topMargin=12 * mm,
+            bottomMargin=12 * mm
         )
 
         styles = getSampleStyleSheet()
 
         title_style = ParagraphStyle(
-            'ValuationTitle',
-            parent=styles['Heading1'],
+            'ValuationDocTitle',
+            parent=styles['Title'],
             fontName='Helvetica-Bold',
-            fontSize=22,
-            leading=25,
-            textColor=colors.HexColor('#0F172A'),
-            spaceAfter=8
-        )
-
-        event_name_style = ParagraphStyle(
-            'EventNameStyle',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=11,
+            fontSize=18,
+            leading=21,
             alignment=TA_LEFT,
-            textColor=colors.HexColor('#312E81')
+            textColor=colors.HexColor('#0F172A'),
         )
 
         datetime_style = ParagraphStyle(
-            'DateTimeStyle',
+            'ValuationMetaRight',
             parent=styles['Normal'],
             fontName='Helvetica',
-            fontSize=10,
-            alignment=TA_RIGHT,
-            textColor=colors.HexColor('#64748B')
-        )
-
-        stage_style = ParagraphStyle(
-            'StageStyle',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=11,
+            fontSize=8.5,
+            leading=11,
             alignment=TA_RIGHT,
             textColor=colors.HexColor('#475569'),
-            spaceAfter=6
+        )
+
+        prog_box_left = ParagraphStyle(
+            'ProgBoxLeft',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=9.5,
+            leading=12,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor('#312E81'),
         )
 
         prog_box_center = ParagraphStyle(
             'ProgBoxCenter',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=11,
+            fontSize=9.5,
+            leading=12,
             alignment=TA_CENTER,
-            textColor=colors.HexColor('#312E81')
+            textColor=colors.HexColor('#312E81'),
+        )
+
+        prog_box_right = ParagraphStyle(
+            'ProgBoxRight',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=9.5,
+            leading=12,
+            alignment=TA_RIGHT,
+            textColor=colors.HexColor('#312E81'),
         )
 
         table_header_center = ParagraphStyle(
             'TableHeaderCenter',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=10,
+            fontSize=9,
+            leading=11,
             alignment=TA_CENTER,
             textColor=colors.white
+        )
+
+        table_subheader_center = ParagraphStyle(
+            'TableSubHeaderCenter',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=8.5,
+            leading=10,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#312E81')
         )
 
         table_body_center = ParagraphStyle(
             'TableBodyCenter',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=10,
+            fontSize=11,
+            leading=13,
             alignment=TA_CENTER,
-            textColor=colors.black
+            textColor=colors.HexColor('#0F172A')
         )
 
+        sig_style = ParagraphStyle(
+            'JudgeSigStyle',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=8.5,
+            leading=11,
+            alignment=TA_LEFT,
+            textColor=colors.HexColor('#334155'),
+        )
+
+        school_name = escape(event.school.name.upper()) if (event.school and event.school.name) else 'EVENTLOO'
         current_dt_str = datetime.now().strftime("%d/%m/%Y %I:%M %p")
         elements = []
         page_counter = 0
@@ -7734,126 +7823,167 @@ def generate_valuation_sheet(request, event_id):
                 if page_counter > 1:
                     elements.append(PageBreak())
 
-                # Top Header Row: Event Name (Left) | Date & Time (Right)
-                top_header_table = Table(
-                [[Paragraph(escape(event.title), event_name_style), Paragraph(current_dt_str, datetime_style)]],
-                    colWidths=[4.2 * inch, 3.0 * inch]
-                )
-                top_header_table.setStyle(TableStyle([
-                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                    ('LEFTPADDING', (0,0), (-1,-1), 0),
-                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                    ('TOPPADDING', (0,0), (-1,-1), 0),
-                    ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-                    ('LINEBELOW', (0,0), (-1,-1), 0.7, colors.HexColor('#CBD5E1')),
+                event_title_display = escape(event.title.upper())
+                school_name_display = escape(event.school.name) if (event.school and event.school.name) else 'Eventloo Demo'
+
+                # 1. Clean Unified Top Header Table (matching Schedule PDF)
+                header_table = Table([[
+                    Paragraph(
+                        f'<font size="9" color="#4F46E5"><b>{event_title_display}</b></font><br/>'
+                        f'<font size="18" color="#0F172A"><b>VALUATION SHEET</b></font>',
+                        title_style,
+                    ),
+                    Paragraph(
+                        f'<font size="10" color="#0F172A"><b>{school_name_display}</b></font><br/>'
+                        f'<font size="8" color="#64748B">Printed {current_dt_str} · Copy {copy_num + 1} of {copies}</font>',
+                        datetime_style,
+                    ),
+                ]], colWidths=[118 * mm, 64 * mm])
+                header_table.setStyle(TableStyle([
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LINEBELOW', (0, 0), (-1, -1), 1.2, colors.HexColor('#4F46E5')),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
                 ]))
-                elements.append(top_header_table)
-                elements.append(Spacer(1, 4))
+                elements.append(header_table)
+                elements.append(Spacer(1, 3.5 * mm))
 
-                # Main Title
-                elements.append(Paragraph("Valuation Sheet", title_style))
-                
-                # Black divider line
-                elements.append(HRFlowable(width="100%", thickness=1.2, color=colors.HexColor('#4F46E5'), spaceBefore=4, spaceAfter=10))
-
-                # Stage No (Right Aligned)
-                elements.append(Paragraph("Stage No: ________", stage_style))
-
-                # Program Info Box Table (3-columns matching user screenshot)
+                # 2. Program Info Box Table (Full 182mm width, integrated Stage No)
                 prog_type = "Group" if program.is_team_based else "Individual"
                 cat_display = program.get_category_display().upper() if hasattr(program, 'get_category_display') and callable(getattr(program, 'get_category_display', None)) else str(program.category).upper()
+                stage_display = f"Stage: {program.stage.display_name if program.stage else (program.venue or '_______')}"
 
                 prog_info_table = Table(
                     [[
-                        Paragraph(f"<b>{escape(program.name.upper())}</b>", prog_box_center),
+                        Paragraph(f"<b>{escape(program.name.upper())}</b>", prog_box_left),
                         Paragraph(f"<b>{cat_display}</b>", prog_box_center),
-                        Paragraph(f"<b>{prog_type}</b>", prog_box_center)
+                        Paragraph(f"<b>{prog_type}</b>", prog_box_center),
+                        Paragraph(f"<b>{stage_display}</b>", prog_box_right)
                     ]],
-                    colWidths=[2.6 * inch, 2.6 * inch, 2.0 * inch]
+                    colWidths=[66 * mm, 44 * mm, 36 * mm, 36 * mm]
                 )
                 prog_info_table.setStyle(TableStyle([
-                    ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                    ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#EEF2FF')),
-                    ('GRID', (0,0), (-1,-1), 0.55, colors.HexColor('#C7D2FE')),
-                    ('BOX', (0,0), (-1,-1), 0.9, colors.HexColor('#A5B4FC')),
-                    ('TOPPADDING', (0,0), (-1,-1), 8),
-                    ('BOTTOMPADDING', (0,0), (-1,-1), 8),
-                    ('LEFTPADDING', (0,0), (-1,-1), 6),
-                    ('RIGHTPADDING', (0,0), (-1,-1), 6),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#EEF2FF')),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#C7D2FE')),
+                    ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#A5B4FC')),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 6),
                 ]))
                 elements.append(prog_info_table)
-                elements.append(Spacer(1, 4))
+                elements.append(Spacer(1, 4 * mm))
 
                 max_mark_val = event.max_mark_per_judge
-                judge_count = program.effective_num_judges
+                assigned_judges_map = {}
+                if hasattr(program, 'judge_assignments'):
+                    try:
+                        assigned_judges_map = {
+                            a.judge_number: a.judge.name
+                            for a in program.judge_assignments.select_related('judge').all()
+                        }
+                    except Exception:
+                        assigned_judges_map = {}
+                assigned_max = max(assigned_judges_map.keys()) if assigned_judges_map else 0
+                judge_count = max(1, min(max(program.effective_num_judges, assigned_max), 6))
 
-                # Main Valuation Table
-                table_data = [[
+                # 3. Main Valuation Table with 2-level clean header
+                # Column widths: Code Letter (32mm), Marks (150mm shared equally across judges)
+                judge_col_width = (150.0 / judge_count) * mm
+                main_col_widths = [32 * mm] + [judge_col_width] * judge_count
+
+                header_row_0 = [
                     Paragraph("<b>Code Letter</b>", table_header_center),
-                    Paragraph("<b>Marks</b>", table_header_center),
+                    Paragraph(f"<b>Marks (Max: {max_mark_val})</b>", table_header_center),
                     *([""] * (judge_count - 1)),
-                    Paragraph(f"<b>Converted mark out of {event.converted_total_mark}</b>", table_header_center),
-                ]]
+                ]
+                header_row_1 = [
+                    "",
+                    *[
+                        Paragraph(
+                            f"<b>Judge {j+1}</b>" + (f"<br/><font size='7' color='#4338CA'>({escape(assigned_judges_map[j+1])})</font>" if (j+1) in assigned_judges_map else ""),
+                            table_subheader_center
+                        )
+                        for j in range(judge_count)
+                    ],
+                ]
+                table_data = [header_row_0, header_row_1]
 
-                # Determine total rows (1 row per participant for individual, 1 row per sub-team/team for group)
+                # Determine rows: exact total number of participants / sub-teams competing
                 if assignments.exists():
-                    if program.is_team_based:
-                        sub_teams = sorted(list({(a.team_id, a.sub_team_number or 1) for a in assignments}))
-                        entry_count = len(sub_teams)
-                        result_code_map = {
-                            (r.team_id, r.sub_team_number or 1): r.code_letter
-                            for r in ProgramResult.objects.filter(program=program, is_team_result=True)
-                            if r.code_letter
-                        }
-                        for idx, st_key in enumerate(sub_teams):
-                            code = result_code_map.get(st_key) or (chr(65 + idx) if idx < 26 else f"{chr(65 + (idx // 26) - 1)}{chr(65 + (idx % 26))}")
-                            row_cells = [Paragraph(f"<b>{code}</b>", table_body_center)]
-                            row_cells.extend([""] * (judge_count + 1))
-                            table_data.append(row_cells)
-                    else:
-                        entry_count = assignments.count()
-                        result_code_map = {
-                            r.participant_id: r.code_letter
-                            for r in ProgramResult.objects.filter(program=program)
-                            if r.code_letter
-                        }
-                        for idx, a in enumerate(assignments):
-                            code = result_code_map.get(a.student_id) or (chr(65 + idx) if idx < 26 else f"{chr(65 + (idx // 26) - 1)}{chr(65 + (idx % 26))}")
-                            row_cells = [Paragraph(f"<b>{code}</b>", table_body_center)]
-                            row_cells.extend([""] * (judge_count + 1))
-                            table_data.append(row_cells)
+                    entries = get_grouped_assignments_for_report(program, assignments, event)
+                    row_count = len(entries)
                 else:
-                    entry_count = 3  # Minimum 3 empty rows if no participants
-                    for _ in range(entry_count):
-                        table_data.append([""] * (judge_count + 2))
+                    row_count = 1 if not only_with_participants else 0
 
-                judge_width = (4.0 / judge_count) * inch
+                # Leave code letter and marks empty for organizers and judges to enter manually
+                for _ in range(row_count):
+                    row_cells = [""] * (judge_count + 1)
+                    table_data.append(row_cells)
+
                 main_table = Table(
                     table_data,
-                    colWidths=[1.3 * inch] + [judge_width] * judge_count + [1.9 * inch],
+                    colWidths=main_col_widths,
+                    repeatRows=2
                 )
                 main_table.setStyle(TableStyle([
+                    ('SPAN', (0, 0), (0, 1)),
                     ('SPAN', (1, 0), (judge_count, 0)),
                     ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
                     ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
-                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                    ('GRID', (0, 0), (-1, -1), 0.55, colors.HexColor('#CBD5E1')),
-                    ('BOX', (0, 0), (-1, -1), 0.9, colors.HexColor('#94A3B8')),
-                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
-                    ('TOPPADDING', (0, 0), (-1, -1), 10),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
+                    ('BACKGROUND', (0, 0), (0, 1), colors.HexColor('#312E81')),
+                    ('BACKGROUND', (1, 0), (judge_count, 0), colors.HexColor('#312E81')),
+                    ('BACKGROUND', (1, 1), (judge_count, 1), colors.HexColor('#EEF2FF')),
+                    ('TEXTCOLOR', (0, 0), (0, 1), colors.white),
+                    ('TEXTCOLOR', (1, 0), (judge_count, 0), colors.white),
+                    ('TEXTCOLOR', (1, 1), (judge_count, 1), colors.HexColor('#312E81')),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+                    ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor('#64748B')),
+                    ('ROWBACKGROUNDS', (0, 2), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+                    ('TOPPADDING', (0, 0), (-1, 1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, 1), 6),
+                    ('TOPPADDING', (0, 2), (-1, -1), 14),
+                    ('BOTTOMPADDING', (0, 2), (-1, -1), 14),
                     ('LEFTPADDING', (0, 0), (-1, -1), 4),
                     ('RIGHTPADDING', (0, 0), (-1, -1), 4),
                 ]))
-
                 elements.append(main_table)
+                elements.append(Spacer(1, 8 * mm))
+
+                # 4. Professional Judge Signatures Footer
+                active_judges_shown = judge_count
+                sig_col_w = (182.0 / active_judges_shown) * mm
+                line_dashes = '_' * (18 if active_judges_shown >= 5 else (22 if active_judges_shown == 4 else 28))
+                sig_cells = []
+                for j in range(active_judges_shown):
+                    j_num = j + 1
+                    j_name = assigned_judges_map.get(j_num)
+                    if j_name:
+                        sig_title = f'<b>Judge {j_num}: {escape(j_name)}</b><br/><font size="7.5" color="#64748B">Signature:</font>'
+                    else:
+                        sig_title = f'<b>Judge {j_num} Name & Signature:</b>'
+                    sig_cells.append(
+                        Paragraph(
+                            f'<font size="8.5" color="#312E81">{sig_title}</font><br/><br/><br/>'
+                            f'{line_dashes}',
+                            sig_style
+                        )
+                    )
+                sig_table = Table([sig_cells], colWidths=[sig_col_w] * active_judges_shown)
+                sig_table.setStyle(TableStyle([
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 2),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 2),
+                ]))
+                elements.append(sig_table)
 
         if not elements or page_counter == 0:
             elements.append(Paragraph("No matching programs or participants found for Valuation Sheet.", styles['Normal']))
 
-        doc.build(elements)
+        doc.build(elements, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         pdf_data = buffer.getvalue()
         buffer.close()
 
@@ -7890,7 +8020,7 @@ def generate_call_list(request, event_id):
         from reportlab.lib.pagesizes import A4
         from reportlab.lib import colors
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
+        from reportlab.lib.units import inch, mm
         from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak, HRFlowable
         from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
         from io import BytesIO
@@ -8030,125 +8160,95 @@ def generate_call_list(request, event_id):
                 'items': items
             })
 
+        PAGE_WIDTH = 182 * mm
         buffer = BytesIO()
         doc = SimpleDocTemplate(
             buffer,
             pagesize=A4,
-            leftMargin=36,
-            rightMargin=36,
-            topMargin=34,
-            bottomMargin=34
+            leftMargin=14 * mm,
+            rightMargin=14 * mm,
+            topMargin=12 * mm,
+            bottomMargin=12 * mm
         )
 
         styles = getSampleStyleSheet()
 
-        event_name_style = ParagraphStyle(
-            'EventNameStyle',
-            parent=styles['Normal'],
+        title_style = ParagraphStyle(
+            'CallListDocTitle',
+            parent=styles['Title'],
             fontName='Helvetica-Bold',
-            fontSize=11,
+            fontSize=18,
+            leading=21,
             alignment=TA_LEFT,
-            textColor=colors.HexColor('#312E81')
+            textColor=colors.HexColor('#0F172A'),
         )
 
         datetime_style = ParagraphStyle(
-            'DateTimeStyle',
+            'CallListMetaRight',
             parent=styles['Normal'],
             fontName='Helvetica',
-            fontSize=10,
+            fontSize=8.5,
+            leading=11,
             alignment=TA_RIGHT,
-            textColor=colors.HexColor('#64748B')
-        )
-
-        title_style = ParagraphStyle(
-            'CallListTitle',
-            parent=styles['Heading1'],
-            fontName='Helvetica-Bold',
-            fontSize=22,
-            leading=25,
-            textColor=colors.HexColor('#0F172A'),
-            spaceAfter=2
-        )
-
-        subtitle_style = ParagraphStyle(
-            'CallListSubtitle',
-            parent=styles['Normal'],
-            fontName='Helvetica',
-            fontSize=13,
             textColor=colors.HexColor('#475569'),
-            spaceAfter=4
         )
 
-        prog_title_style = ParagraphStyle(
-            'ProgTitleStyle',
+        prog_box_left = ParagraphStyle(
+            'CLProgBoxLeft',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=11,
+            fontSize=9.5,
+            leading=12,
             alignment=TA_LEFT,
-            textColor=colors.HexColor('#0F172A')
-        )
-
-        prog_cat_style = ParagraphStyle(
-            'ProgCatStyle',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=11,
-            alignment=TA_CENTER,
-            textColor=colors.HexColor('#312E81')
-        )
-
-        prog_type_style = ParagraphStyle(
-            'ProgTypeStyle',
-            parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=11,
-            alignment=TA_RIGHT,
-            textColor=colors.HexColor('#475569')
-        )
-
-        category_section_style = ParagraphStyle(
-            'CategorySectionStyle',
-            parent=styles['Heading2'],
-            fontName='Helvetica-Bold',
-            fontSize=12,
-            leading=16,
             textColor=colors.HexColor('#312E81'),
-            spaceBefore=10,
-            spaceAfter=6
+        )
+
+        prog_box_center = ParagraphStyle(
+            'CLProgBoxCenter',
+            parent=styles['Normal'],
+            fontName='Helvetica-Bold',
+            fontSize=9.5,
+            leading=12,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor('#312E81'),
         )
 
         table_header_style = ParagraphStyle(
-            'TableHeaderStyle',
+            'CLTableHeaderLeft',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=10,
+            fontSize=8.5,
+            leading=11,
             alignment=TA_LEFT,
             textColor=colors.white
         )
 
         table_header_center = ParagraphStyle(
-            'TableHeaderCenter',
+            'CLTableHeaderCenter',
             parent=styles['Normal'],
             fontName='Helvetica-Bold',
-            fontSize=10,
+            fontSize=8.5,
+            leading=11,
             alignment=TA_CENTER,
             textColor=colors.white
         )
 
         table_body_style = ParagraphStyle(
-            'TableBodyStyle',
+            'CLTableBodyLeft',
             parent=styles['Normal'],
             fontName='Helvetica',
-            fontSize=10,
+            fontSize=8.5,
+            leading=11,
             alignment=TA_LEFT,
             textColor=colors.HexColor('#1E293B')
         )
 
         table_body_center = ParagraphStyle(
-            'TableBodyCenter',
+            'CLTableBodyCenter',
             parent=styles['Normal'],
-            fontName='Helvetica-Bold',
-            fontSize=10,
+            fontName='Helvetica',
+            fontSize=8.5,
+            leading=11,
             alignment=TA_CENTER,
             textColor=colors.HexColor('#1E293B')
         )
@@ -8156,19 +8256,21 @@ def generate_call_list(request, event_id):
         total_part_style = ParagraphStyle(
             'TotalPartStyle',
             parent=styles['Normal'],
-            fontName='Helvetica',
-            fontSize=10,
+            fontName='Helvetica-Bold',
+            fontSize=8.5,
+            leading=11,
             alignment=TA_RIGHT,
-            textColor=colors.HexColor('#374151'),
-            spaceBefore=4
+            textColor=colors.HexColor('#475569'),
+            spaceBefore=3 * mm
         )
 
         current_dt_str = datetime.now().strftime("%d/%m/%Y %I:%M %p")
+        school_name = escape(event.school.name.upper()) if (getattr(event, 'school', None) and event.school.name) else 'EVENTLOO'
         elements = []
         page_counter = 0
 
         if mode == 'team':
-            # Format 2: Team Wise Call List (Screenshot 2)
+            # Format 2: Team Wise Call List
             teams = Team.objects.filter(school=event.school).order_by('name')
             if team_id != 'all':
                 try:
@@ -8196,24 +8298,42 @@ def generate_call_list(request, event_id):
                 if page_counter > 1:
                     elements.append(PageBreak())
 
-                top_header_table = Table(
-                    [[Paragraph(escape(event.title), event_name_style), Paragraph(current_dt_str, datetime_style)]],
-                    colWidths=[4.2 * inch, 3.0 * inch]
-                )
+                top_header_table = Table([[
+                    Paragraph(
+                        f'<font size="10" color="#312E81"><b>{school_name}</b></font><br/>'
+                        f'<font size="18" color="#0F172A"><b>Team Call List</b></font>',
+                        title_style
+                    ),
+                    Paragraph(
+                        f'<b>{escape(event.title)}</b><br/>'
+                        f'<font size="8" color="#64748B">Generated {current_dt_str}</font>',
+                        datetime_style
+                    )
+                ]], colWidths=[118 * mm, 64 * mm])
                 top_header_table.setStyle(TableStyle([
-                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                    ('LEFTPADDING', (0,0), (-1,-1), 0),
-                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                    ('TOPPADDING', (0,0), (-1,-1), 0),
-                    ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-                    ('LINEBELOW', (0,0), (-1,-1), 0.7, colors.HexColor('#CBD5E1')),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+                    ('LINEBELOW', (0, 0), (-1, -1), 1.2, colors.HexColor('#4F46E5')),
                 ]))
                 elements.append(top_header_table)
-                elements.append(Spacer(1, 4))
+                elements.append(Spacer(1, 4 * mm))
 
-                elements.append(Paragraph("Call List", title_style))
-                elements.append(Paragraph(team.name, subtitle_style))
-                elements.append(HRFlowable(width="100%", thickness=1.2, color=colors.HexColor('#4F46E5'), spaceBefore=4, spaceAfter=10))
+                # Team Banner Box
+                team_banner = Table([[
+                    Paragraph(f'<font size="10" color="#ffffff"><b>Team: {escape(team.name)}</b></font>', table_header_style)
+                ]], colWidths=[182 * mm])
+                team_banner.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#312E81')),
+                    ('TOPPADDING', (0, 0), (-1, -1), 5),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ]))
+                elements.append(team_banner)
+                elements.append(Spacer(1, 3 * mm))
 
                 categories_dict = {}
                 for a in assignments:
@@ -8226,7 +8346,19 @@ def generate_call_list(request, event_id):
                     categories_dict[cat_name][prog_key].append(a)
 
                 for cat_name, cat_prog_map in categories_dict.items():
-                    elements.append(Paragraph(f"<b>{escape(cat_name)} ({len(cat_prog_map)})</b>", category_section_style))
+                    cat_banner = Table([[
+                        Paragraph(f'<font size="9.5" color="#312E81"><b>{escape(cat_name.upper())} ({len(cat_prog_map)} Entries)</b></font>', prog_box_left)
+                    ]], colWidths=[182 * mm])
+                    cat_banner.setStyle(TableStyle([
+                        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#EEF2FF')),
+                        ('TOPPADDING', (0, 0), (-1, -1), 4),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+                    ]))
+                    elements.append(cat_banner)
+                    elements.append(Spacer(1, 2 * mm))
 
                     table_data = [
                         [
@@ -8253,26 +8385,25 @@ def generate_call_list(request, event_id):
                                 Paragraph(escape(entry['gender']), table_body_center)
                             ])
 
-                    table = Table(table_data, colWidths=[2.7 * inch, 1.0 * inch, 2.5 * inch, 1.0 * inch])
+                    table = Table(table_data, colWidths=[62 * mm, 24 * mm, 72 * mm, 24 * mm], repeatRows=1)
                     table.setStyle(TableStyle([
-                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
+                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#312E81')),
                         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                        ('GRID', (0, 0), (-1, -1), 0.55, colors.HexColor('#CBD5E1')),
-                        ('BOX', (0, 0), (-1, -1), 0.9, colors.HexColor('#94A3B8')),
+                        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+                        ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor('#64748B')),
                         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
-                        ('TOPPADDING', (0, 0), (-1, -1), 6),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                        ('TOPPADDING', (0, 0), (-1, -1), 5),
+                        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
                         ('LEFTPADDING', (0, 0), (-1, -1), 6),
                         ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                     ]))
 
                     elements.append(table)
-                    elements.append(Spacer(1, 10))
+                    elements.append(Spacer(1, 4 * mm))
 
         else:
-            # Format 1: Competition Wise Call List (Screenshot 1)
+            # Format 1: Competition Wise Call List
             programs = Program.objects.filter(event=event).order_by('category', 'name')
             if category != 'all':
                 programs = programs.filter(category=category)
@@ -8300,46 +8431,52 @@ def generate_call_list(request, event_id):
                 if page_counter > 1:
                     elements.append(PageBreak())
 
-                top_header_table = Table(
-                    [[Paragraph(escape(event.title), event_name_style), Paragraph(current_dt_str, datetime_style)]],
-                    colWidths=[4.2 * inch, 3.0 * inch]
-                )
+                top_header_table = Table([[
+                    Paragraph(
+                        f'<font size="10" color="#312E81"><b>{school_name}</b></font><br/>'
+                        f'<font size="18" color="#0F172A"><b>Competitions Call List</b></font>',
+                        title_style
+                    ),
+                    Paragraph(
+                        f'<b>{escape(event.title)}</b><br/>'
+                        f'<font size="8" color="#64748B">Generated {current_dt_str}</font>',
+                        datetime_style
+                    )
+                ]], colWidths=[118 * mm, 64 * mm])
                 top_header_table.setStyle(TableStyle([
-                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                    ('LEFTPADDING', (0,0), (-1,-1), 0),
-                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                    ('TOPPADDING', (0,0), (-1,-1), 0),
-                    ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-                    ('LINEBELOW', (0,0), (-1,-1), 0.7, colors.HexColor('#CBD5E1')),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+                    ('LINEBELOW', (0, 0), (-1, -1), 1.2, colors.HexColor('#4F46E5')),
                 ]))
                 elements.append(top_header_table)
-                elements.append(Spacer(1, 4))
-
-                elements.append(Paragraph("Competitions Call List", title_style))
-                elements.append(HRFlowable(width="100%", thickness=1.2, color=colors.HexColor('#4F46E5'), spaceBefore=4, spaceAfter=10))
+                elements.append(Spacer(1, 4 * mm))
 
                 prog_type = "Group" if program.is_team_based else "Individual"
                 cat_display = program.get_category_display().upper() if hasattr(program, 'get_category_display') and callable(getattr(program, 'get_category_display', None)) else str(program.category).upper()
+                stage_display = program.stage.display_name if program.stage else (program.venue or '—')
 
-                sub_header_table = Table(
-                    [[
-                        Paragraph(f"<b>{escape(program.name.upper())}</b>", prog_title_style),
-                        Paragraph(f"<u><b>{cat_display}</b></u>", prog_cat_style),
-                        Paragraph(f"<u><b>{prog_type}</b></u>", prog_type_style)
-                    ]],
-                    colWidths=[2.8 * inch, 2.6 * inch, 1.8 * inch]
-                )
-                sub_header_table.setStyle(TableStyle([
-                    ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                    ('LEFTPADDING', (0,0), (-1,-1), 0),
-                    ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                    ('TOPPADDING', (0,0), (-1,-1), 2),
-                    ('BOTTOMPADDING', (0,0), (-1,-1), 6),
-                    ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
-                    ('BOX', (0,0), (-1,-1), 0.6, colors.HexColor('#CBD5E1')),
+                info_box_data = [[
+                    Paragraph(f'<b>PROGRAM:</b> {escape(program.name.upper())}', prog_box_left),
+                    Paragraph(f'<b>CATEGORY:</b> {escape(cat_display)}', prog_box_center),
+                    Paragraph(f'<b>MODE:</b> {escape(prog_type)}', prog_box_center),
+                    Paragraph(f'<b>STAGE:</b> {escape(stage_display)}', prog_box_center),
+                ]]
+                info_table = Table(info_box_data, colWidths=[66 * mm, 44 * mm, 36 * mm, 36 * mm])
+                info_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#EEF2FF')),
+                    ('BOX', (0, 0), (-1, -1), 0.8, colors.HexColor('#C7D2FE')),
+                    ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#C7D2FE')),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 5),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 6),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 6),
                 ]))
-                elements.append(sub_header_table)
-                elements.append(Spacer(1, 6))
+                elements.append(info_table)
+                elements.append(Spacer(1, 4 * mm))
 
                 table_data = [
                     [
@@ -8364,50 +8501,47 @@ def generate_call_list(request, event_id):
                             Paragraph(escape(entry['team_name']), table_body_style)
                         ])
 
-                table = Table(table_data, colWidths=[0.6 * inch, 0.9 * inch, 2.7 * inch, 1.0 * inch, 2.0 * inch])
+                table = Table(table_data, colWidths=[14 * mm, 24 * mm, 72 * mm, 22 * mm, 50 * mm], repeatRows=1)
                 table.setStyle(TableStyle([
-                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#312E81')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ('GRID', (0, 0), (-1, -1), 0.55, colors.HexColor('#CBD5E1')),
-                    ('BOX', (0, 0), (-1, -1), 0.9, colors.HexColor('#94A3B8')),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+                    ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor('#64748B')),
                     ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
-                    ('TOPPADDING', (0, 0), (-1, -1), 6),
-                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                    ('TOPPADDING', (0, 0), (-1, -1), 5),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
                     ('LEFTPADDING', (0, 0), (-1, -1), 6),
                     ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
                 ]))
 
                 elements.append(table)
                 elements.append(Paragraph(f"Total participants: {sl_no}", total_part_style))
-                elements.append(Spacer(1, 10))
+                elements.append(Spacer(1, 6 * mm))
 
         if not elements or page_counter == 0:
-            top_header_table = Table(
-                [[Paragraph(escape(event.title), event_name_style), Paragraph(current_dt_str, datetime_style)]],
-                colWidths=[4.2 * inch, 3.0 * inch]
-            )
+            top_header_table = Table([[
+                Paragraph(
+                    f'<font size="10" color="#312E81"><b>{school_name}</b></font><br/>'
+                    f'<font size="18" color="#0F172A"><b>Official Call List</b></font>',
+                    title_style
+                ),
+                Paragraph(
+                    f'<b>{escape(event.title)}</b><br/>'
+                    f'<font size="8" color="#64748B">Generated {current_dt_str}</font>',
+                    datetime_style
+                )
+            ]], colWidths=[118 * mm, 64 * mm])
             top_header_table.setStyle(TableStyle([
-                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-                ('LEFTPADDING', (0,0), (-1,-1), 0),
-                ('RIGHTPADDING', (0,0), (-1,-1), 0),
-                ('TOPPADDING', (0,0), (-1,-1), 0),
-                ('BOTTOMPADDING', (0,0), (-1,-1), 0),
-                ('LINEBELOW', (0,0), (-1,-1), 0.7, colors.HexColor('#CBD5E1')),
+                ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ('TOPPADDING', (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+                ('LINEBELOW', (0, 0), (-1, -1), 1.2, colors.HexColor('#4F46E5')),
             ]))
             elements.append(top_header_table)
-            elements.append(Spacer(1, 10))
-            elements.append(Paragraph("Official Call List", title_style))
-            team_obj = None
-            if team_id != 'all':
-                try:
-                    team_obj = Team.objects.filter(id=int(team_id)).first()
-                except (ValueError, TypeError):
-                    pass
-            if team_obj:
-                elements.append(Paragraph(escape(team_obj.name), subtitle_style))
-            elements.append(HRFlowable(width="100%", thickness=1.2, color=colors.HexColor('#4F46E5'), spaceBefore=4, spaceAfter=14))
+            elements.append(Spacer(1, 10 * mm))
             
             notice_style = ParagraphStyle(
                 'EmptyCallListNotice',
@@ -8419,11 +8553,11 @@ def generate_call_list(request, event_id):
                 spaceBefore=12,
                 spaceAfter=12
             )
-            elements.append(Spacer(1, 40))
+            elements.append(Spacer(1, 30 * mm))
             elements.append(Paragraph("<b>No matching assignments found for Call List.</b>", notice_style))
             elements.append(Paragraph("Please ensure students are assigned to programs and verified with chest numbers for this event.", notice_style))
 
-        doc.build(elements)
+        doc.build(elements, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         pdf_data = buffer.getvalue()
         buffer.close()
 
@@ -8814,6 +8948,12 @@ def get_public_participant_badge(request, event_id, student_identifier):
     except Event.DoesNotExist:
         return Response({'error': 'Event not found'}, status=status.HTTP_404_NOT_FOUND)
 
+    if not event.enable_public_portal:
+        return Response(
+            {'error': 'The public portal is currently private or disabled for this event by the organizers.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
     chest_obj = None
     student = None
 
@@ -8969,6 +9109,20 @@ def get_public_participant_badge(request, event_id, student_identifier):
             school_logo_url = request.build_absolute_uri(school.logo.url)
         except Exception:
             school_logo_url = getattr(school.logo, 'url', None)
+    if not school_logo_url and school and hasattr(school, 'settings') and getattr(school.settings, 'school_logo', None):
+        try:
+            school_logo_url = request.build_absolute_uri(school.settings.school_logo.url)
+        except Exception:
+            school_logo_url = getattr(school.settings.school_logo, 'url', None)
+
+    event_logo_url = None
+    if getattr(event, 'logo', None) and getattr(event.logo, 'name', None):
+        try:
+            event_logo_url = request.build_absolute_uri(event.logo.url)
+        except Exception:
+            event_logo_url = getattr(event.logo, 'url', None)
+    if not event_logo_url:
+        event_logo_url = school_logo_url
 
     category_name = student.category or (programs_list[0]['category'] if programs_list else 'General')
     if category_name:
@@ -9001,9 +9155,18 @@ def get_public_participant_badge(request, event_id, student_identifier):
         'event': {
             'id': event.id,
             'title': event.title,
+            'logo': event_logo_url,
             'description': event.description,
             'start_date': event.start_date.isoformat() if event.start_date else None,
             'end_date': event.end_date.isoformat() if event.end_date else None,
+            'start_time': event.start_time.isoformat() if event.start_time else None,
+            'end_time': event.end_time.isoformat() if event.end_time else None,
+            'start_datetime': (
+                datetime.combine(
+                    event.start_date,
+                    event.start_time if event.start_time else time(9, 0)
+                ).isoformat()
+            ) if event.start_date else None,
             'venue': event.venue or '',
             'status': event.status,
             'academic_year': getattr(event, 'academic_year', ''),
@@ -9073,6 +9236,12 @@ def get_public_event_portal(request, event_id):
         event = Event.objects.select_related('school').get(id=event_id)
     except Event.DoesNotExist:
         return Response({'error': 'Event not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not event.enable_public_portal:
+        return Response(
+            {'error': 'The public portal is currently private or disabled for this event by the organizers.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
 
     # School branding from System Settings
     school_name = event.school.name if event.school else 'School'
@@ -9292,8 +9461,20 @@ def get_public_event_portal(request, event_id):
             'venue': event.venue or 'Campus Venue',
             'start_date': event.start_date.isoformat() if event.start_date else None,
             'end_date': event.end_date.isoformat() if event.end_date else None,
+            'start_time': event.start_time.isoformat() if event.start_time else None,
+            'end_time': event.end_time.isoformat() if event.end_time else None,
+            'start_datetime': (
+                datetime.combine(
+                    event.start_date,
+                    event.start_time if event.start_time else time(9, 0)
+                ).isoformat()
+            ) if event.start_date else None,
             'status': event.status or 'published',
             'is_schedule_published': event.is_schedule_published,
+            'enable_public_portal': getattr(event, 'enable_public_portal', True),
+            'public_theme_title': getattr(event, 'public_theme_title', 'Make It Your Own') or 'Make It Your Own',
+            'public_about_text': getattr(event, 'public_about_text', '') or '',
+            'public_theme_color': getattr(event, 'public_theme_color', 'sunset') or 'sunset',
             'school_name': school_name,
             'school_logo': school_logo_url,
             'logo': event_logo_url,
@@ -9311,5 +9492,4 @@ def get_public_event_portal(request, event_id):
         'public_url': public_url,
         'qr_code_svg': qr_svg,
     })
-
 

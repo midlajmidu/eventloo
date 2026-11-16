@@ -36,3 +36,13 @@ def build_custom_pdf_template(school_settings):
     This provides access to all custom template features.
     """
     return create_custom_pdf_template(school_settings)
+
+
+def add_eventloo_footer(canvas, doc):
+    """Draws 'Powered by eventloo.in' at the bottom center of every PDF page."""
+    canvas.saveState()
+    canvas.setFont('Helvetica', 8)
+    canvas.setFillColor(colors.HexColor('#94A3B8'))
+    page_w = getattr(canvas, '_pagesize', getattr(doc, 'pagesize', (595.27, 841.89)))[0]
+    canvas.drawCentredString(page_w / 2.0, 5 * 2.83464567, "Powered by eventloo.in")
+    canvas.restoreState()

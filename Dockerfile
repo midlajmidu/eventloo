@@ -6,8 +6,8 @@ FROM node:20-alpine AS frontend-builder
 WORKDIR /build
 
 # Install dependencies first (layer caching)
-COPY frontend/package*.json ./
-RUN npm ci --silent || npm install --silent
+COPY frontend/package*.json frontend/.npmrc* ./
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 # Copy frontend source code and compile production SPA bundle
 COPY frontend/ ./

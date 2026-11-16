@@ -33,7 +33,7 @@ import TeamStudents from './components/TeamManager/TeamStudents';
 import ProgramAssignmentPage from './components/TeamManager/ProgramAssignmentPage';
 import TeamEventDashboard from './components/TeamManager/TeamEventDashboard';
 import PublicParticipantBadge from './components/Public/PublicParticipantBadge';
-import PublicEventPortal from './components/Public/PublicEventPortal';
+import ThemedPage from './components/Public/themes/ThemedPage';
 
 import './index.css';
 
@@ -72,8 +72,19 @@ function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/team-manager/login" element={<Navigate to="/login?tab=team" replace />} />
           <Route path="/super-admin/login" element={<SuperAdminLogin />} />
-          <Route path="/events/:eventId/public" element={<PublicEventPortal />} />
-          <Route path="/public/events/:eventId" element={<PublicEventPortal />} />
+          {/* Public Themed Event Experience Routes */}
+          <Route path="/events/:eventId/public" element={<ThemedPage page="landing" />} />
+          <Route path="/public/events/:eventId" element={<ThemedPage page="landing" />} />
+          <Route path="/events/:eventId/public/results" element={<ThemedPage page="results" />} />
+          <Route path="/public/events/:eventId/results" element={<ThemedPage page="results" />} />
+          <Route path="/events/:eventId/public/points" element={<ThemedPage page="standings" />} />
+          <Route path="/public/events/:eventId/points" element={<ThemedPage page="standings" />} />
+          <Route path="/events/:eventId/public/standings" element={<ThemedPage page="standings" />} />
+          <Route path="/public/events/:eventId/standings" element={<ThemedPage page="standings" />} />
+          <Route path="/events/:eventId/public/schedule" element={<ThemedPage page="schedule" />} />
+          <Route path="/public/events/:eventId/schedule" element={<ThemedPage page="schedule" />} />
+          <Route path="/events/:eventId/public/verify" element={<ThemedPage page="verify" />} />
+          <Route path="/public/events/:eventId/verify" element={<ThemedPage page="verify" />} />
           <Route path="/events/:eventId/badge/:studentId" element={<PublicParticipantBadge />} />
           <Route path="/public/events/:eventId/participants/:studentId" element={<PublicParticipantBadge />} />
           <Route path="/public/events/:eventId/badges/:chestOrStudentId" element={<PublicParticipantBadge />} />

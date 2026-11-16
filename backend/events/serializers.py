@@ -187,6 +187,7 @@ class EventDetailSerializer(serializers.ModelSerializer):
             'mix_group_first', 'mix_group_second', 'mix_group_third',
             'count_general_individual_points_for_students',
             'is_schedule_published',
+            'enable_public_portal', 'public_theme_title', 'public_about_text', 'public_theme_color',
             'school_name', 'school_logo', 'logo', 'event_logo',
             'current_participants', 'current_teams', 'is_registration_open',
             'created_by', 'created_at', 'updated_at', 'image'
@@ -214,6 +215,7 @@ class EventCreateUpdateSerializer(serializers.ModelSerializer):
             'mix_group_first', 'mix_group_second', 'mix_group_third',
             'count_general_individual_points_for_students',
             'is_schedule_published',
+            'enable_public_portal', 'public_theme_title', 'public_about_text', 'public_theme_color',
             'image', 'logo'
         ]
 
@@ -1344,4 +1346,5 @@ class EventWithProgramsSerializer(EventDetailSerializer):
         fields = EventDetailSerializer.Meta.fields + ['programs', 'programs_count']
         
     def get_programs_count(self, obj):
-        return obj.programs.count() 
+        return obj.programs.count()
+

@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Menu,
-  Bell,
   Search,
   User,
   Settings,
@@ -17,8 +16,6 @@ import {
   Shield,
   FileText,
   Check,
-  CheckCheck,
-  Trash2,
   X,
   ExternalLink,
   Sparkles,
@@ -51,59 +48,6 @@ const resolveLogoUrl = (rawLogo) => {
   }
   return `/media/${trimmed}`;
 };
-
-const DEFAULT_NOTIFICATIONS = [
-  {
-    id: 'notif-1',
-    title: 'Cultural Fest 2026 Live',
-    message: 'Stage 1 schedule is live. 12 programs scheduled for today.',
-    time: '10 min ago',
-    unread: true,
-    category: 'events',
-    link: '/admin/events',
-    type: 'event',
-  },
-  {
-    id: 'notif-2',
-    title: 'New Team Registered',
-    message: 'Team "Emerald Falcons" completed manager credentials setup.',
-    time: '45 min ago',
-    unread: true,
-    category: 'events',
-    link: '/admin/teams',
-    type: 'team',
-  },
-  {
-    id: 'notif-3',
-    title: 'Official Results Published',
-    message: 'Scores published for Senior Classical Dance & Solo Song.',
-    time: '2 hours ago',
-    unread: false,
-    category: 'events',
-    link: '/admin/points',
-    type: 'result',
-  },
-  {
-    id: 'notif-4',
-    title: 'Student Roster Updated',
-    message: 'Batch upload completed: 48 students enrolled across junior categories.',
-    time: '5 hours ago',
-    unread: false,
-    category: 'system',
-    link: '/admin/students',
-    type: 'student',
-  },
-  {
-    id: 'notif-5',
-    title: 'System Security Audit',
-    message: 'Scheduled data snapshot and session token rotation completed.',
-    time: '1 day ago',
-    unread: false,
-    category: 'system',
-    link: '/admin/settings',
-    type: 'system',
-  },
-];
 
 const QUICK_ADD_ACTIONS = [
   {
@@ -325,49 +269,24 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
 
   // Distinct states for separate popovers
   const [quickAddOpen, setQuickAddOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   // Tabs inside popovers
   const [quickAddTab, setQuickAddTab] = useState('all'); // 'all' | 'entities' | 'operations'
   const [quickAddQuery, setQuickAddQuery] = useState('');
-  const [notificationTab, setNotificationTab] = useState('all'); // 'all' | 'unread' | 'events' | 'system'
 
   // Search state
   const [searchFocused, setSearchFocused] = useState(false);
   const [globalSearch, setGlobalSearch] = useState('');
 
-  // Notifications state with localStorage caching
-  const [notifications, setNotifications] = useState(() => {
-    try {
-      const saved = localStorage.getItem('eventloo_notifications');
-      return saved ? JSON.parse(saved) : DEFAULT_NOTIFICATIONS;
-    } catch {
-      return DEFAULT_NOTIFICATIONS;
-    }
-  });
-
   const quickAddRef = useRef(null);
-  const notificationRef = useRef(null);
   const dropdownRef = useRef(null);
-
-  // Sync notifications to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('eventloo_notifications', JSON.stringify(notifications));
-    } catch {
-      // Ignore storage errors
-    }
-  }, [notifications]);
 
   // Click outside and escape key handling
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (quickAddRef.current && !quickAddRef.current.contains(event.target)) {
         setQuickAddOpen(false);
-      }
-      if (notificationRef.current && !notificationRef.current.contains(event.target)) {
-        setNotificationsOpen(false);
       }
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setDropdownOpen(false);
@@ -377,7 +296,6 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         setQuickAddOpen(false);
-        setNotificationsOpen(false);
         setDropdownOpen(false);
       }
     };
@@ -393,20 +311,12 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
   // Mutually exclusive toggles
   const toggleQuickAdd = () => {
     setQuickAddOpen((prev) => !prev);
-    setNotificationsOpen(false);
-    setDropdownOpen(false);
-  };
-
-  const toggleNotifications = () => {
-    setNotificationsOpen((prev) => !prev);
-    setQuickAddOpen(false);
     setDropdownOpen(false);
   };
 
   const toggleDropdown = () => {
     setDropdownOpen((prev) => !prev);
     setQuickAddOpen(false);
-    setNotificationsOpen(false);
   };
 
   const handleLogout = async () => {
@@ -443,36 +353,6 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
     navigate(path);
   };
 
-  const markAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })));
-  };
-
-  const markNotificationRead = (id) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, unread: false } : n))
-    );
-  };
-
-  const dismissNotification = (id, e) => {
-    e.stopPropagation();
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
-
-  const clearAllNotifications = () => {
-    setNotifications([]);
-  };
-
-  const handleNotificationClick = (notification) => {
-    markNotificationRead(notification.id);
-    setNotificationsOpen(false);
-    if (notification.link) {
-      navigate(notification.link);
-    }
-  };
-
-  // Filtered lists
-  const unreadCount = notifications.filter((n) => n.unread).length;
-
   const filteredQuickAddActions = activeQuickActions.filter((action) => {
     const matchesTab = quickAddTab === 'all' || action.category === quickAddTab;
     const matchesQuery =
@@ -482,43 +362,6 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
       action.tag.toLowerCase().includes(quickAddQuery.toLowerCase());
     return matchesTab && matchesQuery;
   });
-
-  const filteredNotifications = notifications.filter((n) => {
-    if (notificationTab === 'unread') return n.unread;
-    if (notificationTab === 'events') return n.category === 'events';
-    if (notificationTab === 'system') return n.category === 'system';
-    return true; // 'all'
-  });
-
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'event':
-        return <Calendar className="h-4 w-4 text-purple-600" />;
-      case 'team':
-        return <Users className="h-4 w-4 text-blue-600" />;
-      case 'result':
-        return <Trophy className="h-4 w-4 text-amber-600" />;
-      case 'student':
-        return <GraduationCap className="h-4 w-4 text-emerald-600" />;
-      default:
-        return <Shield className="h-4 w-4 text-indigo-600" />;
-    }
-  };
-
-  const getNotificationBadgeClass = (type) => {
-    switch (type) {
-      case 'event':
-        return 'bg-purple-100 text-purple-700';
-      case 'team':
-        return 'bg-blue-100 text-blue-700';
-      case 'result':
-        return 'bg-amber-100 text-amber-700';
-      case 'student':
-        return 'bg-emerald-100 text-emerald-700';
-      default:
-        return 'bg-indigo-100 text-indigo-700';
-    }
-  };
 
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-40 backdrop-blur-lg bg-white/95">
@@ -557,7 +400,7 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
           </div>
         </div>
 
-        {/* Right section: Quick Add + Notifications + User Menu */}
+        {/* Right section: Quick Add + User Menu */}
         <div className="flex items-center space-x-3">
           {/* ========================================================================= */}
           {/* 1. QUICK ADD TAB / DROPDOWN */}
@@ -723,203 +566,7 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
           </div>
 
           {/* ========================================================================= */}
-          {/* 2. NOTIFICATIONS TAB / DROPDOWN */}
-          {/* ========================================================================= */}
-          <div className="relative" ref={notificationRef}>
-            <button
-              onClick={toggleNotifications}
-              className={`p-2 rounded-xl relative transition-all duration-200 ${notificationsOpen
-                  ? 'bg-indigo-50 text-indigo-600 ring-2 ring-indigo-200'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-100'
-                }`}
-              aria-label="Notifications"
-              title="Notifications"
-            >
-              <Bell className="h-5 w-5" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-sm animate-pulse">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-
-            {/* Notifications Popover Panel */}
-            {notificationsOpen && (
-              <div className="absolute right-0 mt-2 w-[calc(100vw-1.5rem)] sm:w-96 max-w-sm bg-white rounded-2xl shadow-2xl border border-gray-100 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-                {/* Notification Header */}
-                <div className="p-4 bg-gradient-to-r from-gray-50 via-white to-indigo-50/40 border-b border-gray-100">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <h3 className="font-semibold text-gray-900 text-sm">Notifications</h3>
-                      {unreadCount > 0 ? (
-                        <span className="px-2 py-0.5 text-xs font-semibold text-indigo-700 bg-indigo-100 rounded-full">
-                          {unreadCount} new
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 rounded-full border border-emerald-100 flex items-center">
-                          <Check className="h-3 w-3 mr-0.5" /> Caught up
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center space-x-1">
-                      {unreadCount > 0 && (
-                        <button
-                          onClick={markAllNotificationsRead}
-                          className="p-1.5 text-xs text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors flex items-center"
-                          title="Mark all as read"
-                        >
-                          <CheckCheck className="h-3.5 w-3.5 mr-1" />
-                          <span className="hidden sm:inline text-[11px]">Mark read</span>
-                        </button>
-                      )}
-                      {notifications.length > 0 && (
-                        <button
-                          onClick={clearAllNotifications}
-                          className="p-1.5 text-xs text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Clear all notifications"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Notification Category Tabs */}
-                  <div className="flex items-center space-x-1.5 mt-3">
-                    <button
-                      onClick={() => setNotificationTab('all')}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${notificationTab === 'all'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                    >
-                      All ({notifications.length})
-                    </button>
-                    <button
-                      onClick={() => setNotificationTab('unread')}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${notificationTab === 'unread'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                    >
-                      Unread ({unreadCount})
-                    </button>
-                    <button
-                      onClick={() => setNotificationTab('events')}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${notificationTab === 'events'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                    >
-                      Events
-                    </button>
-                    <button
-                      onClick={() => setNotificationTab('system')}
-                      className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${notificationTab === 'system'
-                          ? 'bg-indigo-600 text-white shadow-sm'
-                          : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                    >
-                      System
-                    </button>
-                  </div>
-                </div>
-
-                {/* Notifications List */}
-                <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
-                  {filteredNotifications.length > 0 ? (
-                    filteredNotifications.map((notification) => (
-                      <div
-                        key={notification.id}
-                        onClick={() => handleNotificationClick(notification)}
-                        className={`p-3.5 hover:bg-gray-50/80 cursor-pointer transition-all duration-150 flex items-start space-x-3 group relative ${notification.unread ? 'bg-indigo-50/30' : 'bg-white'
-                          }`}
-                      >
-                        {/* Icon Pill */}
-                        <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 mt-0.5 border border-gray-200/60 group-hover:scale-105 transition-transform">
-                          {getNotificationIcon(notification.type)}
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <span className="text-xs font-semibold text-gray-900 group-hover:text-indigo-600 transition-colors truncate">
-                              {notification.title}
-                            </span>
-                            <span className="text-[10px] text-gray-400 shrink-0 ml-2">
-                              {notification.time}
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-600 line-clamp-2 leading-relaxed">
-                            {notification.message}
-                          </p>
-                          <div className="flex items-center justify-between mt-1.5">
-                            <span
-                              className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${getNotificationBadgeClass(
-                                notification.type
-                              )}`}
-                            >
-                              {notification.category}
-                            </span>
-                            <span className="text-[11px] font-medium text-indigo-600 group-hover:underline flex items-center">
-                              Open <ArrowRight className="h-3 w-3 ml-0.5" />
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Unread indicator or Dismiss button */}
-                        <div className="flex flex-col items-center justify-between h-full pt-1 shrink-0">
-                          {notification.unread && (
-                            <span className="w-2 h-2 rounded-full bg-indigo-600 ring-2 ring-indigo-200 mb-2"></span>
-                          )}
-                          <button
-                            onClick={(e) => dismissNotification(notification.id, e)}
-                            className="text-gray-300 hover:text-gray-600 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                            title="Dismiss notification"
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="p-8 text-center">
-                      <div className="w-12 h-12 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mx-auto mb-3 text-gray-400">
-                        <Bell className="h-6 w-6" />
-                      </div>
-                      <p className="text-xs font-semibold text-gray-800">No notifications</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5">
-                        {notificationTab === 'unread'
-                          ? 'All notifications have been read.'
-                          : 'No activity found in this category.'}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Notification Footer */}
-                <div className="p-2.5 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
-                  <span className="flex items-center">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block mr-1.5 animate-pulse"></span>
-                    Live monitoring active
-                  </span>
-                  <button
-                    onClick={() => {
-                      setNotificationsOpen(false);
-                      navigate('/admin/events');
-                    }}
-                    className="text-indigo-600 hover:text-indigo-800 font-medium hover:underline"
-                  >
-                    View All Events
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ========================================================================= */}
-          {/* 3. USER PROFILE MENU */}
+          {/* USER PROFILE MENU */}
           {/* ========================================================================= */}
           <div className="relative" ref={dropdownRef}>
             <button

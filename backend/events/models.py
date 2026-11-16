@@ -151,6 +151,27 @@ class Event(models.Model):
         default=False,
         help_text="Whether the event schedule is finalized and published for team managers to view",
     )
+    # Public Animated Portal & Theme Settings
+    enable_public_portal = models.BooleanField(
+        default=True,
+        help_text="Whether the public portal page is publicly accessible",
+    )
+    public_theme_title = models.CharField(
+        max_length=200,
+        default='Make It Your Own',
+        blank=True,
+        help_text="Theme title or tagline displayed boldly on the animated public page",
+    )
+    public_about_text = models.TextField(
+        blank=True,
+        help_text="Custom story/description text displayed on the public page",
+    )
+    public_theme_color = models.CharField(
+        max_length=50,
+        default='sunset',
+        blank=True,
+        help_text="Color palette theme for the animated public page (sunset, cosmic, oasis, royal)",
+    )
 
     def get_effective_grading_rules(self):
         if self.grading_rules and isinstance(self.grading_rules, list) and len(self.grading_rules) > 0:
@@ -986,6 +1007,7 @@ class Program(models.Model):
         
         # Call the parent delete method
         super().delete(*args, **kwargs)
+
 
 class ProgramAssignment(models.Model):
     program = models.ForeignKey(Program, on_delete=models.CASCADE, related_name='assignments')

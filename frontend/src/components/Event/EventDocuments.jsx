@@ -499,6 +499,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
               <tbody>${rowsHtml}</tbody>
             </table>
             <div class="result-total">Total entries: ${programResults.length}</div>
+            <div class="doc-footer">Powered by <strong>eventloo.in</strong></div>
           </section>
         `;
       }
@@ -509,6 +510,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
             <div class="result-event-name">${escapeHtml(event?.title || 'Eventloo Event')}</div>
             <h1 class="result-title">Competition Results</h1>
             <div class="result-empty-state">No published results match the selected filters.</div>
+            <div class="doc-footer">Powered by <strong>eventloo.in</strong></div>
           </section>
         `;
       }
@@ -594,6 +596,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
               <div class="hr"></div>
               ${tablesHtml}
               ${tablesHtml ? '' : '<div class="center">No assigned participants.</div>'}
+              <div class="doc-footer">Powered by <strong>eventloo.in</strong></div>
             </div>
           `;
         }
@@ -634,26 +637,33 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
 
           pageCount++;
           const pageBreak = pageCount > 1 ? 'style="page-break-before: always;"' : '';
+          const stageDisplay = prog?.stage?.name || prog?.venue || '—';
 
           pagesHtml += `
             <div class="program-page" ${pageBreak}>
               <div class="header">
-                <div>${escapeHtml(event?.title || 'Event')}</div>
+                <div>${escapeHtml(event?.school?.name || event?.title || 'Eventloo')}</div>
                 <div>${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
               </div>
               <div class="title">Competitions Call List</div>
-              <div class="hr"></div>
-              <div class="subheader">
-                <div><u><strong>${escapeHtml(progName)}</strong></u></div>
-                <div><u><strong>${escapeHtml(progCat)}</strong></u></div>
-                <div><u><strong>${escapeHtml(progType)}</strong></u></div>
-              </div>
+              
+              <table class="info-box">
+                <tbody>
+                  <tr>
+                    <td class="font-bold" style="width: 40%;"><strong>PROGRAM:</strong> ${escapeHtml(progName)}</td>
+                    <td class="center font-bold" style="width: 24%;"><strong>CATEGORY:</strong> ${escapeHtml(progCat)}</td>
+                    <td class="center font-bold" style="width: 18%;"><strong>MODE:</strong> ${escapeHtml(progType)}</td>
+                    <td class="center font-bold" style="width: 18%;"><strong>STAGE:</strong> ${escapeHtml(stageDisplay)}</td>
+                  </tr>
+                </tbody>
+              </table>
+
               <table class="main-table">
                 <thead>
                   <tr>
                     <th class="center" style="width: 10%;">Sl. No</th>
-                    <th class="center" style="width: 15%;">Chest No</th>
-                    <th style="width: 45%;">Participant</th>
+                    <th class="center" style="width: 16%;">Chest No</th>
+                    <th style="width: 44%;">Participant</th>
                     <th style="width: 30%;">Team Name</th>
                   </tr>
                 </thead>
@@ -662,6 +672,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                 </tbody>
               </table>
               <div class="total-part">Total participants: ${slNo}</div>
+              <div class="doc-footer">Powered by <strong>eventloo.in</strong></div>
             </div>
           `;
         }
@@ -673,6 +684,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
         const progName = (prog.name || 'PROGRAM').toUpperCase();
         const progCat = (prog.category || 'UPPER PRIMARY').toUpperCase();
         const progType = prog.is_team_based ? 'Group' : 'Individual';
+        const stageDisplay = prog?.stage?.name || prog?.venue || '—';
 
         let assignments = [];
         try {
@@ -697,19 +709,64 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
             } else {
               rowCount = assignments.length;
             }
-          } else {
-            rowCount = 3;
           }
 
+          const assignedJudgesMap = {};
+          if (Array.isArray(prog.assigned_judges)) {
+            prog.assigned_judges.forEach(j => {
+              if (j.judge_number) {
+                assignedJudgesMap[j.judge_number] = j.judge_name;
+              }
+            });
+          }
+          const assignedMax = Object.keys(assignedJudgesMap).length > 0
+            ? Math.max(...Object.keys(assignedJudgesMap).map(Number))
+            : 0;
+          const judgeCount = Math.max(1, Math.min(
+            Math.max(
+              Number(prog.effective_num_judges || prog.num_judges || event?.num_judges || 3),
+              assignedMax
+            ),
+            6
+          ));
+
+          // Generate exact number of rows matching participating candidates / sub-teams
           for (let r = 0; r < rowCount; r++) {
+            const judgeCells = Array.from({ length: judgeCount }, () => `<td style="padding: 14px 6px;"></td>`).join('');
             rowsHtml += `
               <tr>
-                <td class="center font-bold"></td>
-                <td></td><td></td><td></td><td></td>
-                <td></td>
+                <td class="center font-bold" style="padding: 14px 6px;"></td>
+                ${judgeCells}
               </tr>
             `;
           }
+
+          const eventTitleDisplay = (event?.title || 'Event').toUpperCase();
+          const schoolNameDisplay = event?.school?.name || event?.school_name || 'Eventloo Demo';
+          const maxMarkVal = prog.max_mark_per_judge || exportItem?.judgeMaxMarks || event?.max_mark_per_judge || 100;
+          const marksColWidthPercent = 78;
+          const perJudgeWidthPercent = (marksColWidthPercent / judgeCount).toFixed(2);
+
+          const judgeHeaderCells = Array.from({ length: judgeCount }, (_, j) => {
+            const jNum = j + 1;
+            const jName = assignedJudgesMap[jNum];
+            const nameSub = jName ? `<div style="font-size: 8.5px; font-weight: normal; color: #4338ca; text-transform: none; margin-top: 1px;">(${escapeHtml(jName)})</div>` : '';
+            return `<th class="center sub-th" style="width: ${perJudgeWidthPercent}%;">Judge ${jNum}${nameSub}</th>`;
+          }).join('');
+
+          const sigBoxes = Array.from({ length: judgeCount }, (_, j) => {
+            const jNum = j + 1;
+            const jName = assignedJudgesMap[jNum];
+            const labelHtml = jName
+              ? `<div>Judge ${jNum}: <strong>${escapeHtml(jName)}</strong></div><div style="font-size: 8.5px; font-weight: normal; color: #64748b; margin-top: 2px;">Signature</div>`
+              : `<div>Judge ${jNum} Name &amp; Signature</div>`;
+            return `
+              <div class="sig-box">
+                <div class="sig-label">${labelHtml}</div>
+                <div class="sig-line"></div>
+              </div>
+            `;
+          }).join('');
 
           for (let copyIdx = 0; copyIdx < copies; copyIdx++) {
             pageCount++;
@@ -717,19 +774,23 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
             pagesHtml += `
               <div class="program-page" ${pageBreak}>
                 <div class="header">
-                  <div>${escapeHtml(event?.title || 'Event')}</div>
-                  <div>${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                  <div>
+                    <div style="font-size: 11px; font-weight: 700; color: #4f46e5; margin-bottom: 2px;">${escapeHtml(eventTitleDisplay)}</div>
+                    <div class="title" style="margin-top: 0; margin-bottom: 0;">VALUATION SHEET</div>
+                  </div>
+                  <div style="text-align: right;">
+                    <div style="font-size: 11px; font-weight: 700; color: #0f172a;">${escapeHtml(schoolNameDisplay)}</div>
+                    <div style="font-size: 10px; color: #64748b; margin-top: 2px;">${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} · Copy ${copyIdx + 1} of ${copies}</div>
+                  </div>
                 </div>
-                <div class="title">Valuation Sheet</div>
-                <div class="hr"></div>
-                <div class="stage-no">Stage No: ________</div>
                 
                 <table class="info-box">
                   <tbody>
                     <tr>
-                      <td class="center font-bold" style="width: 38%;">${escapeHtml(progName)}</td>
-                      <td class="center font-bold" style="width: 35%;">${escapeHtml(progCat)}</td>
-                      <td class="center font-bold" style="width: 27%;">${escapeHtml(progType)}</td>
+                      <td class="font-bold" style="width: 40%;"><strong>PROGRAM:</strong> ${escapeHtml(progName)}</td>
+                      <td class="center font-bold" style="width: 24%;"><strong>CATEGORY:</strong> ${escapeHtml(progCat)}</td>
+                      <td class="center font-bold" style="width: 18%;"><strong>MODE:</strong> ${escapeHtml(progType)}</td>
+                      <td class="center font-bold" style="width: 18%;"><strong>STAGE:</strong> ${escapeHtml(stageDisplay)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -737,15 +798,22 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                 <table class="main-table">
                   <thead>
                     <tr>
-                      <th class="center" style="width: 18%;">Code Letter</th>
-                      <th class="center" colspan="4" style="width: 54%;">Marks</th>
-                      <th class="center" style="width: 28%;">Mark out of ${maxMarkVal}</th>
+                      <th class="center" rowspan="2" style="width: 22%;">Code Letter</th>
+                      <th class="center" colspan="${judgeCount}" style="width: 78%;">Marks (Max: ${maxMarkVal})</th>
+                    </tr>
+                    <tr>
+                      ${judgeHeaderCells}
                     </tr>
                   </thead>
                   <tbody>
                     ${rowsHtml}
                   </tbody>
                 </table>
+
+                <div class="judge-signatures">
+                  ${sigBoxes}
+                </div>
+                <div class="doc-footer">Powered by <strong>eventloo.in</strong></div>
               </div>
             `;
           }
@@ -755,27 +823,33 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
           if (assignments.length > 0) {
             const documentRows = groupDocumentAssignments(prog, assignments);
             rowsHtml = documentRows.map(row => {
-              // Code Letter column is left blank for manual handwriting before event
+              const gender = row.members?.[0]?.student?.gender || row.members?.[0]?.student_details?.gender || '—';
               return `
                 <tr>
-                  <td class="center">${escapeHtml(row.chestNo)}</td>
-                  <td>${escapeHtml(row.participantNames)}</td>
-                  <td class="center"></td>
-                  <td></td>
+                  <td class="center font-bold" style="padding: 10px 6px;">${escapeHtml(row.chestNo)}</td>
+                  <td style="padding: 10px 8px;">${escapeHtml(row.participantNames)}</td>
+                  <td class="center" style="padding: 10px 6px;">${escapeHtml(gender)}</td>
+                  <td class="center" style="padding: 10px 6px;"></td>
+                  <td style="padding: 10px 6px;"></td>
                 </tr>
               `;
             }).join('');
-          } else {
-            rowsHtml = `
-              <tr><td class="center">&nbsp;</td><td>&nbsp;</td><td class="center">&nbsp;</td><td></td></tr>
-              <tr><td class="center">&nbsp;</td><td>&nbsp;</td><td class="center">&nbsp;</td><td></td></tr>
-            `;
           }
 
-          rowsHtml += `
-            <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
-            <tr><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>
-          `;
+          // Ensure at least 6 rows
+          const minRows = 6;
+          const currentCount = assignments.length > 0 ? groupDocumentAssignments(prog, assignments).length : 0;
+          for (let r = currentCount; r < minRows; r++) {
+            rowsHtml += `
+              <tr>
+                <td class="center" style="padding: 10px 6px;">&nbsp;</td>
+                <td style="padding: 10px 8px;">&nbsp;</td>
+                <td class="center" style="padding: 10px 6px;">&nbsp;</td>
+                <td class="center" style="padding: 10px 6px;">&nbsp;</td>
+                <td style="padding: 10px 6px;">&nbsp;</td>
+              </tr>
+            `;
+          }
 
           pageCount++;
           const pageBreak = (i > 0 && exportItem?.pageLayout !== 'continuous') ? 'style="page-break-before: always;"' : '';
@@ -783,29 +857,44 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
           pagesHtml += `
             <div class="program-page" ${pageBreak}>
               <div class="header">
-                <div>${escapeHtml(event?.title || 'Event')}</div>
+                <div>${escapeHtml(event?.school?.name || event?.title || 'Eventloo')}</div>
                 <div>${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
               </div>
               <div class="title">Green Room Sign Sheet</div>
-              <div class="hr"></div>
-              <div class="subheader">
-                <div><strong>${escapeHtml(progName)}</strong></div>
-                <div style="text-transform: none; font-weight: normal;">${escapeHtml(progType)}</div>
-                <div><strong>${escapeHtml(progCat)}</strong></div>
-              </div>
-              <table>
+
+              <table class="info-box">
+                <tbody>
+                  <tr>
+                    <td class="font-bold" style="width: 40%;"><strong>PROGRAM:</strong> ${escapeHtml(progName)}</td>
+                    <td class="center font-bold" style="width: 24%;"><strong>CATEGORY:</strong> ${escapeHtml(progCat)}</td>
+                    <td class="center font-bold" style="width: 18%;"><strong>MODE:</strong> ${escapeHtml(progType)}</td>
+                    <td class="center font-bold" style="width: 18%;"><strong>STAGE:</strong> ${escapeHtml(stageDisplay)}</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <table class="main-table">
                 <thead>
                   <tr>
-                    <th class="center" style="width: 15%;">Chest No</th>
-                    <th style="width: 45%;">Participant</th>
-                    <th class="center" style="width: 15%;">Code Letter</th>
-                    <th style="width: 25%;">Participants Signature</th>
+                    <th class="center" style="width: 14%;">Chest No</th>
+                    <th style="width: 42%;">Participant</th>
+                    <th class="center" style="width: 14%;">Gender</th>
+                    <th class="center" style="width: 14%;">Code Letter</th>
+                    <th class="center" style="width: 16%;">Participant Signature</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${rowsHtml}
                 </tbody>
               </table>
+
+              <div class="gr-signature">
+                <div class="sig-box" style="margin-left: auto;">
+                  <div class="sig-label">Green Room In-charge Signature</div>
+                  <div class="sig-line"></div>
+                </div>
+              </div>
+              <div class="doc-footer">Powered by <strong>eventloo.in</strong></div>
             </div>
           `;
         }
@@ -819,28 +908,41 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
         <title>${escapeHtml(exportItem.typeName || 'Export Document')}</title>
         <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Dancing+Script:wght@500;700&family=Great+Vibes&family=Inter:wght@400;600;800&family=Montserrat:wght@400;600;800&family=Outfit:wght@400;600;800&family=Playfair+Display:ital,wght@0,600;0,800;1,600&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
-          @page { margin: 0; size: landscape; }
+          @page {
+            margin: ${exportItem?.type === 'certificate' || exportItem?.type === 'badge' ? '0' : '12mm 14mm'};
+            size: ${exportItem?.type === 'certificate' ? 'landscape' : 'A4 portrait'};
+          }
           body { font-family: Inter, Arial, sans-serif; padding: 0; color: #0f172a; background: #fff; margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .program-page { box-sizing: border-box; min-height: 100vh; padding: 34px 44px 40px; }
-          .header { display: flex; justify-content: space-between; padding-bottom: 10px; border-bottom: 1px solid #cbd5e1; color: #64748b; font-size: 12px; font-weight: 600; }
-          .header > div:first-child { color: #312e81; font-weight: 800; letter-spacing: .02em; }
-          .title { color: #0f172a; font-size: 28px; line-height: 1.05; font-weight: 800; margin-top: 16px; margin-bottom: 6px; }
-          .subtitle { font-size: 14px; font-weight: 600; color: #475569; margin-bottom: 8px; }
-          .category-header { color: #312e81; background: #eef2ff; border-left: 4px solid #4f46e5; padding: 8px 10px; font-size: 13px; font-weight: 800; margin-top: 18px; margin-bottom: 8px; }
+          .program-page { box-sizing: border-box; width: 100%; max-width: 182mm; margin: 0 auto; padding: 0 0 20px 0; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 8px; border-bottom: 1.5px solid #4f46e5; color: #64748b; font-size: 11px; }
+          .header > div:first-child { color: #312e81; font-weight: 800; font-size: 12px; }
+          .title { color: #0f172a; font-size: 22px; line-height: 1.15; font-weight: 800; margin: 12px 0 8px 0; letter-spacing: -0.01em; }
+          .subtitle { font-size: 13px; font-weight: 700; color: #475569; margin-bottom: 8px; }
+          .category-header { color: #312e81; background: #eef2ff; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 11px; font-weight: 700; margin-top: 14px; margin-bottom: 6px; }
           .hr { border-bottom: 2px solid #4f46e5; margin-bottom: 14px; }
           .stage-no { text-align: right; color: #475569; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
           .subheader { display: flex; justify-content: space-between; gap: 16px; padding: 10px 12px; border: 1px solid #cbd5e1; background: #f8fafc; font-size: 12px; font-weight: bold; margin-bottom: 14px; text-transform: uppercase; }
           table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 15px; }
-          table.info-box td { border: 1px solid #c7d2fe; padding: 10px; font-size: 12px; background: #eef2ff; color: #312e81; }
-          table.main-table th { border: 1px solid #cbd5e1; padding: 9px; font-size: 11px; background: #4f46e5; color: #fff; }
-          table.main-table td { border: 1px solid #cbd5e1; padding: 9px; font-size: 11px; }
+          table.info-box { border: 1px solid #c7d2fe; margin: 10px 0 14px 0; }
+          table.info-box td { border: 1px solid #c7d2fe; padding: 7px 10px; font-size: 11px; background: #eef2ff; color: #312e81; }
+          table.main-table { border: 1px solid #64748b; }
+          table.main-table th { border: 1px solid #cbd5e1; padding: 7px 8px; font-size: 11px; background: #312e81; color: #fff; font-weight: 700; }
+          table.main-table th.sub-th { background: #eef2ff; color: #312e81; font-weight: 700; font-size: 10px; }
+          table.main-table td { border: 1px solid #cbd5e1; padding: 7px 8px; font-size: 11px; }
           table.main-table tbody tr:nth-child(even) td { background: #f8fafc; }
-          th { border: 1px solid #cbd5e1; padding: 9px; font-size: 11px; background: #4f46e5; color: #fff; text-align: left; }
+          th { border: 1px solid #cbd5e1; padding: 7px 8px; font-size: 11px; background: #312e81; color: #fff; text-align: left; }
           th.center { text-align: center; }
-          td { border: 1px solid #cbd5e1; padding: 9px; font-size: 11px; }
+          td { border: 1px solid #cbd5e1; padding: 7px 8px; font-size: 11px; }
           td.center { text-align: center; }
           .font-bold { font-weight: bold; }
-          .total-part { text-align: right; font-size: 11px; font-weight: 600; color: #475569; margin-top: 5px; }
+          .total-part { text-align: right; font-size: 11px; font-weight: 700; color: #475569; margin-top: 6px; }
+          .judge-signatures { display: flex; justify-content: space-between; gap: 14px; margin-top: 36px; padding-top: 8px; }
+          .gr-signature { display: flex; justify-content: flex-end; margin-top: 36px; padding-top: 8px; }
+          .sig-box { flex: 1; text-align: center; min-width: 0; }
+          .sig-label { font-size: 10px; font-weight: 700; color: #312e81; margin-bottom: 28px; line-height: 1.25; min-height: 28px; }
+          .sig-line { border-top: 1px solid #94a3b8; width: 90%; margin: 0 auto; }
+          .doc-footer { text-align: center; font-size: 8pt; color: #94a3b8; margin-top: 24px; padding-top: 8px; letter-spacing: 0.02em; }
+          .doc-footer strong { color: #64748b; font-weight: 700; }
           body.certificate-document { padding: 0; overflow: visible; }
           .cert-sheet {
             width: 100vw;
@@ -1200,26 +1302,26 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
       title: 'Call List',
       description: 'Competition-wise and Team-wise call lists.',
       icon: PhoneCall,
-      iconBg: 'bg-amber-50 text-amber-600',
+      iconBg: 'bg-indigo-50 text-indigo-600',
     },
     {
       id: 'results',
       title: 'Results',
       description: 'Published result sheets with standings, grades and points per competition.',
       icon: Trophy,
-      iconBg: 'bg-amber-100/70 text-amber-700',
+      iconBg: 'bg-indigo-50 text-indigo-600',
     },
     {
       id: 'certificate',
       title: 'Certificate',
       description: 'Participation and placement certificates for competitions.',
       icon: Award,
-      iconBg: 'bg-amber-50 text-amber-600',
+      iconBg: 'bg-indigo-50 text-indigo-600',
     },
     {
       id: 'badge',
       title: 'Badge',
-      description: 'Official paper badges (9 per A4 sheet with cut guides, chest numbers & programs).',
+      description: 'Official participant badges (Full A4 size per participant in high quality with QR verification).',
       icon: BadgeCheck,
       iconBg: 'bg-indigo-50 text-indigo-600',
     }
@@ -1232,13 +1334,13 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
       case 'valuation':
         return <FileSpreadsheet className="w-4 h-4 text-indigo-600" />;
       case 'call_list':
-        return <PhoneCall className="w-4 h-4 text-amber-600" />;
+        return <PhoneCall className="w-4 h-4 text-indigo-600" />;
       case 'results':
-        return <Trophy className="w-4 h-4 text-amber-600" />;
+        return <Trophy className="w-4 h-4 text-indigo-600" />;
       case 'badge':
         return <BadgeCheck className="w-4 h-4 text-indigo-600" />;
       case 'certificate':
-        return <Award className="w-4 h-4 text-amber-600" />;
+        return <Award className="w-4 h-4 text-indigo-600" />;
       default:
         return <FileText className="w-4 h-4 text-gray-600" />;
     }
@@ -1257,7 +1359,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
   if (loading) {
     return (
       <div className="py-20 text-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mx-auto mb-3"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3"></div>
         <p className="text-xs text-gray-500 font-medium">Loading Documents Queue...</p>
       </div>
     );
@@ -1571,7 +1673,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                     {selectedExportType === 'badge' && (
                       <div className="p-3.5 bg-indigo-50/80 border border-indigo-100 rounded-xl text-xs text-indigo-900 flex items-center space-x-2.5">
                         <BadgeCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                        <span>Exports official Eventloo paper badges (9 cards per A4 sheet with cut guides, chest numbers, programs & event counts). Ready to print without templates.</span>
+                        <span>Exports official participant badges (1 full A4 page per participant in high quality with QR verification, chest numbers, programs & event counts).</span>
                       </div>
                     )}
 

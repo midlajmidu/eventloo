@@ -1,60 +1,29 @@
 import React from 'react';
+import eventlooWhiteLogo from "@/assets/gravitas/eventloo-logo.png";
+import eventlooColorLogo from "@/assets/eventloo-logo-color.png";
 
 /**
- * Eventloo Minimal & Professional Loop Icon Component
+ * Eventloo Official Loop Icon Component
  */
-export const EventlooIcon = ({ className = "w-8 h-8", animated = false }) => (
-  <svg
-    viewBox="0 0 100 100"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    className={`${className} ${animated ? 'hover:scale-105 transition-transform duration-300' : ''}`}
-  >
-    <defs>
-      <linearGradient id="eventlooGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#06B6D4" /> {/* Cyan */}
-        <stop offset="50%" stopColor="#3B82F6" /> {/* Blue */}
-        <stop offset="100%" stopColor="#6366F1" /> {/* Indigo */}
-      </linearGradient>
-      <linearGradient id="eventlooGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
-        <stop offset="0%" stopColor="#8B5CF6" /> {/* Violet */}
-        <stop offset="50%" stopColor="#6366F1" /> {/* Indigo */}
-        <stop offset="100%" stopColor="#06B6D4" /> {/* Cyan */}
-      </linearGradient>
-      <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-        <feGaussianBlur stdDeviation="3" result="blur" />
-        <feComposite in="SourceGraphic" in2="blur" operator="over" />
-      </filter>
-    </defs>
-    {/* Smooth Infinity Loop Ribbon */}
-    <path
-      d="M30 50 C15 50 15 28 32 28 C45 28 55 72 68 72 C85 72 85 50 70 50 C55 50 45 28 32 28 C15 28 15 50 30 50 Z"
-      stroke="url(#eventlooGrad1)"
-      strokeWidth="9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+export const EventlooIcon = ({ className = "w-8 h-8", variant = "color", animated = false }) => {
+  const src = variant === "white" ? eventlooWhiteLogo : eventlooColorLogo;
+  return (
+    <img
+      src={src}
+      alt="Eventloo"
+      className={`${className} object-contain ${animated ? 'hover:scale-105 transition-transform duration-300' : ''}`}
     />
-    <path
-      d="M70 50 C85 50 85 28 68 28 C55 28 45 72 32 72 C15 72 15 50 30 50"
-      stroke="url(#eventlooGrad2)"
-      strokeWidth="9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      opacity="0.8"
-    />
-    {/* Glowing Nodes */}
-    <circle cx="32" cy="28" r="3.5" fill="#06B6D4" filter="url(#glow)" />
-    <circle cx="68" cy="72" r="3.5" fill="#8B5CF6" filter="url(#glow)" />
-  </svg>
-);
+  );
+};
 
 /**
  * Main Eventloo Logo component (Icon + Text or Icon only)
  */
 const EventlooLogo = ({
-  variant = 'full', // 'full' | 'icon'
+  variant = 'full', // 'full' | 'icon' | 'white'
   size = 'md', // 'sm' | 'md' | 'lg' | 'xl'
   theme = 'light', // 'light' | 'dark'
+  showText = true,
   className = '',
   showSubtitle = false,
   onClick,
@@ -67,11 +36,12 @@ const EventlooLogo = ({
   };
 
   const currentSize = sizeMap[size] || sizeMap.md;
-  const textColor = theme === 'dark' ? 'text-white' : 'text-gray-900';
-  const subtitleColor = theme === 'dark' ? 'text-gray-400' : 'text-gray-500';
+  const isWhite = theme === 'dark' || variant === 'white';
+  const textColor = isWhite ? 'text-white' : 'text-gray-900';
+  const subtitleColor = isWhite ? 'text-gray-400' : 'text-gray-500';
 
-  if (variant === 'icon') {
-    return <EventlooIcon className={`${currentSize.icon} ${className}`} animated />;
+  if (variant === 'icon' || showText === false) {
+    return <EventlooIcon className={`${currentSize.icon} ${className}`} variant={isWhite ? 'white' : 'color'} animated />;
   }
 
   return (
@@ -80,7 +50,7 @@ const EventlooLogo = ({
       className={`inline-flex items-center ${currentSize.space} ${onClick ? 'cursor-pointer select-none' : ''} ${className}`}
     >
       <div className="relative flex items-center justify-center">
-        <EventlooIcon className={currentSize.icon} animated />
+        <EventlooIcon className={currentSize.icon} variant={isWhite ? 'white' : 'color'} animated />
       </div>
 
       <div className="flex flex-col">

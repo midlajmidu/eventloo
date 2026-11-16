@@ -20,9 +20,16 @@ import {
   User,
   Users,
   Tag,
-  Tags
+  Tags,
+  Globe,
+  Palette,
+  ExternalLink,
+  QrCode,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { eventsAPI, categoriesAPI, eventProgramTypesAPI } from '../../services/api';
+import { themes } from '../Public/themes/themeRegistry';
 
 const getDefaultGradeRules = (scale = 100) => {
   const s = parseFloat(scale) || 100;
@@ -52,6 +59,18 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
   const [convertedTotalMark, setConvertedTotalMark] = useState(100);
   const [savingJudgeSettings, setSavingJudgeSettings] = useState(false);
   const [registrationDeadline, setRegistrationDeadline] = useState('');
+
+  // Public Portal & Animated Theme Settings
+  const [enablePublicPortal, setEnablePublicPortal] = useState(true);
+  const [publicThemeTitle, setPublicThemeTitle] = useState('Make It Your Own');
+  const [publicAboutText, setPublicAboutText] = useState('');
+  const [publicThemeColor, setPublicThemeColor] = useState('enchanted-illustrated');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [venue, setVenue] = useState('');
+  const [savingPublicSettings, setSavingPublicSettings] = useState(false);
+  const [copiedPublicUrl, setCopiedPublicUrl] = useState(false);
   
   // Student Program Limits (0 = Unlimited)
   const [maxSinglePrograms, setMaxSinglePrograms] = useState(3);
@@ -263,6 +282,14 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
       setMixGroupThird(event.mix_group_third ?? 3);
       setParticipationPoints(event.participation_points ?? 25);
       setCountGeneralIndividualPoints(event.count_general_individual_points_for_students ?? false);
+      setEnablePublicPortal(event.enable_public_portal ?? true);
+      setPublicThemeTitle(event.public_theme_title || 'Make It Your Own');
+      setPublicAboutText(event.public_about_text || event.description || '');
+      setPublicThemeColor(event.public_theme_color || 'enchanted-illustrated');
+      setStartDate(event.start_date || '');
+      setEndDate(event.end_date || '');
+      setStartTime(event.start_time || '');
+      setVenue(event.venue || '');
     }
   }, [event]);
 
@@ -429,6 +456,47 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
     }
   };
 
+  const handleSavePublicSettings = async () => {
+    if (!eventId) return;
+    setSavingPublicSettings(true);
+    setMessage('');
+    try {
+      const payload = {
+        enable_public_portal: enablePublicPortal,
+        public_theme_title: publicThemeTitle.trim() || 'Make It Your Own',
+        public_about_text: publicAboutText.trim(),
+        public_theme_color: publicThemeColor,
+        start_date: startDate || event?.start_date,
+        end_date: endDate || event?.end_date,
+        start_time: startTime || null,
+        venue: venue || event?.venue || '',
+      };
+
+      if (eventsAPI.patchEvent) {
+        await eventsAPI.patchEvent(eventId, payload);
+      } else {
+        await eventsAPI.updateEvent(eventId, {
+          title: event?.title || '',
+          description: event?.description || '',
+          event_type: event?.event_type || 'other',
+          status: event?.status || 'published',
+          ...payload,
+        });
+      }
+
+      setMessage('Public page theme and story settings saved successfully!');
+      setMessageType('success');
+      if (onRefresh) await onRefresh();
+      setTimeout(() => setMessage(''), 3500);
+    } catch (err) {
+      console.error('Error saving public settings:', err);
+      setMessage('Failed to save public page settings');
+      setMessageType('error');
+    } finally {
+      setSavingPublicSettings(false);
+    }
+  };
+
   // Grade Rule Handlers
   const handleAddRule = () => {
     const s = parseFloat(convertedTotalMark) || 100;
@@ -515,8 +583,10 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
         description: event.description || '',
         event_type: event.event_type || 'other',
         status: event.status || 'published',
-        start_date: event.start_date,
-        end_date: event.end_date,
+        start_date: startDate || event.start_date,
+        end_date: endDate || event.end_date,
+        start_time: startTime || null,
+        venue: venue || event.venue || '',
         num_judges: parseInt(numJudges, 10),
         max_mark_per_judge: parseFloat(maxMarkPerJudge),
         converted_total_mark: parseFloat(convertedTotalMark),
@@ -549,6 +619,10 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
         mix_group_third: parseInt(mixGroupThird, 10) || 0,
         participation_points: parseInt(participationPoints, 10) || 0,
         count_general_individual_points_for_students: countGeneralIndividualPoints,
+        enable_public_portal: enablePublicPortal,
+        public_theme_title: publicThemeTitle.trim() || 'Make It Your Own',
+        public_about_text: publicAboutText.trim(),
+        public_theme_color: publicThemeColor,
       };
 
       await eventsAPI.updateEvent(eventId, updateData);
@@ -632,8 +706,8 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
         </div>
       )}
 
-      {/* 2-Tab Settings Navigation */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-100/90 p-1.5 rounded-2xl border border-gray-200">
+      {/* 3-Tab Settings Navigation */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 bg-gray-100/90 p-1.5 rounded-2xl border border-gray-200">
         <button
           type="button"
           onClick={() => setActiveSettingsTab('registration-limits')}
@@ -645,8 +719,8 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
         >
           <Clock className={`h-4 w-4 ${activeSettingsTab === 'registration-limits' ? 'text-indigo-600' : 'text-gray-500'}`} />
           <div className="text-left">
-            <div className="font-bold">Registration & Student Limits</div>
-            <div className="text-[10px] font-normal text-gray-500">Cutoff time & participation quotas</div>
+            <div className="font-bold">Registration & Limits</div>
+            <div className="text-[10px] font-normal text-gray-500">Cutoff time & quotas</div>
           </div>
         </button>
 
@@ -661,8 +735,24 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
         >
           <Award className={`h-4 w-4 ${activeSettingsTab === 'judging-grading' ? 'text-indigo-600' : 'text-gray-500'}`} />
           <div className="text-left">
-            <div className="font-bold">Judging, Grading & Points</div>
-            <div className="text-[10px] font-normal text-gray-500">Judges, scale, bonus grades & placement points</div>
+            <div className="font-bold">Judging & Points</div>
+            <div className="text-[10px] font-normal text-gray-500">Judges, scale & grades</div>
+          </div>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setActiveSettingsTab('public-portal')}
+          className={`px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center space-x-2.5 cursor-pointer ${
+            activeSettingsTab === 'public-portal'
+              ? 'bg-white text-indigo-600 shadow-xs border border-gray-200'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-white/60'
+          }`}
+        >
+          <Globe className={`h-4 w-4 ${activeSettingsTab === 'public-portal' ? 'text-indigo-600' : 'text-gray-500'}`} />
+          <div className="text-left">
+            <div className="font-bold">Public Page & Theme</div>
+            <div className="text-[10px] font-normal text-gray-500">Theme tagline, story & colors</div>
           </div>
         </button>
       </div>
@@ -990,7 +1080,7 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
                     <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-3">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-1.5">
-                          <div className="p-1.5 bg-amber-50 text-amber-600 rounded-lg">
+                          <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
                             <User className="w-4 h-4" />
                           </div>
                           <div>
@@ -1006,9 +1096,9 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
                             type="checkbox"
                             checked={currentLimits.is_single_unlimited}
                             onChange={(e) => updateSelectedCategoryLimit('is_single_unlimited', e.target.checked)}
-                            className="h-3.5 w-3.5 text-amber-600 focus:ring-amber-500 border-gray-300 rounded cursor-pointer"
+                            className="h-3.5 w-3.5 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
                           />
-                          <span className="text-[11px] font-semibold text-amber-700 flex items-center space-x-0.5">
+                          <span className="text-[11px] font-semibold text-indigo-700 flex items-center space-x-0.5">
                             <Infinity className="w-3 h-3" />
                             <span>Unlimited</span>
                           </span>
@@ -1016,9 +1106,9 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
                       </div>
 
                       {currentLimits.is_single_unlimited ? (
-                        <div className="py-2 px-2.5 bg-amber-50/70 border border-amber-100 rounded-lg text-xs font-bold text-amber-800 flex items-center justify-between">
+                        <div className="py-2 px-2.5 bg-indigo-50/70 border border-indigo-100 rounded-lg text-xs font-bold text-indigo-800 flex items-center justify-between">
                           <span>Unlimited single events</span>
-                          <Infinity className="w-4 h-4 text-amber-500" />
+                          <Infinity className="w-4 h-4 text-indigo-500" />
                         </div>
                       ) : (
                         <div>
@@ -1028,7 +1118,7 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
                             max="50"
                             value={currentLimits.max_single}
                             onChange={(e) => updateSelectedCategoryLimit('max_single', e.target.value)}
-                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-800 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                            className="w-full px-3 py-1.5 text-xs font-bold text-gray-800 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                             placeholder="e.g. 3"
                           />
                           <p className="text-[10px] text-gray-500 mt-1">Maximum solo programs in this category</p>
@@ -1349,9 +1439,9 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
       <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-2xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-3 gap-2">
           <div className="flex items-center space-x-2 text-gray-900">
-            <Sparkles className="h-4 w-4 text-amber-500" />
+            <Sparkles className="h-4 w-4 text-indigo-600" />
             <h3 className="text-xs font-bold uppercase tracking-wider">Grading System</h3>
-            <span className="px-2 py-0.5 text-[10px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200 rounded-full">
+            <span className="px-2 py-0.5 text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full">
               Scale: Out of {convertedTotalMark} marks
             </span>
           </div>
@@ -1361,7 +1451,7 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
               type="checkbox"
               checked={enableGradingSystem}
               onChange={(e) => setEnableGradingSystem(e.target.checked)}
-              className="h-4 w-4 text-amber-600 focus:ring-amber-500 border-gray-300 rounded cursor-pointer"
+              className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
             />
             <span className="text-xs font-bold text-gray-800">
               {enableGradingSystem ? 'Grading System Enabled' : 'Disabled'}
@@ -1371,7 +1461,7 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
 
         {enableGradingSystem ? (
           <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-indigo-50/50 p-3 rounded-xl border border-indigo-100">
               <p className="text-xs text-gray-600">
                 Define score bands out of your Converted Final Scale (<strong>{convertedTotalMark} marks</strong>) and bonus points. Bonus points are added directly on top of placement points (e.g. 1st place 5 pts + A+ 3 pts = 8 pts; 4th place with B+ receives 1 bonus point).
               </p>
@@ -1379,7 +1469,7 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
                 <button
                   type="button"
                   onClick={() => setGradingRules(getDefaultGradeRules(convertedTotalMark))}
-                  className="shrink-0 px-2.5 py-1 text-[11px] font-bold text-amber-800 bg-amber-100 hover:bg-amber-200 rounded-lg transition-colors border border-amber-300 cursor-pointer"
+                  className="shrink-0 px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-indigo-100 hover:bg-indigo-200 rounded-lg transition-colors border border-indigo-300 cursor-pointer"
                   title={`Rescale default grade thresholds to match ${convertedTotalMark} marks`}
                 >
                   Adjust for {convertedTotalMark} Scale
@@ -1410,7 +1500,7 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
                               type="text"
                               value={rule.name}
                               onChange={(e) => handleUpdateRule(idx, 'name', e.target.value)}
-                              className="w-20 px-2.5 py-1 text-xs font-bold bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                              className="w-20 px-2.5 py-1 text-xs font-bold bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                               placeholder="Grade"
                             />
                             <button
@@ -1433,7 +1523,7 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
                               max={Math.max(100, scaleNum)}
                               value={rule.min_mark}
                               onChange={(e) => handleUpdateRule(idx, 'min_mark', e.target.value)}
-                              className="w-24 px-2.5 py-1 text-xs font-semibold bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                              className="w-24 px-2.5 py-1 text-xs font-semibold bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                             />
                             <span className="text-[10px] text-gray-400 font-medium">{minPct}% of scale</span>
                           </div>
@@ -1447,21 +1537,21 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
                               max={Math.max(100, scaleNum)}
                               value={rule.max_mark}
                               onChange={(e) => handleUpdateRule(idx, 'max_mark', e.target.value)}
-                              className="w-24 px-2.5 py-1 text-xs font-semibold bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                              className="w-24 px-2.5 py-1 text-xs font-semibold bg-gray-50 border border-gray-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                             />
                             <span className="text-[10px] text-gray-400 font-medium">{maxPct}% of scale</span>
                           </div>
                         </td>
                         <td className="px-4 py-2">
                           <div className="flex items-center space-x-1.5">
-                            <span className="text-xs font-black text-amber-600">+</span>
+                            <span className="text-xs font-black text-indigo-600">+</span>
                             <input
                               type="number"
                               min="0"
                               step="1"
                               value={rule.bonus_points ?? 0}
                               onChange={(e) => handleUpdateRule(idx, 'bonus_points', e.target.value)}
-                              className="w-20 px-2.5 py-1 text-xs font-bold text-gray-900 bg-amber-50/60 border border-amber-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                              className="w-20 px-2.5 py-1 text-xs font-bold text-gray-900 bg-indigo-50/60 border border-indigo-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-indigo-500 focus:outline-none"
                               placeholder="0"
                             />
                             <span className="text-[11px] font-bold text-gray-500">pts</span>
@@ -1478,7 +1568,7 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
               <button
                 type="button"
                 onClick={handleAddRule}
-                className="px-3.5 py-1.5 text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-xl transition-colors border border-amber-200 flex items-center space-x-1.5 cursor-pointer"
+                className="px-3.5 py-1.5 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition-colors border border-indigo-200 flex items-center space-x-1.5 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Grade Rule</span>
@@ -1689,6 +1779,250 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
           </div>
         </div>
       </div>
+        </div>
+      )}
+
+      {/* TAB 3: PUBLIC PAGE & THEME CONFIGURATION — EXACT REPO UI */}
+      {activeSettingsTab === 'public-portal' && (
+        <div className="space-y-8">
+          {/* Header Action Strip */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 bg-gradient-to-r from-indigo-50/90 via-indigo-50/40 to-white rounded-2xl border border-indigo-200/70 shadow-2xs">
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-xs">
+                <Sparkles className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Public Website & Theme Configuration</h3>
+                <p className="text-xs text-gray-600">
+                  Choose your festival theme, title slogan, and description. Synchronized with live event data.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleSavePublicSettings}
+              disabled={savingPublicSettings}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-50 self-start sm:self-auto"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{savingPublicSettings ? 'Saving...' : 'Save Public Page Settings'}</span>
+            </button>
+          </div>
+
+          {/* Section: Public Website Appearance (exact UI from gravitas-celestial-journey) */}
+          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2">
+              <div>
+                <h2 className="font-editorial text-2xl font-bold text-gray-900">Public Website Appearance</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Choose how your public event website looks. Event information stays the same in every theme.
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-gray-500 font-medium">Public Portal:</span>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={enablePublicPortal}
+                    onChange={(e) => setEnablePublicPortal(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+                <span className={`text-xs font-bold ${enablePublicPortal ? 'text-emerald-600' : 'text-gray-400'}`}>
+                  {enablePublicPortal ? 'Live' : 'Private'}
+                </span>
+              </div>
+            </div>
+
+            {/* Live Public URL info strip */}
+            {enablePublicPortal && (
+              <div className="mt-4 p-3 bg-gray-50 rounded-xl border border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-semibold text-gray-500">Live Website URL</div>
+                  <div className="text-xs font-mono font-bold text-indigo-600 truncate">
+                    {typeof window !== 'undefined' ? `${window.location.origin}/events/${eventId}/public` : `/events/${eventId}/public`}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = typeof window !== 'undefined' ? `${window.location.origin}/events/${eventId}/public` : '';
+                      if (url) {
+                        navigator.clipboard.writeText(url);
+                        setCopiedPublicUrl(true);
+                        setTimeout(() => setCopiedPublicUrl(false), 2000);
+                      }
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg shadow-2xs transition-all cursor-pointer"
+                  >
+                    {copiedPublicUrl ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-gray-500" />}
+                    <span>{copiedPublicUrl ? 'Copied Link!' : 'Copy Link'}</span>
+                  </button>
+                  <a
+                    href={`/events/${eventId}/public`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-all cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Open Live Page</span>
+                  </a>
+                </div>
+              </div>
+            )}
+
+            {/* Theme cards: exact UI from repo EventSettings.tsx */}
+            <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
+              {themes.map((t, i) => {
+                const selected = publicThemeColor === t.id;
+                const active = event?.public_theme_color === t.id || (!event?.public_theme_color && t.id === 'enchanted-illustrated');
+                return (
+                  <div
+                    key={t.id}
+                    className={`flex flex-col overflow-hidden rounded-xl border-2 transition ${
+                      selected ? 'border-indigo-600 ring-2 ring-indigo-600/20 shadow-md' : 'border-gray-200'
+                    } ${t.available ? '' : 'opacity-60'}`}
+                  >
+                    <div className="aspect-[16/10] bg-gray-100 overflow-hidden">
+                      {t.thumbnail && (
+                        <img
+                          src={t.thumbnail}
+                          alt={`${t.name} preview`}
+                          className="h-full w-full object-cover object-top transition duration-300 hover:scale-105"
+                          loading="lazy"
+                        />
+                      )}
+                    </div>
+                    <div className="flex flex-1 flex-col p-4 bg-white">
+                      <h3 className="font-editorial text-lg text-gray-900">
+                        <span className="text-gray-400 font-normal">{String(i + 1).padStart(2, '0')} — </span>
+                        {t.name}
+                      </h3>
+                      <p className="mt-1 flex-1 text-sm text-gray-500">{t.description}</p>
+                      {active && <p className="mt-2 text-xs font-semibold text-emerald-600">● Live on your website</p>}
+                      {t.available ? (
+                        <div className="mt-3 flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setPublicThemeColor(t.id)}
+                            className={`flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
+                              selected
+                                ? 'bg-indigo-600 text-white'
+                                : 'border border-gray-300 hover:bg-gray-50 text-gray-800'
+                            }`}
+                          >
+                            {selected ? (
+                              <>
+                                <Check className="h-4 w-4 text-white" />
+                                <span>Selected</span>
+                              </>
+                            ) : (
+                              'Select Theme'
+                            )}
+                          </button>
+                          <a
+                            href={`/events/${eventId}/public?preview=${t.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-lg text-gray-700 hover:bg-gray-100 transition-colors"
+                          >
+                            <ExternalLink className="h-4 w-4 text-gray-500" />
+                            <span>Preview</span>
+                          </a>
+                        </div>
+                      ) : (
+                        <p className="mt-3 text-xs font-semibold text-gray-400">Coming soon</p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Section: Event details (exact UI from gravitas-celestial-journey) */}
+          <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-xs space-y-4">
+            <h2 className="font-editorial text-2xl font-bold text-gray-900">Event details</h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700 block">Theme title</label>
+                <input
+                  type="text"
+                  value={publicThemeTitle}
+                  onChange={(e) => setPublicThemeTitle(e.target.value)}
+                  placeholder="e.g. Paths of Knowledge"
+                  className="w-full px-3.5 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700 block">Venue</label>
+                <input
+                  type="text"
+                  value={venue}
+                  onChange={(e) => setVenue(e.target.value)}
+                  placeholder="e.g. Campus Venue"
+                  className="w-full px-3.5 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700 block">Start date</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3.5 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-gray-700 block">End date</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-3.5 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="space-y-1.5 sm:col-span-2">
+                <label className="text-sm font-medium text-gray-700 block">Start time (countdown time)</label>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full px-3.5 py-2 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2 space-y-1.5">
+                <label className="text-sm font-medium text-gray-700 block">Description</label>
+                <textarea
+                  rows={4}
+                  value={publicAboutText}
+                  onChange={(e) => setPublicAboutText(e.target.value)}
+                  placeholder="Describe your festival's concept, inspiration, or greeting. Displayed in the illustrated story section."
+                  className="w-full px-3.5 py-2 text-sm leading-relaxed text-gray-900 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-3">
+              <button
+                type="button"
+                onClick={handleSavePublicSettings}
+                disabled={savingPublicSettings}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+              >
+                <Save className="h-4 w-4" />
+                <span>{savingPublicSettings ? 'Saving...' : 'Save Public Settings'}</span>
+              </button>
+            </div>
+          </section>
         </div>
       )}
 

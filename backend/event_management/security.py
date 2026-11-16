@@ -26,6 +26,6 @@ class SecurityHeadersMiddleware:
             "frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; "
             "font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'",
         )
-        response.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+        response.setdefault('Permissions-Policy', 'camera=(self), microphone=(), geolocation=()')
         response.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
         return response

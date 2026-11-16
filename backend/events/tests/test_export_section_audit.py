@@ -144,9 +144,10 @@ class ExportSectionDeepAuditTests(APITestCase):
         self.assertIn("UP FOLK DANCE GROUP", pdf['text'].upper())
         self.assertNotIn("HS MONO ACT EMPTY", pdf['text'].upper())
 
-        # Check Code Letters A, B, C appear
-        self.assertIn("A", pdf['text'])
-        self.assertIn("B", pdf['text'])
+        # Check Code Letter and Judge header columns appear
+        self.assertIn("Code Letter", pdf['text'])
+        self.assertIn("Judge 1", pdf['text'])
+        self.assertIn("Powered by eventloo.in", pdf['text'])
 
         # Specific Category filter: category='lp'
         res_lp = self.client.get(f'/api/events/{self.event.id}/valuation-sheet/?category=lp&program_id=all&copies=1')
@@ -179,6 +180,7 @@ class ExportSectionDeepAuditTests(APITestCase):
         self.assertIn("201", pdf_comp['text'])
         self.assertIn("Participant1", pdf_comp['text'])
         self.assertIn("Total participants:", pdf_comp['text'])
+        self.assertIn("Powered by eventloo.in", pdf_comp['text'])
 
         # Team Mode
         res_team = self.client.get(f'/api/events/{self.event.id}/call-list/?mode=team&category=all&program_id=all&team_id={self.team_red.id}')
@@ -186,6 +188,7 @@ class ExportSectionDeepAuditTests(APITestCase):
         pdf_team = self.extract_pdf_text(res_team.content)
         self.assertIn("Red House", pdf_team['text'])
         self.assertNotIn("Blue House", pdf_team['text'])
+        self.assertIn("Powered by eventloo.in", pdf_team['text'])
 
     def test_green_room_sign_sheet(self):
         res = self.client.get(f'/api/events/{self.event.id}/green-room-sign/?category=all&program_id=all')
@@ -195,6 +198,7 @@ class ExportSectionDeepAuditTests(APITestCase):
         self.assertIn("Chest No", pdf['text'])
         self.assertIn("Participant", pdf['text'])
         self.assertIn("Code Letter", pdf['text'])
+        self.assertIn("Powered by eventloo.in", pdf['text'])
 
     def test_winners_and_program_details_reports(self):
         # Winners report: only published program
@@ -203,12 +207,14 @@ class ExportSectionDeepAuditTests(APITestCase):
         pdf_win = self.extract_pdf_text(res_win.content)
         self.assertIn("LP Recitation English", pdf_win['text'])
         self.assertNotIn("LP Classical Music", pdf_win['text'])  # Unpublished
+        self.assertIn("Powered by eventloo.in", pdf_win['text'])
 
         # Program details report
         res_det = self.client.get(f'/api/events/{self.event.id}/reports/program-details/')
         self.assertEqual(res_det.status_code, 200)
         pdf_det = self.extract_pdf_text(res_det.content)
         self.assertIn("LP Classical Music", pdf_det['text'])
+        self.assertIn("Powered by eventloo.in", pdf_det['text'])
 
     def test_team_list_pdf_all_categories(self):
         res = self.client.get(f'/api/events/{self.event.id}/teams/{self.team_red.id}/program-list-pdf/')
@@ -216,3 +222,30 @@ class ExportSectionDeepAuditTests(APITestCase):
         pdf = self.extract_pdf_text(res.content)
         self.assertIn("Team: Red House", pdf['text'])
         self.assertIn("LP Classical Music", pdf['text'])
+        self.assertIn("Powered by eventloo.in", pdf['text'])
+
+    def test_valuation_sheet_dynamic_judge_count(self):
+        # 1. Test 4 judges: set program.num_judges = 4
+        self.p_lp_ind.num_judges = 4
+        self.p_lp_ind.save()
+
+        res_4 = self.client.get(f'/api/events/{self.event.id}/valuation-sheet/?program_id={self.p_lp_ind.id}&copies=1')
+        self.assertEqual(res_4.status_code, 200)
+        pdf_4 = self.extract_pdf_text(res_4.content)
+        self.assertIn("Judge 1", pdf_4['text'])
+        self.assertIn("Judge 2", pdf_4['text'])
+        self.assertIn("Judge 3", pdf_4['text'])
+        self.assertIn("Judge 4", pdf_4['text'])
+        self.assertIn("Judge 4 Name & Signature", pdf_4['text'])
+
+        # 2. Test 2 judges: set program.num_judges = 2
+        self.p_lp_ind.num_judges = 2
+        self.p_lp_ind.save()
+
+        res_2 = self.client.get(f'/api/events/{self.event.id}/valuation-sheet/?program_id={self.p_lp_ind.id}&copies=1')
+        self.assertEqual(res_2.status_code, 200)
+        pdf_2 = self.extract_pdf_text(res_2.content)
+        self.assertIn("Judge 1", pdf_2['text'])
+        self.assertIn("Judge 2", pdf_2['text'])
+        self.assertNotIn("Judge 3", pdf_2['text'])
+        self.assertNotIn("Judge 4", pdf_2['text'])

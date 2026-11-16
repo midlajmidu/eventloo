@@ -1,4 +1,5 @@
 import logging
+import os
 from dataclasses import dataclass
 from io import BytesIO
 
@@ -276,6 +277,54 @@ def _normalize_color(col):
     }
     return named.get(col.lower(), '#4F46E5')
 
+
+def _resolve_event_logo_path(event):
+    """
+    Finds the event logo image path.
+    Checks event.logo, then school.settings.school_logo, then school.logo.
+    """
+    if getattr(event, 'logo', None) and getattr(event.logo, 'name', None):
+        try:
+            if os.path.exists(event.logo.path):
+                return event.logo.path
+        except Exception:
+            pass
+    school = getattr(event, 'school', None)
+    if school:
+        if hasattr(school, 'settings') and getattr(school.settings, 'school_logo', None):
+            try:
+                if school.settings.school_logo.name and os.path.exists(school.settings.school_logo.path):
+                    return school.settings.school_logo.path
+            except Exception:
+                pass
+        if getattr(school, 'logo', None) and getattr(school.logo, 'name', None):
+            try:
+                if os.path.exists(school.logo.path):
+                    return school.logo.path
+            except Exception:
+                pass
+    return None
+
+
+def _resolve_eventloo_icon_path():
+    """
+    Resolves official Eventloo favicon or square icon for 'Powered by Eventloo' badge footer.
+    """
+    from django.conf import settings
+    candidates = [
+        os.path.join(settings.BASE_DIR, 'assets', 'eventloo-icon.png'),
+        os.path.abspath(os.path.join(settings.BASE_DIR, '..', 'frontend', 'public', 'eventloo-icon.png')),
+        os.path.join(settings.BASE_DIR, 'assets', 'favicon.png'),
+        os.path.abspath(os.path.join(settings.BASE_DIR, '..', 'frontend', 'public', 'favicon.png')),
+        os.path.join(settings.BASE_DIR, 'assets', 'eventloo-logo.png'),
+        os.path.abspath(os.path.join(settings.BASE_DIR, '..', 'frontend', 'public', 'eventloo-logo.png')),
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    return None
+
+
 def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None, base_url=None, event_program_types=None):
     """
     Renders a single high-quality participant paper badge (1 of 9 per A4 sheet)
@@ -336,46 +385,66 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pdf.setLineWidth(0.5)
     pdf.roundRect(card_x, card_y, card_w, card_h, radius=8, stroke=1, fill=0)
 
-    # 3. Top Header: —— Eventloo ——
-    y_logo = card_top - 20
-    pdf.setStrokeColor(HexColor('#CBD5E1'))
-    pdf.setLineWidth(0.5)
-    pdf.line(card_x + 16, y_logo + 3, card_x + 46, y_logo + 3)
-    pdf.line(card_x + card_w - 46, y_logo + 3, card_x + card_w - 16, y_logo + 3)
+    # 3. Top Header: Event Logo + Event Name (Clean Title, No "FESTIVAL : ")
+    event_logo_path = _resolve_event_logo_path(event)
+    event_title = (event.title or 'EVENT').strip().upper()
 
-    # Eventloo Logo Icon + Text
-    pdf.saveState()
-    # Mini loop mark
-    pdf.setStrokeColor(HexColor('#4F46E5'))
-    pdf.setLineWidth(1.1)
-    loop_cx = card_center_x - 30
-    loop_cy = y_logo + 3.5
-    pdf.circle(loop_cx - 3, loop_cy, 2.8, stroke=1, fill=0)
-    pdf.circle(loop_cx + 3, loop_cy, 2.8, stroke=1, fill=0)
-    pdf.restoreState()
+    if event_logo_path:
+        try:
+            with Image.open(event_logo_path) as im:
+                orig_w, orig_h = im.size
+            box_w, box_h = 34.0, 20.0
+            scale = min(box_w / float(orig_w), box_h / float(orig_h))
+            logo_w = orig_w * scale
+            logo_h = orig_h * scale
+            logo_cy = card_top - 18.0
+            logo_x = card_center_x - logo_w / 2.0
+            logo_y = logo_cy - logo_h / 2.0
+            pdf.drawImage(event_logo_path, logo_x, logo_y, width=logo_w, height=logo_h, mask='auto', preserveAspectRatio=True)
 
-    pdf.setFont('Helvetica-Bold', 10.5)
-    pdf.setFillColor(HexColor('#0F172A'))
-    pdf.drawString(card_center_x - 18, y_logo, 'Eventloo')
+            # Flanking subtle divider lines
+            pdf.setStrokeColor(HexColor('#CBD5E1'))
+            pdf.setLineWidth(0.5)
+            pdf.line(card_x + 16, logo_cy, logo_x - 6, logo_cy)
+            pdf.line(logo_x + logo_w + 6, logo_cy, card_x + card_w - 16, logo_cy)
+        except Exception as err:
+            logger.warning("Failed to render event logo on badge: %s", err)
+            event_logo_path = None
 
-    # 4. Festival / Event Line: FESTIVAL : [EVENT NAME]
-    y_fest = card_top - 38
-    fest_lbl = 'FESTIVAL : '
-    lbl_w = stringWidth(fest_lbl, 'Helvetica', 6.5)
-    event_title = (event.title or 'FESTIVAL').upper()
-    title_w = stringWidth(event_title, 'Helvetica-Bold', 7.5)
-    start_fest_x = card_center_x - (lbl_w + title_w) / 2.0
-    
-    pdf.setFont('Helvetica', 6.5)
-    pdf.setFillColor(HexColor('#64748B'))
-    pdf.drawString(start_fest_x, y_fest, fest_lbl)
+    if not event_logo_path:
+        y_title = card_top - 24.0
+        t_size = 9.5 if len(event_title) <= 20 else 8.0
+        max_title_w = card_w - 48.0
+        while t_size > 6.0 and stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
+            t_size -= 0.5
+        if stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
+            while event_title and stringWidth(event_title + '…', 'Helvetica-Bold', t_size) > max_title_w:
+                event_title = event_title[:-1]
+            event_title += '…'
+        t_w = stringWidth(event_title, 'Helvetica-Bold', t_size)
+        pdf.setStrokeColor(HexColor('#CBD5E1'))
+        pdf.setLineWidth(0.5)
+        pdf.line(card_x + 16, y_title + 3, card_center_x - t_w / 2.0 - 6, y_title + 3)
+        pdf.line(card_center_x + t_w / 2.0 + 6, y_title + 3, card_x + card_w - 16, y_title + 3)
+        pdf.setFont('Helvetica-Bold', t_size)
+        pdf.setFillColor(HexColor('#0F172A'))
+        pdf.drawCentredString(card_center_x, y_title, event_title)
+    else:
+        y_title = card_top - 36.0
+        t_size = 8.5 if len(event_title) <= 20 else (7.5 if len(event_title) <= 30 else 6.5)
+        max_title_w = card_w - 24.0
+        while t_size > 5.5 and stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
+            t_size -= 0.5
+        if stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
+            while event_title and stringWidth(event_title + '…', 'Helvetica-Bold', t_size) > max_title_w:
+                event_title = event_title[:-1]
+            event_title += '…'
+        pdf.setFont('Helvetica-Bold', t_size)
+        pdf.setFillColor(HexColor('#0F172A'))
+        pdf.drawCentredString(card_center_x, y_title, event_title)
 
-    pdf.setFont('Helvetica-Bold', 7.5)
-    pdf.setFillColor(HexColor('#0F172A'))
-    pdf.drawString(start_fest_x + lbl_w, y_fest, event_title)
-
-    # 5. Participant Name
-    y_name = card_top - 68
+    # 4. Participant Name
+    y_name = card_top - 66
     name = (student.get_full_name() or student.display_name or 'Participant').strip()
     name_len = len(name)
     if name_len > 24:
@@ -670,6 +739,27 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pdf.setFillColor(HexColor('#312E81'))
     pdf.drawCentredString(qr_box_x + qr_box_w / 2.0, qr_box_y + 4.0, 'SCAN TO VERIFY')
 
+    # 11. "Powered by Eventloo" at Bottom
+    eventloo_icon_path = _resolve_eventloo_icon_path()
+    f_x = card_x + 12.0
+    f_y = card_y + 24.0
+    icon_offset = 0.0
+    if eventloo_icon_path:
+        try:
+            pdf.drawImage(eventloo_icon_path, f_x, f_y, width=10, height=10, mask='auto', preserveAspectRatio=True)
+            icon_offset = 14.0
+        except Exception as icon_err:
+            logger.warning("Eventloo badge icon draw failed: %s", icon_err)
+            icon_offset = 0.0
+
+    pdf.setFont('Helvetica', 5.2)
+    pdf.setFillColor(HexColor('#64748B'))
+    pdf.drawString(f_x + icon_offset, f_y + 2.5, 'Powered by ')
+    pw = stringWidth('Powered by ', 'Helvetica', 5.2)
+    pdf.setFont('Helvetica-Bold', 5.8)
+    pdf.setFillColor(HexColor('#1E1B4B'))
+    pdf.drawString(f_x + icon_offset + pw, f_y + 2.5, 'Eventloo')
+
     pdf.restoreState()
 
 
@@ -716,51 +806,29 @@ def render_certificates_pdf(event, templates_by_type, recipients, quality='stand
                 )
         pdf.showPage()
 
-    # 2. Badges (9 badges per A4 portrait page, 3x3 grid)
+    # 2. Badges (1 single full A4 badge per page)
     if badge_recipients:
         page_width, page_height = portrait(A4)
-        cols = 3
-        rows = 3
-        badges_per_page = cols * rows  # 9
-        badge_width = 186.0
-        badge_height = 266.0
-        margin_x = (page_width - cols * badge_width) / 2.0   # ~18.64 pt
-        margin_y = (page_height - rows * badge_height) / 2.0  # ~21.94 pt
+        badge_ref_w = 186.0
+        badge_ref_h = 266.0
+        scale = min((page_width - 48.0) / badge_ref_w, (page_height - 48.0) / badge_ref_h)
+        draw_w = badge_ref_w * scale
+        draw_h = badge_ref_h * scale
+        offset_x = (page_width - draw_w) / 2.0
+        offset_y = (page_height - draw_h) / 2.0
         event_program_types = list(event.get_program_types())
 
-        for page_start in range(0, len(badge_recipients), badges_per_page):
+        for recipient in badge_recipients:
             pdf.setPageSize((page_width, page_height))
-            page_batch = badge_recipients[page_start:page_start + badges_per_page]
-
-            # Draw outer cut marks in page margins
-            _draw_crop_marks(pdf, page_width, page_height, margin_x, margin_y, cols, rows, badge_width, badge_height)
-
-            # Draw 3x3 grid cut guides
             pdf.saveState()
-            pdf.setStrokeColor(HexColor('#CBD5E1'))
-            pdf.setLineWidth(0.4)
-            pdf.setDash(2, 2)
-            for i in range(badges_per_page):
-                r = i // cols
-                c = i % cols
-                cx = margin_x + c * badge_width
-                cy = page_height - margin_y - (r + 1) * badge_height
-                pdf.rect(cx, cy, badge_width, badge_height, stroke=1, fill=0)
+            pdf.translate(offset_x, offset_y)
+            pdf.scale(scale, scale)
+            _draw_paper_badge(
+                pdf, 0, 0, badge_ref_w, badge_ref_h,
+                recipient, event, category_names, base_url=base_url,
+                event_program_types=event_program_types
+            )
             pdf.restoreState()
-
-            # Render each badge in current page batch using the official paper badge model
-            for idx, recipient in enumerate(page_batch):
-                row = idx // cols
-                col = idx % cols
-                cell_x = margin_x + col * badge_width
-                cell_y = page_height - margin_y - (row + 1) * badge_height
-
-                _draw_paper_badge(
-                    pdf, cell_x, cell_y, badge_width, badge_height,
-                    recipient, event, category_names, base_url=base_url,
-                    event_program_types=event_program_types
-                )
-
             pdf.showPage()
 
     pdf.save()

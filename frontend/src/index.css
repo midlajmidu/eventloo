@@ -396,3 +396,390 @@ code {
   appearance: textfield;
 }
 
+/* Festival Animated Public Portal Styles */
+@keyframes festivalFloatSlow {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-14px) rotate(1deg);
+  }
+}
+
+@keyframes festivalFloatMedium {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(-1.2deg);
+  }
+}
+
+@keyframes festivalFloatFast {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes festivalTwinkle {
+  0%, 100% {
+    opacity: 0.25;
+    transform: scale(0.8);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+@keyframes festivalDrift {
+  0% {
+    transform: translateX(0);
+  }
+  50% {
+    transform: translateX(25px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes festivalScanLaser {
+  0% {
+    top: 8%;
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    top: 88%;
+    opacity: 0.7;
+  }
+}
+
+@keyframes festivalPulseGlow {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 35px rgba(245, 158, 11, 0.75);
+  }
+}
+
+.animate-float-slow {
+  animation: festivalFloatSlow 5.5s ease-in-out infinite;
+}
+
+.animate-float-medium {
+  animation: festivalFloatMedium 4.2s ease-in-out infinite;
+}
+
+.animate-float-fast {
+  animation: festivalFloatFast 3.2s ease-in-out infinite;
+}
+
+.animate-twinkle {
+  animation: festivalTwinkle 2.8s ease-in-out infinite;
+}
+
+.animate-drift {
+  animation: festivalDrift 18s ease-in-out infinite;
+}
+
+.animate-scan-laser {
+  animation: festivalScanLaser 2.2s ease-in-out infinite alternate;
+}
+
+.animate-pulse-glow {
+  animation: festivalPulseGlow 3s ease-in-out infinite;
+}
+
+/* Custom Display & Brush Typography Classes */
+.font-handwritten {
+  font-family: 'Caveat', 'Alex Brush', cursive, sans-serif;
+  letter-spacing: 0.04em;
+}
+
+.font-brush {
+  font-family: 'Alex Brush', cursive, sans-serif;
+}
+
+.font-cinzel-dec {
+  font-family: 'Cinzel Decorative', 'Cinzel', Georgia, serif;
+}
+
+.font-editorial {
+  font-family: 'Playfair Display', Georgia, serif;
+}
+
+.font-cinzel {
+  font-family: 'Cinzel', Georgia, serif;
+}
+
+/* Lantern and Candle Glow Animations */
+@keyframes lanternGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 25px rgba(251, 191, 36, 0.75)) drop-shadow(0 0 55px rgba(245, 158, 11, 0.45));
+    opacity: 0.95;
+  }
+  50% {
+    filter: drop-shadow(0 0 35px rgba(251, 191, 36, 0.95)) drop-shadow(0 0 75px rgba(245, 158, 11, 0.65));
+    opacity: 1;
+  }
+}
+
+.animate-lantern-glow {
+  animation: lanternGlow 3.5s ease-in-out infinite;
+}
+
+/* Shooting star animation */
+@keyframes shootingStarAnim {
+  0% {
+    transform: translateX(0) translateY(0) scale(0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+    transform: translateX(40px) translateY(25px) scale(1);
+  }
+  40% {
+    opacity: 0;
+    transform: translateX(180px) translateY(110px) scale(0.2);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(200px) translateY(120px) scale(0);
+  }
+}
+
+.animate-shooting-star {
+  animation: shootingStarAnim 7s ease-in-out infinite;
+}
+
+/* Ribbon wave animation */
+@keyframes ribbonWaveAnim {
+  0%, 100% {
+    transform: rotate(0deg) translateY(0) scale(1);
+  }
+  50% {
+    transform: rotate(2deg) translateY(-8px) scale(1.02);
+  }
+}
+
+.animate-ribbon {
+  animation: ribbonWaveAnim 6s ease-in-out infinite;
+}
+
+/* Floating Underwater / Bubble countdown animations */
+@keyframes bubbleRise {
+  0% {
+    transform: translateY(0) translateX(0) scale(0.9);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translateY(-20px) translateX(8px) scale(1.05);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translateY(0) translateX(0) scale(0.9);
+    opacity: 0.7;
+  }
+}
+
+.animate-bubble {
+  animation: bubbleRise 4.5s ease-in-out infinite;
+}
+
+.animate-bubble-delayed {
+  animation: bubbleRise 6s ease-in-out infinite 1.8s;
+}
+
+/* Public Portal Theme Color Tokens & Classes */
+[class*="theme-"] h1,
+[class*="theme-"] h2,
+[class*="theme-"] h3,
+[class*="theme-"] h4,
+[class*="theme-"] h5,
+[class*="theme-"] h6 {
+  color: inherit;
+}
+
+.theme-enchanted {
+  --background: oklch(0.2 0.07 290);
+  --foreground: oklch(0.96 0.03 85);
+  --card: oklch(0.95 0.04 85);
+  --card-foreground: oklch(0.25 0.09 300);
+  --primary: oklch(0.82 0.14 82);
+  --primary-foreground: oklch(0.22 0.08 295);
+  --secondary: oklch(0.33 0.11 295);
+  --secondary-foreground: oklch(0.96 0.03 85);
+  --muted: oklch(0.3 0.08 290);
+  --muted-foreground: oklch(0.82 0.04 80);
+  --accent: oklch(0.65 0.2 350);
+  --accent-foreground: oklch(0.98 0.01 85);
+  --border: oklch(0.82 0.14 82 / 35%);
+  --parchment: oklch(0.94 0.045 85);
+  --parchment-deep: oklch(0.86 0.08 75);
+  --ink: oklch(0.27 0.1 300);
+  --ink-soft: oklch(0.42 0.08 300);
+  --night: oklch(0.18 0.07 288);
+  --night-deep: oklch(0.13 0.05 285);
+  --gold: oklch(0.82 0.14 82);
+  --glow: oklch(0.85 0.17 75);
+}
+
+.theme-minimal-editorial {
+  --background: #FAF8F5;
+  --foreground: #1A1A1A;
+  --card: #FFFFFF;
+  --card-foreground: #1A1A1A;
+  --primary: #2C3E50;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F0EDE6;
+  --secondary-foreground: #1A1A1A;
+  --muted: #F0EDE6;
+  --muted-foreground: #666666;
+  --accent: #D4AF37;
+  --border: #E5E0D8;
+  --gold: #D4AF37;
+}
+
+.theme-swiss {
+  --background: #FFFFFF;
+  --foreground: #111111;
+  --card: #F5F5F2;
+  --card-foreground: #111111;
+  --primary: #111111;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F5F5F2;
+  --secondary-foreground: #111111;
+  --muted: #F5F5F2;
+  --muted-foreground: #5F5F5C;
+  --accent: #E53935;
+  --border: #D8D8D8;
+  --pop: #E53935;
+  --pop-2: #D8D8D8;
+  --pop-3: #F5F5F2;
+}
+
+.theme-playful {
+  --background: #FFF8EC;
+  --foreground: #1C2346;
+  --card: #FFFFFF;
+  --card-foreground: #1C2346;
+  --primary: #2F5BFF;
+  --primary-foreground: #FFFFFF;
+  --secondary: #CFE8FF;
+  --secondary-foreground: #1C2346;
+  --muted: #F3ECFF;
+  --muted-foreground: #5A6185;
+  --accent: #FF8A1F;
+  --border: #E6DCF5;
+  --pop: #FF6F61;
+  --pop-2: #B9A4FF;
+  --pop-3: #B8F04A;
+}
+
+.theme-brutal {
+  --background: #F4F0E8;
+  --foreground: #101010;
+  --card: #F4F0E8;
+  --card-foreground: #101010;
+  --primary: #101010;
+  --primary-foreground: #F4F0E8;
+  --secondary: #244BE8;
+  --secondary-foreground: #F4F0E8;
+  --muted: #E8E2D6;
+  --muted-foreground: #3D3D3D;
+  --accent: #FF642E;
+  --border: #101010;
+  --pop: #C7F000;
+  --pop-2: #FF4C92;
+  --pop-3: #244BE8;
+}
+
+.theme-retro {
+  --background: #F4E4C1;
+  --foreground: #17334B;
+  --card: #F8EDD3;
+  --card-foreground: #17334B;
+  --primary: #17334B;
+  --primary-foreground: #F4E4C1;
+  --secondary: #E7B64A;
+  --secondary-foreground: #17334B;
+  --muted: #EAD7AD;
+  --muted-foreground: #79543A;
+  --accent: #B5442D;
+  --border: #C9AD78;
+  --pop: #E7B64A;
+  --pop-2: #79543A;
+  --pop-3: #B5442D;
+}
+
+/* Font utility classes for themes */
+.font-sans-dm { font-family: 'DM Sans', sans-serif; }
+.font-display { font-family: 'Cinzel', Georgia, serif; }
+.font-script { font-family: 'Great Vibes', cursive; }
+.font-serif-garamond { font-family: 'Cormorant Garamond', Georgia, serif; }
+.font-swiss { font-family: 'Inter', -apple-system, sans-serif; }
+.font-grotesk { font-family: 'Space Grotesk', sans-serif; }
+.font-archivo { font-family: 'Archivo Black', sans-serif; }
+.font-anton { font-family: 'Anton', sans-serif; }
+.font-bebas { font-family: 'Bebas Neue', sans-serif; }
+.font-fraunces { font-family: 'Fraunces', Georgia, serif; }
+.font-oswald { font-family: 'Oswald', sans-serif; }
+.font-baskerville { font-family: 'Libre Baskerville', Georgia, serif; }
+.font-fredoka { font-family: 'Fredoka', cursive, sans-serif; }
+.font-retro-script { font-family: 'Pacifico', cursive; }
+
+.extrude {
+  text-shadow: 0 1px 0 var(--pop-2, #B9A4FF), 0 2px 0 var(--pop-2, #B9A4FF), 0 3px 0 var(--primary, #2F5BFF), 0 4px 0 var(--primary, #2F5BFF), 0 6px 12px rgba(0,0,0,0.25);
+}
+
+.arch {
+  border-radius: 999px 999px 1.25rem 1.25rem;
+}
+
+.torn-top {
+  clip-path: polygon(0 14px, 4% 4px, 9% 12px, 15% 2px, 22% 10px, 28% 3px, 35% 12px, 42% 4px, 50% 11px, 57% 2px, 64% 10px, 71% 4px, 78% 12px, 85% 3px, 92% 10px, 100% 4px, 100% 100%, 0 100%);
+}
+
+.text-glow {
+  text-shadow: 0 0 24px var(--glow, #ffd15c), 0 0 45px rgba(245, 186, 66, 0.5), 0 2px 4px var(--night-deep, #0a0815);
+}
+
+.grain {
+  position: relative;
+}
+.grain::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .18;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+.halftone {
+  background-image: radial-gradient(currentColor 1.1px, transparent 1.3px);
+  background-size: 7px 7px;
+}
+
+.stripes {
+  background-image: repeating-linear-gradient(135deg, currentColor 0 10px, transparent 10px 20px);
+}
+
+.sunburst {
+  background: repeating-conic-gradient(from 0deg at 50% 100%, var(--pop) 0deg 6deg, var(--background) 6deg 12deg);
+}
+
+
+
+
