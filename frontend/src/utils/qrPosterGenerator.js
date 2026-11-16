@@ -5,7 +5,8 @@
  * - Bold event title & spaced uppercase subtitle
  * - Rounded QR code container with camera focus corner brackets in brand color (#4F46E5)
  * - Large crisp QR code
- * - Two-line sentence: "Scan to view results, schedule & points table."
+ * - Bold Heading: "View Your Public Event Page"
+ * - Subtext: "Explore the event results, schedule, and points table for {eventTitle}."
  * - Eventloo logo placed at the BOTTOM ("Powered by Eventloo")
  * - Subtle organic corner waves (top-right and bottom-left)
  */
@@ -53,7 +54,8 @@ function loadImage(src) {
  * - Event Logo at the TOP
  * - Event Title & Subtitle
  * - Rounded QR code container with corner brackets
- * - "Scan to view results, schedule & points table."
+ * - Heading: "View Your Public Event Page"
+ * - Subtext: "Explore the event results, schedule, and points table for {eventTitle}."
  * - Eventloo logo at the BOTTOM
  */
 export async function generateEventQrPosterBlob({ event, portalData, publicUrl, eventId, eventLogoUrl }) {
@@ -119,7 +121,7 @@ export async function generateEventQrPosterBlob({ event, portalData, publicUrl, 
 
   const logoBoxSize = 90;
   const logoBoxX = (width - logoBoxSize) / 2;
-  const logoBoxY = 46;
+  const logoBoxY = 44;
 
   if (eventLogoImg) {
     // Soft card backing with subtle shadow
@@ -166,7 +168,7 @@ export async function generateEventQrPosterBlob({ event, portalData, publicUrl, 
   const rawTitle = (event?.title || portalData?.event?.title || 'Gravitas').trim();
   const eventTitle = rawTitle.charAt(0).toUpperCase() + rawTitle.slice(1);
 
-  const titleY = logoBoxY + logoBoxSize + 36;
+  const titleY = logoBoxY + logoBoxSize + 34;
   ctx.fillStyle = '#0F172A';
   ctx.font = '800 38px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   ctx.textAlign = 'center';
@@ -178,9 +180,9 @@ export async function generateEventQrPosterBlob({ event, portalData, publicUrl, 
   }
   ctx.fillText(eventTitle, width / 2, titleY);
 
-  // Subtitle: e.g. CAMPUS FESTIVAL or venue in spaced uppercase
-  const subY = titleY + 30;
-  const rawSubtitle = (event?.venue || portalData?.event?.venue || 'CAMPUS FESTIVAL').toUpperCase();
+  // Subtitle: e.g. CAMPUS VENUE or festival in spaced uppercase
+  const subY = titleY + 28;
+  const rawSubtitle = (event?.venue || portalData?.event?.venue || 'CAMPUS VENUE').toUpperCase();
   const spacedSubtitle = rawSubtitle.split('').join(' ');
 
   ctx.fillStyle = '#64748B';
@@ -203,10 +205,10 @@ export async function generateEventQrPosterBlob({ event, portalData, publicUrl, 
   // =========================================================================
   // 3. QR CODE CONTAINER & ROUNDED CAMERA FOCUS BRACKETS
   // =========================================================================
-  const qrBoxSize = 410;
+  const qrBoxSize = 390;
   const qrBoxX = (width - qrBoxSize) / 2;
-  const qrBoxY = lineY + 28;
-  const qrBoxR = 26;
+  const qrBoxY = lineY + 24;
+  const qrBoxR = 24;
 
   // Soft Card Container
   ctx.save();
@@ -223,8 +225,8 @@ export async function generateEventQrPosterBlob({ event, portalData, publicUrl, 
   roundRect(ctx, qrBoxX, qrBoxY, qrBoxSize, qrBoxSize, qrBoxR, false, true);
 
   // Rounded Corner Camera Focus Brackets (Eventloo Brand Color #4F46E5)
-  const cornerLen = 30;
-  const cornerPad = 16;
+  const cornerLen = 28;
+  const cornerPad = 15;
   const cornerRadius = 10;
   ctx.strokeStyle = '#4F46E5';
   ctx.lineWidth = 4.5;
@@ -269,7 +271,7 @@ export async function generateEventQrPosterBlob({ event, portalData, publicUrl, 
       const qrImg = await loadImage(blobURL);
 
       if (qrImg) {
-        const qrInnerSize = 330;
+        const qrInnerSize = 315;
         const qrInnerX = qrBoxX + (qrBoxSize - qrInnerSize) / 2;
         const qrInnerY = qrBoxY + (qrBoxSize - qrInnerSize) / 2;
         ctx.drawImage(qrImg, qrInnerX, qrInnerY, qrInnerSize, qrInnerSize);
@@ -281,29 +283,35 @@ export async function generateEventQrPosterBlob({ event, portalData, publicUrl, 
   }
 
   // =========================================================================
-  // 4. CLEAN TWO-LINE SENTENCE: "Scan to view results, schedule & points table."
+  // 4. HEADING & DESCRIPTION AFTER QR CODE (EXACT TEMPLATE MATCH)
+  // "View Your Public Event Page"
+  // "Explore the event results, schedule, and points table for {eventTitle}."
   // =========================================================================
-  const textY = qrBoxY + qrBoxSize + 42;
-  ctx.fillStyle = '#334155';
-  ctx.font = '600 18px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  const headingY = qrBoxY + qrBoxSize + 44;
+  ctx.fillStyle = '#0F172A';
+  ctx.font = '800 27px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  ctx.fillText('View Your Public Event Page', width / 2, headingY);
 
-  ctx.fillText('Scan to view results,', width / 2, textY);
-  ctx.fillText('schedule & points table.', width / 2, textY + 25);
+  const descY = headingY + 30;
+  ctx.fillStyle = '#64748B';
+  ctx.font = '500 15px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText('Explore the event results, schedule, and points table', width / 2, descY);
+  ctx.fillText(`for ${eventTitle}.`, width / 2, descY + 22);
 
   // =========================================================================
-  // 5. BOTTOM FOOTER: EVENTLOO LOGO (PLACED AT DOWN)
+  // 5. BOTTOM FOOTER: EVENTLOO LOGO (POWERED BY EVENTLOO)
   // =========================================================================
-  const footerY = 915;
+  const footerY = 920;
   const eventlooLogoImg = await loadImage(eventlooColorLogo);
 
   // Subtle separator line
   ctx.strokeStyle = '#F1F5F9';
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo((width - 240) / 2, footerY - 32);
-  ctx.lineTo((width + 240) / 2, footerY - 32);
+  ctx.moveTo((width - 240) / 2, footerY - 28);
+  ctx.lineTo((width + 240) / 2, footerY - 28);
   ctx.stroke();
 
   // Draw "POWERED BY" + [Eventloo Logo Icon] + "Eventloo"

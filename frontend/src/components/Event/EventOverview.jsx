@@ -564,10 +564,14 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
               )}
             </div>
 
-            {/* Two-Line Clean Sentence */}
-            <div className="text-sm font-semibold text-slate-600 leading-snug mb-4">
-              <p>Scan to view results,</p>
-              <p>schedule & points table.</p>
+            {/* Heading & Description after QR Code (Template Match) */}
+            <div className="my-4 px-1">
+              <h4 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
+                View Your Public Event Page
+              </h4>
+              <p className="text-xs sm:text-[13px] text-slate-500 font-medium mt-1 leading-relaxed">
+                Explore the event results, schedule, and points table for {event?.title || 'this event'}.
+              </p>
             </div>
 
             {/* Primary Action: Download Poster (PNG) */}
