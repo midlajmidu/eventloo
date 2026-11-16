@@ -64,14 +64,20 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const eventLogoUrl = event?.logo || event?.event_logo || portalData?.event?.logo || portalData?.event?.event_logo;
+
   const handleDownloadQrPoster = async () => {
     try {
       setDownloadingQr(true);
+      const logoUrl = eventLogoUrl
+        ? (eventLogoUrl.startsWith('http') ? eventLogoUrl : `${window.location.origin}${eventLogoUrl}`)
+        : null;
       await downloadEventQrPoster({
         event,
         portalData,
         publicUrl: portalData?.public_url || `${window.location.origin}/events/${eventId}/public`,
         eventId,
+        eventLogoUrl: logoUrl,
         filename: `${(event?.title || 'Festival').replace(/[^a-zA-Z0-9_-]/g, '_')}_Official_QR_Poster.png`
       });
     } catch (err) {
@@ -511,13 +517,24 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
               <X className="w-4 h-4" />
             </button>
 
-            {/* Official Eventloo Logo on Pure White Background (Matches Login Page) */}
-            <div className="flex justify-center pt-1">
-              <EventlooLogo size="md" />
-            </div>
-
-            {/* Accent Bar in Eventloo Indigo */}
-            <div className="w-9 h-1 rounded-full bg-indigo-600 mx-auto mt-3 mb-2" />
+            {/* 1. TOP: Official Event Logo */}
+            {eventLogoUrl ? (
+              <div className="flex justify-center pt-1 mb-2.5">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl border border-slate-200/80 p-1.5 bg-white shadow-2xs flex items-center justify-center overflow-hidden">
+                  <img
+                    src={eventLogoUrl}
+                    alt={event?.title || 'Event Logo'}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-center pt-1 mb-2.5">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-cyan-500 text-white flex items-center justify-center font-extrabold text-2xl shadow-sm">
+                  {((event?.title || 'E').trim().charAt(0) || 'E').toUpperCase()}
+                </div>
+              </div>
+            )}
 
             {/* Event Title & Subtitle */}
             <h3 className="text-2xl font-extrabold tracking-tight text-slate-900">
@@ -526,6 +543,9 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
             <p className="text-[11px] font-bold text-slate-400 tracking-[0.22em] uppercase mt-0.5">
               {event?.venue || 'CAMPUS FESTIVAL'}
             </p>
+
+            {/* Accent Bar in Eventloo Indigo */}
+            <div className="w-8 h-1 rounded-full bg-indigo-600 mx-auto mt-2.5 mb-1" />
 
             {/* Rounded QR Code Frame with Camera Focus Brackets */}
             <div className="w-64 h-64 mx-auto p-4 bg-white rounded-2xl border border-indigo-100/80 shadow-xs flex items-center justify-center relative my-4">
@@ -545,7 +565,7 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
             </div>
 
             {/* Two-Line Clean Sentence */}
-            <div className="text-sm font-semibold text-slate-600 leading-snug mb-5">
+            <div className="text-sm font-semibold text-slate-600 leading-snug mb-4">
               <p>Scan to view results,</p>
               <p>schedule & points table.</p>
             </div>
@@ -571,6 +591,12 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
                   <span>Open Public Portal</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
+              </div>
+
+              {/* 2. BOTTOM: Eventloo Logo Placed at Down */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-center gap-2">
+                <span className="text-[10px] font-bold text-slate-400 tracking-wider uppercase">Powered by</span>
+                <EventlooLogo size="sm" showSubtitle={false} />
               </div>
             </div>
           </div>
