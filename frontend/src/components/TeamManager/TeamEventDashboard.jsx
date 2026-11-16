@@ -258,11 +258,25 @@ const TeamEventDashboard = () => {
       description: 'View all event programs, stages, and competition guidelines',
     },
     {
+      id: 'assignments',
+      name: 'Assignments',
+      icon: Users,
+      badge: null,
+      description: 'Manage student entries, leaders, and team quotas',
+    },
+    {
       id: 'participants',
       name: 'Participants',
       icon: UserCheck,
       badge: null,
       description: 'View your team participants, chest numbers, and digital passes',
+    },
+    {
+      id: 'results',
+      name: 'Results & Standings',
+      icon: Trophy,
+      badge: null,
+      description: 'Live published rankings, awardees, and team leaderboards',
     },
     {
       id: 'schedule',
@@ -271,20 +285,6 @@ const TeamEventDashboard = () => {
       badge: event?.is_schedule_published ? 'Published' : 'Draft',
       badgeColor: event?.is_schedule_published ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800',
       description: 'Official stage schedules and downloadable PDF documentation',
-    },
-    {
-      id: 'assignments',
-      name: 'Assignments',
-      icon: Users,
-      badge: null,
-      description: 'Manage student entries, leaders, and team quotas',
-    },
-    {
-      id: 'results',
-      name: 'Results & Standings',
-      icon: Trophy,
-      badge: null,
-      description: 'Live published rankings, awardees, and team leaderboards',
     },
     {
       id: 'documents',
@@ -535,10 +535,11 @@ const TeamEventDashboard = () => {
   return (
     <div className="min-h-screen bg-[#f7f8fb] flex flex-col font-sans">
       {/* ========================================================================= */}
-      {/* TOP NAVIGATION BAR (Dedicated Event Portal Window Header) */}
+      {/* TOP NAVIGATION BAR (Desktop Full Header + Mobile Minimal Bar) */}
       {/* ========================================================================= */}
       <div className="sticky top-0 z-40 bg-white border-b border-slate-200/90 shadow-2xs backdrop-blur-md bg-white/95">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
+        {/* DESKTOP FULL HEADER (hidden on mobile sm:hidden) */}
+        <div className="hidden sm:block max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             {/* Left: Back button + School Logo + Event Title & Metadata */}
             <div className="flex items-center gap-3 min-w-0">
@@ -635,14 +636,56 @@ const TeamEventDashboard = () => {
             </div>
           </div>
         </div>
+
+        {/* MOBILE COMPACT HEADER (sm:hidden - Minimal Back Button & Scrolling Tabs) */}
+        <div className="sm:hidden px-2.5 py-2 flex items-center gap-2">
+          <button
+            onClick={() => navigate('/team-manager/events')}
+            className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors shrink-0 shadow-2xs cursor-pointer"
+            title="Back to Events List"
+            aria-label="Back"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div className="h-5 w-px bg-slate-200 shrink-0" />
+          <div className="flex items-center overflow-x-auto space-x-1.5 no-scrollbar scroll-smooth flex-1 py-0.5">
+            {tabs.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 cursor-pointer ${
+                    isActive
+                      ? 'bg-indigo-600 text-white shadow-2xs'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Icon className={`h-3.5 w-3.5 shrink-0 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                  <span>{tab.name}</span>
+                  {tab.badge && (
+                    <span
+                      className={`ml-1 px-1.5 py-0.2 rounded text-[9px] font-bold shrink-0 ${
+                        isActive ? 'bg-white/20 text-white' : tab.badgeColor
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* ========================================================================= */}
       {/* MAIN LAYOUT (Sticky Sidebar on Desktop, Horizontal Tabs on Mobile) */}
       {/* ========================================================================= */}
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 w-full flex-1">
-        {/* Mobile Horizontal Tabs Navigation */}
-        <div className="lg:hidden mb-4 bg-white rounded-xl border border-slate-200/80 p-1.5 shadow-2xs">
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 py-2.5 sm:py-6 w-full flex-1">
+        {/* Tablet Horizontal Tabs Navigation */}
+        <div className="hidden sm:block lg:hidden mb-4 bg-white rounded-xl border border-slate-200/80 p-1.5 shadow-2xs">
           <div className="flex items-center overflow-x-auto space-x-1.5 no-scrollbar scroll-smooth py-0.5 px-0.5">
             {tabs.map((tab) => {
               const Icon = tab.icon;

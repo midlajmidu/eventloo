@@ -845,9 +845,9 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
         )}
 
         {/* ========================================================================= */}
-        {/* 2. EVENT METRICS BAR */}
+        {/* 2. EVENT METRICS BAR (Hidden when embedded or on mobile to save vertical space) */}
         {/* ========================================================================= */}
-        <section className="mt-4 sm:mt-5 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+        <section className={`${embedded ? 'hidden' : 'hidden sm:grid'} mt-4 sm:mt-5 grid-cols-1 gap-2.5 sm:grid-cols-3`}>
           <div className="flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white px-3.5 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-50 text-slate-400">
               <Calendar className="h-4 w-4" />
@@ -887,7 +887,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
         {/* ========================================================================= */}
         {/* 3. CATEGORY TABS & FILTER BAR */}
         {/* ========================================================================= */}
-        <section className="mt-6 space-y-3">
+        <section className="mt-4 sm:mt-6 space-y-3">
           {/* Category Tabs Pill Bar */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4 sm:mx-0 sm:px-0">
             <button
@@ -939,25 +939,25 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
           </div>
 
           {/* Search & Secondary Filter Controls */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white p-3 shadow-xs">
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_200px_170px_150px_auto]">
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-2.5 sm:p-3 shadow-xs">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_200px_170px_150px_auto]">
               {/* Search input */}
-              <div className="relative">
+              <div className="relative col-span-2 lg:col-span-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="search"
                   placeholder="Search programs by name, code or description..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+                  className="h-9 sm:h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-xs sm:text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
                 />
               </div>
 
-              {/* Category Dropdown */}
+              {/* Category Dropdown (Desktop/Tablet only since pills are right above on mobile) */}
               <select
                 value={selectedCategoryFilter}
                 onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-                className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                className="hidden sm:block h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
               >
                 <option value="all">All Categories ({programs.length})</option>
                 {eventCategories.map((c) => (
@@ -971,7 +971,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                className="h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-2 sm:px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
               >
                 <option value="all">All Slots</option>
                 <option value="vacant">Needs Assignment</option>
@@ -982,7 +982,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                className="h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-2 sm:px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
               >
                 <option value="all">All Types</option>
                 <option value="individual">Individual</option>
@@ -999,7 +999,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                     setStatusFilter('all');
                     setTypeFilter('all');
                   }}
-                  className="h-10 rounded-xl px-4 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700 sm:col-span-2 lg:col-span-1"
+                  className="col-span-2 lg:col-span-1 h-8 sm:h-10 rounded-xl px-3 text-xs sm:text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700"
                 >
                   Clear
                 </button>
@@ -1417,17 +1417,17 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
               <div className="w-screen max-w-xl md:max-w-2xl bg-white shadow-2xl flex flex-col h-full transform transition ease-in-out duration-300 animate-in slide-in-from-right">
                 
                 {/* 1. Drawer Header */}
-                <div className="border-b border-slate-100 px-5 py-4 bg-slate-50/70 shrink-0">
-                  <div className="flex items-start justify-between gap-3">
+                <div className="border-b border-slate-100 px-3.5 py-2.5 sm:px-5 sm:py-4 bg-slate-50/70 shrink-0">
+                  <div className="flex items-start justify-between gap-2.5">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-indigo-600 mb-1">
-                        {progCatDisplay} · {isTeam ? `Team Program (${teamSize} members required)` : 'Single Program'} · {activeModalProgram.program_type_display || (activeModalProgram.program_type ? activeModalProgram.program_type.replace(/_/g, ' ') : 'Stage')} · {currentAssignedCount}/{maxAllowed} Slots
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-indigo-600 mb-0.5 truncate">
+                        {progCatDisplay} · {isTeam ? `Team (${teamSize})` : 'Single'} · {activeModalProgram.program_type_display || (activeModalProgram.program_type ? activeModalProgram.program_type.replace(/_/g, ' ') : 'Stage')} · {currentAssignedCount}/{maxAllowed} Slots
                       </p>
-                      <h2 className="text-base sm:text-lg font-bold text-slate-900 leading-snug">
+                      <h2 className="text-sm sm:text-lg font-bold text-slate-900 leading-snug truncate">
                         {isTeam ? `Assign Team to ${activeModalProgram.name}` : `Assign Student to ${activeModalProgram.name}`}
                       </h2>
                       {activeModalProgram.description && (
-                        <p className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                        <p className="text-[11px] sm:text-xs text-slate-500 line-clamp-1 mt-0.5 hidden sm:block">
                           {activeModalProgram.description}
                         </p>
                       )}
@@ -1446,8 +1446,8 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
 
                 {/* Sub-Team Tabs (if multi sub-team program) */}
                 {isTeam && maxSubTeams > 1 && (
-                  <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-5 py-2 overflow-x-auto shrink-0">
-                    <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider shrink-0 mr-1">
+                  <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/60 px-3.5 sm:px-5 py-2 overflow-x-auto shrink-0">
+                    <span className="text-[10px] sm:text-[11px] font-semibold text-slate-500 uppercase tracking-wider shrink-0 mr-0.5">
                       Sub-Team:
                     </span>
                     {Array.from({ length: maxSubTeams }, (_, i) => i + 1).map((sNum) => {
@@ -1465,7 +1465,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                             setModalSelectedStudents([]);
                             setModalSelectedLeader(null);
                           }}
-                          className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 ${
+                          className={`inline-flex items-center gap-1 rounded-lg px-2 sm:px-2.5 py-1 text-xs font-semibold transition-all shrink-0 ${
                             isActive
                               ? 'bg-indigo-600 text-white shadow-xs ring-1 ring-indigo-600/30'
                               : isFull
@@ -1475,7 +1475,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                         >
                           <span>Sub-Team {sNum}</span>
                           {isFull ? (
-                            <span className="text-[10px] font-normal opacity-90 truncate max-w-[90px]">
+                            <span className="text-[10px] font-normal opacity-90 truncate max-w-[80px]">
                               ({leader?.name} & Team)
                             </span>
                           ) : (
@@ -1491,7 +1491,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
 
                 {/* Sub-team Full Warning */}
                 {isTeam && isCurrentSubTeamFull && (
-                  <div className="mx-5 mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">
+                  <div className="mx-3.5 sm:mx-5 mt-2.5 sm:mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-2.5 sm:p-3 text-xs text-emerald-800">
                     <div className="flex items-center gap-2 font-semibold">
                       <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                       <span>
@@ -1505,22 +1505,22 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                 )}
 
                 {/* 2. Search & Filtering Toolbar */}
-                <div className="border-b border-slate-100 bg-white px-5 py-3 space-y-2.5 shrink-0 shadow-2xs">
+                <div className="border-b border-slate-100 bg-white px-3.5 sm:px-5 py-2 sm:py-3 space-y-2 shrink-0 shadow-2xs">
                   {/* Search input */}
                   <div className="relative">
-                    <Search className="absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
                     <input
                       type="search"
-                      placeholder={`Search ${progCatDisplay} students by name, ID, class...`}
+                      placeholder={`Search ${progCatDisplay} students...`}
                       value={modalStudentSearch}
                       onChange={(e) => setModalStudentSearch(e.target.value)}
-                      className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/70 pl-9 pr-9 text-xs text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-100"
+                      className="h-8 sm:h-9 w-full rounded-lg border border-slate-200 bg-slate-50/70 pl-8 pr-8 text-xs text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-100"
                     />
                     {modalStudentSearch && (
                       <button
                         type="button"
                         onClick={() => setModalStudentSearch('')}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
                       >
                         <X className="h-3 w-3" />
                       </button>
@@ -1528,12 +1528,12 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                   </div>
 
                   {/* Filter Selects Grid */}
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
                     <div>
                       <select
                         value={drawerGradeFilter}
                         onChange={(e) => setDrawerGradeFilter(e.target.value)}
-                        className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50/80 px-2 text-[11px] font-medium text-slate-700 outline-none focus:border-indigo-400 focus:bg-white"
+                        className="h-7 sm:h-8 w-full rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 text-[10px] sm:text-[11px] font-medium text-slate-700 outline-none focus:border-indigo-400 focus:bg-white"
                       >
                         <option value="all">All Classes</option>
                         {availableGrades.map((g) => (
@@ -1548,7 +1548,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                       <select
                         value={drawerSectionFilter}
                         onChange={(e) => setDrawerSectionFilter(e.target.value)}
-                        className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50/80 px-2 text-[11px] font-medium text-slate-700 outline-none focus:border-indigo-400 focus:bg-white"
+                        className="h-7 sm:h-8 w-full rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 text-[10px] sm:text-[11px] font-medium text-slate-700 outline-none focus:border-indigo-400 focus:bg-white"
                       >
                         <option value="all">All Sections</option>
                         {availableSections.map((s) => (
@@ -1563,7 +1563,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                       <select
                         value={drawerGenderFilter}
                         onChange={(e) => setDrawerGenderFilter(e.target.value)}
-                        className="h-8 w-full rounded-lg border border-slate-200 bg-slate-50/80 px-2 text-[11px] font-medium text-slate-700 outline-none focus:border-indigo-400 focus:bg-white"
+                        className="h-7 sm:h-8 w-full rounded-lg border border-slate-200 bg-slate-50/80 px-1.5 text-[10px] sm:text-[11px] font-medium text-slate-700 outline-none focus:border-indigo-400 focus:bg-white"
                       >
                         <option value="all">All Genders</option>
                         <option value="male">Male</option>
@@ -1575,34 +1575,35 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
 
                   {/* Count indicator & quick actions */}
                   <div className="flex items-center justify-between text-xs text-slate-500 pt-0.5 border-t border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[11px]">
-                        Showing <strong className="text-slate-800">{filteredCandidates.length}</strong> eligible students
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] sm:text-[11px]">
+                        <strong className="text-slate-800">{filteredCandidates.length}</strong> eligible
                       </span>
                       {!isUnlimited && limitReachedCount > 0 && (
                         <button
                           type="button"
                           onClick={() => setDrawerHideLimitReached((prev) => !prev)}
-                          className={`text-[10px] font-medium px-2 py-0.5 rounded transition-colors ${
+                          className={`text-[9px] sm:text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors ${
                             drawerHideLimitReached
                               ? 'bg-indigo-600 text-white'
                               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                           }`}
                         >
-                          {drawerHideLimitReached ? 'Available only' : `Hide limit reached (${limitReachedCount})`}
+                          {drawerHideLimitReached ? 'Available' : `Hide full (${limitReachedCount})`}
                         </button>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                       {isTeam && !isCurrentSubTeamFull && (
                         <button
                           type="button"
                           onClick={handleAutoSelectTeam}
-                          className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
+                          className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] sm:text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors"
                           title={`Quickly select the first ${neededForCurrentSubTeam} available students`}
                         >
-                          <span>Select {neededForCurrentSubTeam} Members</span>
+                          <span className="hidden sm:inline">Select {neededForCurrentSubTeam} Members</span>
+                          <span className="sm:hidden">Auto-pick ({neededForCurrentSubTeam})</span>
                         </button>
                       )}
 
@@ -1610,9 +1611,9 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                         <button
                           type="button"
                           onClick={handleClearDrawerFilters}
-                          className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-rose-600 transition-colors"
+                          className="inline-flex items-center gap-0.5 text-[10px] sm:text-[11px] font-medium text-slate-500 hover:text-rose-600 transition-colors"
                         >
-                          <RotateCcw className="h-3 w-3" />
+                          <RotateCcw className="h-2.5 w-2.5" />
                           <span>Reset</span>
                         </button>
                       )}
@@ -1621,18 +1622,18 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                 </div>
 
                 {/* 3. Candidate Students List */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-slate-50/50">
+                <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 space-y-1.5 sm:space-y-2 bg-slate-50/50">
                   {filteredCandidates.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center">
-                      <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-2.5">
-                        <Users className="h-5 w-5" />
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-white p-6 sm:p-8 text-center">
+                      <div className="mx-auto flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-full bg-slate-100 text-slate-400 mb-2">
+                        <Users className="h-4 w-4 sm:h-5 sm:w-5" />
                       </div>
                       <h4 className="text-xs font-semibold text-slate-800">
                         {allowedCategoryMembers.length === 0
                           ? `No ${progCatDisplay} students in your team`
                           : 'No eligible students match current filters'}
                       </h4>
-                      <p className="mt-1 text-[11px] text-slate-400 max-w-xs mx-auto">
+                      <p className="mt-1 text-[10px] sm:text-[11px] text-slate-400 max-w-xs mx-auto">
                         {allowedCategoryMembers.length === 0
                           ? `Only students in the ${progCatDisplay} category are permitted to participate in this program.`
                           : 'Try clearing your search query or filter options to see all available candidates.'}
@@ -1641,7 +1642,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                         <button
                           type="button"
                           onClick={handleClearDrawerFilters}
-                          className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
                         >
                           <RotateCcw className="h-3 w-3 text-slate-400" />
                           <span>Clear filters</span>
@@ -1677,7 +1678,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                               setModalSelectedStudent(member.id);
                             }
                           }}
-                          className={`group relative flex items-center gap-3 rounded-xl p-2.5 sm:p-3 border transition-all ${
+                          className={`group relative flex items-center gap-2.5 sm:gap-3 rounded-xl p-2 sm:p-2.5 border transition-all ${
                             isLimitReached || (isTeam && isCurrentSubTeamFull)
                               ? 'border-slate-200/60 bg-slate-100/60 opacity-60 cursor-not-allowed select-none'
                               : isSelected
@@ -1696,7 +1697,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                                   handleToggleCandidate(member.id);
                                 }
                               }}
-                              className={`h-4 w-4 rounded ${
+                              className={`h-3.5 w-3.5 sm:h-4 sm:w-4 rounded ${
                                 isLimitReached || isCurrentSubTeamFull
                                   ? 'border-slate-300 text-slate-300 cursor-not-allowed'
                                   : 'border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer'
@@ -1713,7 +1714,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                                   setModalSelectedStudent(member.id);
                                 }
                               }}
-                              className={`h-4 w-4 rounded-full ${
+                              className={`h-3.5 w-3.5 sm:h-4 sm:w-4 rounded-full ${
                                 isLimitReached
                                   ? 'border-slate-300 text-slate-300 cursor-not-allowed'
                                   : 'border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer'
@@ -1723,7 +1724,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
 
                           {/* Student Avatar */}
                           <div
-                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-xs transition-colors ${
+                            className={`flex h-7 w-7 sm:h-8 sm:w-8 shrink-0 items-center justify-center rounded-lg font-bold text-[11px] sm:text-xs transition-colors ${
                               isLimitReached
                                 ? 'bg-slate-200 text-slate-500'
                                 : isSelected
@@ -1742,11 +1743,11 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                               }`}>
                                 {member.name}
                               </span>
-                              <span className="font-mono text-[10px] text-slate-400">
+                              <span className="font-mono text-[9px] sm:text-[10px] text-slate-400">
                                 #{member.student_id}
                               </span>
                             </div>
-                            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                            <p className="text-[10px] sm:text-[11px] text-slate-500 mt-0.5 truncate">
                               {member.grade ? `Class ${member.grade}${member.section ? `-${member.section.toUpperCase()}` : ''}` : 'Student'}
                               {member.gender ? ` · ${member.gender}` : ''}
                               {(() => {
@@ -1762,10 +1763,10 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                           </div>
 
                           {/* Status Badge & Leader selector */}
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-1 shrink-0">
                             {isLimitReached ? (
                               <span
-                                className="text-[10px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded cursor-help"
+                                className="text-[9px] sm:text-[10px] font-semibold text-rose-700 bg-rose-50 border border-rose-200 px-1.5 py-0.5 rounded cursor-help"
                                 title={limitCheck.reason || 'Participation limit reached'}
                               >
                                 {limitCheck.limitType ? `${limitCheck.limitType.toUpperCase()} LIMIT` : 'Limit Reached'}
@@ -1773,8 +1774,8 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                             ) : isSelected ? (
                               isTeam ? (
                                 isLeader ? (
-                                  <span className="inline-flex items-center gap-1 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold px-2 py-0.5 border border-amber-300">
-                                    <Crown className="h-3 w-3 text-amber-600" /> Leader
+                                  <span className="inline-flex items-center gap-1 rounded bg-amber-100 text-amber-800 text-[9px] sm:text-[10px] font-semibold px-1.5 sm:px-2 py-0.5 border border-amber-300">
+                                    <Crown className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-amber-600" /> Leader
                                   </span>
                                 ) : (
                                   <button
@@ -1783,15 +1784,15 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                                       e.stopPropagation();
                                       setModalSelectedLeader(member.id);
                                     }}
-                                    className="inline-flex items-center gap-1 text-[10px] font-medium text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 px-2 py-0.5 rounded hover:bg-indigo-50 transition-colors"
+                                    className="inline-flex items-center gap-1 text-[9px] sm:text-[10px] font-medium text-indigo-600 hover:text-indigo-800 bg-white border border-indigo-200 px-1.5 py-0.5 rounded hover:bg-indigo-50 transition-colors"
                                     title="Set this student as the team leader"
                                   >
-                                    <Crown className="h-2.5 w-2.5 text-slate-400" />
+                                    <Crown className="h-2 w-2 sm:h-2.5 sm:w-2.5 text-slate-400" />
                                     <span>Make Leader</span>
                                   </button>
                                 )
                               ) : (
-                                <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded">
+                                <span className="text-[9px] sm:text-[10px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 rounded">
                                   Selected
                                 </span>
                               )
@@ -1806,16 +1807,15 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                 {/* 4. Selected Team / Student Preview Strip */}
                 {isTeam ? (
                   modalSelectedStudents.length > 0 && (
-                    <div className="border-t border-indigo-100 bg-indigo-50/90 px-5 py-3 shrink-0 animate-in fade-in">
-                      <div className="flex items-center justify-between gap-3 mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <Crown className="h-4 w-4 text-amber-500 shrink-0" />
+                    <div className="border-t border-indigo-100 bg-indigo-50/90 px-3.5 py-2 sm:px-5 sm:py-3 shrink-0 animate-in fade-in">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Crown className="h-3.5 w-3.5 text-amber-500 shrink-0" />
                           <p className="text-xs font-bold text-slate-900 truncate">
-                            Team:{' '}
                             <span className="text-indigo-700">{teamDisplayName}</span>
                           </p>
-                          <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-700">
-                            {modalSelectedStudents.length}/{neededForCurrentSubTeam} selected
+                          <span className="rounded-full bg-indigo-100 px-1.5 py-0.2 text-[9px] sm:text-[10px] font-semibold text-indigo-700 shrink-0">
+                            {modalSelectedStudents.length}/{neededForCurrentSubTeam}
                           </span>
                         </div>
                         <button
@@ -1824,14 +1824,14 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                             setModalSelectedStudents([]);
                             setModalSelectedLeader(null);
                           }}
-                          className="text-xs font-medium text-indigo-600 hover:text-indigo-800 underline shrink-0"
+                          className="text-[11px] sm:text-xs font-medium text-indigo-600 hover:text-indigo-800 underline shrink-0"
                         >
                           Clear
                         </button>
                       </div>
 
                       {/* Chips of selected students */}
-                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+                      <div className="flex flex-wrap gap-1 max-h-20 sm:max-h-24 overflow-y-auto">
                         {modalSelectedStudents.map((sId) => {
                           const m = teamMembers.find((tm) => tm.id === sId);
                           if (!m) return null;
@@ -1839,16 +1839,16 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                           return (
                             <span
                               key={sId}
-                              className={`inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-medium shadow-2xs ${
+                              className={`inline-flex items-center gap-1 rounded-md sm:rounded-lg border px-1.5 py-0.5 sm:px-2 sm:py-1 text-[10px] sm:text-[11px] font-medium shadow-2xs ${
                                 isLeader
                                   ? 'border-amber-300 bg-amber-50 text-amber-900 ring-1 ring-amber-300/60'
                                   : 'border-slate-200 bg-white text-slate-800'
                               }`}
                             >
-                              {isLeader && <Crown className="h-3 w-3 text-amber-600 shrink-0" />}
-                              <span>{m.name}</span>
+                              {isLeader && <Crown className="h-2.5 w-2.5 text-amber-600 shrink-0" />}
+                              <span className="truncate max-w-[100px]">{m.name}</span>
                               {isLeader && (
-                                <span className="text-[9px] font-bold text-amber-700 uppercase">Leader</span>
+                                <span className="text-[8px] sm:text-[9px] font-bold text-amber-700 uppercase">Leader</span>
                               )}
                               <button
                                 type="button"
@@ -1856,7 +1856,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                                 className="text-slate-400 hover:text-rose-600 ml-0.5 p-0.5"
                                 title="Remove member"
                               >
-                                <X className="h-3 w-3" />
+                                <X className="h-2.5 w-2.5" />
                               </button>
                             </span>
                           );
@@ -1867,20 +1867,20 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                 ) : (
                   selectedStudentData && (
                     <div
-                      className={`border-t px-5 py-2.5 flex items-center justify-between gap-3 shrink-0 animate-in fade-in ${
+                      className={`border-t px-3.5 py-2 sm:px-5 sm:py-2.5 flex items-center justify-between gap-2 shrink-0 animate-in fade-in ${
                         isSelectedStudentLimitReached ? 'border-rose-200 bg-rose-50' : 'border-indigo-100 bg-indigo-50/90'
                       }`}
                     >
-                      <div className="min-w-0 flex items-center gap-2.5">
+                      <div className="min-w-0 flex items-center gap-2">
                         <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${
+                          className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${
                             isSelectedStudentLimitReached ? 'bg-rose-600 text-white' : 'bg-indigo-600 text-white'
                           }`}
                         >
                           {isSelectedStudentLimitReached ? (
-                            <AlertCircle className="h-3.5 w-3.5" />
+                            <AlertCircle className="h-3 w-3" />
                           ) : (
-                            <Check className="h-3.5 w-3.5" />
+                            <Check className="h-3 w-3" />
                           )}
                         </div>
                         <div className="min-w-0">
@@ -1889,29 +1889,21 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                               isSelectedStudentLimitReached ? 'text-rose-950' : 'text-indigo-950'
                             }`}
                           >
-                            {isSelectedStudentLimitReached ? 'Cannot Assign: Limit Reached for ' : 'Ready to assign: '}
                             <span className="font-bold">{selectedStudentData.name}</span>
                           </p>
                           <p
-                            className={`text-[11px] truncate ${
+                            className={`text-[10px] sm:text-[11px] truncate ${
                               isSelectedStudentLimitReached ? 'text-rose-700' : 'text-indigo-700'
                             }`}
                           >
                             ID: #{selectedStudentData.student_id} · {getCategoryDisplay(selectedStudentData.category)}
-                            {selectedStudentData.grade
-                              ? ` · Class ${selectedStudentData.grade}${
-                                  selectedStudentData.section ? `-${selectedStudentData.section.toUpperCase()}` : ''
-                                }`
-                              : ''}
-                            {!isUnlimited &&
-                              ` · Enrolled in ${getStudentProgramStats(selectedStudentData).singleCount}/${applicableLimit} programs`}
                           </p>
                         </div>
                       </div>
                       <button
                         type="button"
                         onClick={() => setModalSelectedStudent('')}
-                        className={`text-xs font-medium underline shrink-0 ${
+                        className={`text-[11px] sm:text-xs font-medium underline shrink-0 ${
                           isSelectedStudentLimitReached
                             ? 'text-rose-700 hover:text-rose-900'
                             : 'text-indigo-600 hover:text-indigo-800'
@@ -1924,11 +1916,11 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                 )}
 
                 {/* 5. Sticky Drawer Footer */}
-                <div className="border-t border-slate-200/80 bg-white px-5 py-3.5 flex items-center justify-between gap-3 shrink-0">
+                <div className="border-t border-slate-200/80 bg-white px-3.5 py-2.5 sm:px-5 sm:py-3.5 flex items-center justify-between gap-2 shrink-0">
                   <button
                     type="button"
                     onClick={closeAssignDrawer}
-                    className="rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
+                    className="rounded-lg sm:rounded-xl px-3 py-1.5 sm:px-4 sm:py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors"
                   >
                     Cancel
                   </button>
@@ -1953,27 +1945,52 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                         ? isCurrentSubTeamFull || modalSelectedStudents.length !== neededForCurrentSubTeam
                         : !modalSelectedStudent || isSelectedStudentLimitReached)
                     }
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="inline-flex items-center gap-1.5 rounded-lg sm:rounded-xl bg-indigo-600 px-3 py-1.5 sm:px-5 sm:py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
-                    {isTeam ? <Users className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                    {isTeam ? <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <UserPlus className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
                     <span>
-                      {assigningStudent
-                        ? isTeam
-                          ? 'Assigning Team...'
-                          : 'Assigning Student...'
-                        : isTeam
-                          ? isCurrentSubTeamFull
-                            ? `Sub-Team ${modalSelectedSubTeam} Full`
-                            : modalSelectedStudents.length === neededForCurrentSubTeam
-                              ? `Confirm & Assign ${teamDisplayName} (${neededForCurrentSubTeam} Members)`
-                              : `Select ${neededForCurrentSubTeam - modalSelectedStudents.length} More Member${
-                                  neededForCurrentSubTeam - modalSelectedStudents.length === 1 ? '' : 's'
-                                }`
-                          : isSelectedStudentLimitReached
-                            ? 'Limit Reached for Student'
-                            : modalSelectedStudent
-                              ? 'Confirm & Assign Student'
-                              : 'Select a Student to Assign'}
+                      {assigningStudent ? (
+                        <>
+                          <span className="hidden sm:inline">{isTeam ? 'Assigning Team...' : 'Assigning Student...'}</span>
+                          <span className="sm:hidden">Assigning...</span>
+                        </>
+                      ) : isTeam ? (
+                        isCurrentSubTeamFull ? (
+                          <>
+                            <span className="hidden sm:inline">Sub-Team {modalSelectedSubTeam} Full</span>
+                            <span className="sm:hidden">Full</span>
+                          </>
+                        ) : modalSelectedStudents.length === neededForCurrentSubTeam ? (
+                          <>
+                            <span className="hidden sm:inline">Confirm & Assign {teamDisplayName} ({neededForCurrentSubTeam} Members)</span>
+                            <span className="sm:hidden">Confirm ({neededForCurrentSubTeam})</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="hidden sm:inline">
+                              Select {neededForCurrentSubTeam - modalSelectedStudents.length} More Member{neededForCurrentSubTeam - modalSelectedStudents.length === 1 ? '' : 's'}
+                            </span>
+                            <span className="sm:hidden">
+                              Select {neededForCurrentSubTeam - modalSelectedStudents.length}
+                            </span>
+                          </>
+                        )
+                      ) : isSelectedStudentLimitReached ? (
+                        <>
+                          <span className="hidden sm:inline">Limit Reached for Student</span>
+                          <span className="sm:hidden">Limit Reached</span>
+                        </>
+                      ) : modalSelectedStudent ? (
+                        <>
+                          <span className="hidden sm:inline">Confirm & Assign Student</span>
+                          <span className="sm:hidden">Confirm</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="hidden sm:inline">Select a Student to Assign</span>
+                          <span className="sm:hidden">Select Student</span>
+                        </>
+                      )}
                     </span>
                   </button>
                 </div>
