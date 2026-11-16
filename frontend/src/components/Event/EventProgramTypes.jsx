@@ -267,13 +267,13 @@ const EventProgramTypes = ({ eventId, event, onRefresh }) => {
   };
 
   return (
-    <div className="p-5 sm:p-6 lg:p-7 space-y-6 bg-slate-50/50 min-h-[620px]">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       {/* Header & Overview */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 p-5 sm:p-6 shadow-2xs">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-12 h-12 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs shrink-0">
-              <Tags className="w-6 h-6" />
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shadow-2xs shrink-0">
+              <Tags className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -290,22 +290,11 @@ const EventProgramTypes = ({ eventId, event, onRefresh }) => {
 
           <button
             onClick={openCreate}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-2xs hover:shadow transition-all cursor-pointer shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-2xs hover:shadow transition-all cursor-pointer shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span>Add Program Type</span>
           </button>
-        </div>
-
-        {/* Global info callout */}
-        <div className="mt-4 p-3.5 bg-gradient-to-r from-indigo-50/80 via-purple-50/40 to-indigo-50/60 border border-indigo-100/90 rounded-xl text-xs text-indigo-900 flex items-start gap-3">
-          <Sparkles className="w-4 h-4 text-indigo-600 shrink-0 mt-0.5" />
-          <div className="space-y-0.5">
-            <p className="font-semibold text-indigo-950">Dynamic Event-wide Allocation</p>
-            <p className="text-[11px] text-indigo-800/90 leading-relaxed">
-              Every type configured here automatically updates your <strong>Add Program modal</strong>, <strong>Filters</strong>, <strong>Category Participation Limits</strong>, <strong>Excel/CSV Bulk Importer</strong>, and <strong>Category Championship Leaderboards</strong>.
-            </p>
-          </div>
         </div>
       </div>
 

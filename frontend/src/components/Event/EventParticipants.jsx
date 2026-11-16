@@ -139,10 +139,10 @@ const EventParticipants = ({
   const totalScore = offstagePoints + stagePoints;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto py-2 relative">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px] relative">
       
       {/* Header Card Box */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/90 shadow-2xs flex items-center justify-between">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">
             {isTeamManager ? 'Team Participants' : 'Participants'}
@@ -159,7 +159,7 @@ const EventParticipants = ({
         <button
           onClick={fetchParticipantsData}
           disabled={loading}
-          className="flex items-center space-x-2 px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-2xs transition-colors cursor-pointer"
+          className="flex items-center space-x-2 px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-2xs transition-colors cursor-pointer self-start sm:self-auto"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-600' : 'text-gray-500'}`} />
           <span>Refresh</span>
@@ -236,7 +236,7 @@ const EventParticipants = ({
       </div>
 
       {/* Participants Table */}
-      <div className="bg-white border border-gray-100 rounded-2xl shadow-2xs overflow-hidden">
+      <div className="bg-white border border-slate-200/80 rounded-xl shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-100">
             <thead className="bg-gray-50/70">

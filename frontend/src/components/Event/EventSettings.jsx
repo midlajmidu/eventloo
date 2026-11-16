@@ -671,9 +671,9 @@ const EventSettings = ({ event, eventId, onRefresh }) => {
   const isDeadlinePassed = registrationDeadline && new Date() > new Date(registrationDeadline);
 
   return (
-    <div className="space-y-5 max-w-4xl mx-auto py-2">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       {/* Top Header Card */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center space-x-3">
           <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
             <Settings className="h-5 w-5" />

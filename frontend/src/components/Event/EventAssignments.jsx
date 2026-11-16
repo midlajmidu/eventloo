@@ -262,7 +262,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
   if (loading) {
     return (
       <div className="py-20 text-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-amber-600 mx-auto mb-3"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto mb-3"></div>
         <p className="text-sm text-gray-500 font-medium">Loading Registrations...</p>
       </div>
     );
@@ -271,9 +271,9 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
   const isSelectionIncomplete = !selectedCategory || !selectedTeamId;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto py-2">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       {/* Top Header Card Box */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Assignments & Registrations</h1>
           <p className="text-xs text-gray-500 mt-0.5">
@@ -283,7 +283,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
 
         <button
           onClick={() => setShowInsights(!showInsights)}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-2xs transition-colors inline-flex items-center space-x-2 self-start sm:self-auto cursor-pointer"
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors inline-flex items-center space-x-2 self-start sm:self-auto cursor-pointer"
         >
           <BarChart2 className="w-4 h-4" />
           <span>Insights</span>
@@ -300,26 +300,26 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
 
       {/* Insights Drawer / Modal */}
       {showInsights && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 space-y-3">
+        <div className="bg-indigo-50/60 border border-indigo-100/90 rounded-xl p-5 space-y-3">
           <div className="flex justify-between items-center">
-            <h3 className="text-sm font-bold text-amber-900 flex items-center space-x-2">
-              <BarChart2 className="w-4 h-4 text-amber-600" />
+            <h3 className="text-sm font-bold text-indigo-950 flex items-center space-x-2">
+              <BarChart2 className="w-4 h-4 text-indigo-600" />
               <span>Registration Insights Overview</span>
             </h3>
-            <button onClick={() => setShowInsights(false)} className="text-amber-700 hover:text-amber-900 cursor-pointer">
+            <button onClick={() => setShowInsights(false)} className="text-indigo-700 hover:text-indigo-900 cursor-pointer">
               <X className="w-4 h-4" />
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-            <div className="bg-white p-3.5 rounded-xl border border-amber-200">
+            <div className="bg-white p-3.5 rounded-xl border border-indigo-100 shadow-2xs">
               <div className="text-gray-500 font-medium">Total Competitions</div>
               <div className="text-lg font-extrabold text-gray-900">{programs.length}</div>
             </div>
-            <div className="bg-white p-3.5 rounded-xl border border-amber-200">
+            <div className="bg-white p-3.5 rounded-xl border border-indigo-100 shadow-2xs">
               <div className="text-gray-500 font-medium">Total Registered Teams</div>
               <div className="text-lg font-extrabold text-gray-900">{teams.length}</div>
             </div>
-            <div className="bg-white p-3.5 rounded-xl border border-amber-200">
+            <div className="bg-white p-3.5 rounded-xl border border-indigo-100 shadow-2xs">
               <div className="text-gray-500 font-medium">Total Active Assignments</div>
               <div className="text-lg font-extrabold text-emerald-700">{assignments.length}</div>
             </div>
@@ -329,7 +329,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
 
       {isSelectionIncomplete ? (
         /* SCREENSHOT 1 STATE: Centered Selection Card Container */
-        <div className="bg-white border border-gray-100 rounded-3xl p-12 shadow-2xs text-center min-h-[420px] flex items-center justify-center">
+        <div className="bg-white border border-slate-200/80 rounded-xl p-8 sm:p-12 shadow-2xs text-center min-h-[420px] flex items-center justify-center">
           <div className="max-w-md w-full mx-auto space-y-6">
             <div>
               <h2 className="text-xl font-bold text-gray-900">Registrations</h2>
@@ -344,7 +344,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                 <select
                   value={selectedCategory}
                   onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-3 text-sm text-gray-700 bg-white border border-gray-200 rounded-2xl appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs font-medium cursor-pointer"
+                  className="w-full px-4 py-3 text-sm text-gray-700 bg-white border border-gray-200 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs font-medium cursor-pointer"
                 >
                   <option value="">Select Category</option>
                   {categoryOptions.map((cat) => (
@@ -360,7 +360,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                 <select
                   value={selectedTeamId}
                   onChange={(e) => setSelectedTeamId(e.target.value)}
-                  className="w-full px-4 py-3 text-sm text-gray-700 bg-white border border-gray-200 rounded-2xl appearance-none focus:outline-none focus:ring-2 focus:ring-amber-500 shadow-2xs font-medium cursor-pointer"
+                  className="w-full px-4 py-3 text-sm text-gray-700 bg-white border border-gray-200 rounded-xl appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs font-medium cursor-pointer"
                 >
                   <option value="">Select Team</option>
                   {teams.map((t) => (
@@ -379,7 +379,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
         </div>
       ) : (
         /* SCREENSHOT 2 STATE: Active Table View */
-        <div className="bg-white border border-gray-100 rounded-3xl p-6 shadow-2xs space-y-6">
+        <div className="bg-white border border-slate-200/80 rounded-xl p-5 sm:p-6 shadow-2xs space-y-5">
           {/* Top Controls Filter Row */}
           <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-gray-50/70 p-3.5 rounded-2xl border border-gray-200/80">
             <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
@@ -693,7 +693,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                                             <button
                                               type="button"
                                               onClick={() => handleSetLeader(activeDrawerProgram.id, studentId, subNum)}
-                                              className="px-2 py-1 text-[10px] font-semibold text-gray-600 hover:text-amber-800 hover:bg-amber-50 rounded-lg border border-gray-200 hover:border-amber-200 transition-colors flex items-center space-x-1 cursor-pointer"
+                                              className="px-2 py-1 text-[10px] font-semibold text-gray-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg border border-gray-200 hover:border-indigo-200 transition-colors flex items-center space-x-1 cursor-pointer"
                                             >
                                               <Crown className="w-3 h-3 text-gray-400" />
                                               <span>Make Leader</span>

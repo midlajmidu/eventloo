@@ -1366,10 +1366,10 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto py-2">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       
       {/* Top Header Card Box */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Documents & Exports</h1>
           <p className="text-xs text-gray-500 mt-0.5">
@@ -1380,7 +1380,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
-          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-2xs transition-colors inline-flex items-center space-x-1.5 self-start sm:self-auto cursor-pointer"
+          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors inline-flex items-center space-x-1.5 self-start sm:self-auto cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>New Export</span>
@@ -1388,7 +1388,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
       </div>
 
       {/* Main Exports Queue Table */}
-      <div className="bg-white border border-gray-100 rounded-3xl shadow-2xs overflow-hidden">
+      <div className="bg-white border border-slate-200/80 rounded-xl shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-100">
             <thead className="bg-gray-50/70">

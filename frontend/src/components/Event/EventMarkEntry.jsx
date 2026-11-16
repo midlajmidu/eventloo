@@ -422,9 +422,9 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       {/* Header Card Box */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Mark Entry</h1>
           <p className="text-xs text-gray-500 mt-0.5">Enter and manage judge marks for <span className="font-semibold text-gray-700">{event?.title || 'this event'}</span></p>
@@ -444,7 +444,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
       )}
 
       {/* Minimal Filter Bar */}
-      <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-white p-4 rounded-xl border border-gray-200 shadow-2xs">
+      <div className="flex flex-col sm:flex-row gap-3 justify-between items-center bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200/80 shadow-2xs">
         <div className="relative w-full sm:w-80">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -481,7 +481,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
       </div>
 
       {/* Competitions Table */}
-      <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-2xs">
+      <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-2xs">
         {loadingPrograms ? (
           <div className="p-12 text-center text-gray-500">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3"></div>

@@ -338,12 +338,12 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
   const entryUnit = editing?.is_team_based ? (slotsCount === 1 ? 'group' : 'groups') : (slotsCount === 1 ? 'participant' : 'participants');
 
   return (
-    <div className="min-h-[620px] bg-slate-50 p-5 sm:p-7">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
+      {/* Top Header Card Box */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">Event operations</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Schedule</h1>
-          <p className="mt-1 text-sm text-slate-500">Assign every program to a stage, date, and start time.</p>
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Schedule</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Assign every program to a stage, date, and start time.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {/* Final Schedule Confirmation Toggle */}
@@ -377,9 +377,9 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
             <button
               onClick={loadPdfPreview}
               disabled={loadingPdf}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors shadow-2xs"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
             >
-              <RefreshCw className={`h-4 w-4 ${loadingPdf ? 'animate-spin text-indigo-600' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingPdf ? 'animate-spin text-indigo-600' : ''}`} />
               <span>Refresh PDF</span>
             </button>
           )}
@@ -388,33 +388,33 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
               setActiveTab('preview');
               if (!pdfUrl) loadPdfPreview();
             }}
-            className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2.5 text-sm font-semibold transition-colors shadow-2xs ${
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors shadow-2xs cursor-pointer ${
               activeTab === 'preview'
                 ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
                 : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
             }`}
           >
-            <Eye className="h-4 w-4" /> Live Preview
+            <Eye className="h-3.5 w-3.5" /> <span>Live Preview</span>
           </button>
           <button
             onClick={openPreviewModal}
             title="Open preview in a pop-up modal"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
           >
-            <Maximize2 className="h-4 w-4 text-slate-500" />
+            <Maximize2 className="h-3.5 w-3.5 text-slate-500" />
             <span>Modal</span>
           </button>
           <button
             onClick={() => download('csv')}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
           >
-            <FileSpreadsheet className="h-4 w-4" /> CSV
+            <FileSpreadsheet className="h-3.5 w-3.5" /> <span>CSV</span>
           </button>
           <button
             onClick={() => download('pdf')}
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 transition-colors cursor-pointer"
           >
-            <Download className="h-4 w-4" /> Export PDF
+            <Download className="h-3.5 w-3.5" /> <span>Export PDF</span>
           </button>
         </div>
       </div>

@@ -126,22 +126,22 @@ const EventStages = ({ eventId }) => {
   };
 
   return (
-    <div className="min-h-[620px] bg-slate-50 p-5 sm:p-7">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
+      {/* Top Header Card Box */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-600">Event setup</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Stages</h1>
-          <p className="mt-1 text-sm text-slate-500">Manage event stages, halls, and locations.</p>
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Stages</h1>
+          <p className="text-xs text-gray-500 mt-0.5">Manage event stages, halls, and locations.</p>
         </div>
-        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
-          <Plus className="h-4 w-4" /> Add stage
+        <button onClick={openCreate} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 cursor-pointer self-start sm:self-auto">
+          <Plus className="h-4 w-4" /> <span>Add Stage</span>
         </button>
       </div>
 
-      {message && <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">{message}</div>}
-      {error && !drawerOpen && <div className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {message && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-medium text-emerald-700">{message}</div>}
+      {error && !drawerOpen && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700">{error}</div>}
 
-      <section className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
         <div className="border-b border-slate-200 p-4">
           <label className="relative block max-w-md">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />

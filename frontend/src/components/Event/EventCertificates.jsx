@@ -366,7 +366,7 @@ const EventCertificates = ({ event, eventId }) => {
   const configuredCount = availableTemplateIds.filter(id => templates[id]?.status === 'Custom' || templates[id]?.bgImage).length;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto py-2">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       
       {/* Save Success Toast */}
       {savedSuccess && (
@@ -382,11 +382,21 @@ const EventCertificates = ({ event, eventId }) => {
         </div>
       )}
 
+      {/* Top Header Card Box */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Templates</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Design and customize certificate and ID badge templates for <span className="font-semibold text-gray-700">{event?.title || 'this Event'}</span>
+          </p>
+        </div>
+      </div>
+
       {/* Main Grid Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* Left / Center Canvas Workspace (Col 8) */}
-        <div className="lg:col-span-8 bg-white border border-gray-100 rounded-3xl p-6 shadow-2xs space-y-4">
+        <div className="lg:col-span-8 bg-white border border-slate-200/80 rounded-xl p-6 shadow-2xs space-y-4">
           
           {/* Header Title & Top Action Bar */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -706,7 +716,7 @@ const EventCertificates = ({ event, eventId }) => {
         </div>
 
         {/* Right Template Library Sidebar (Col 4) */}
-        <div className="lg:col-span-4 bg-white border border-gray-100 rounded-3xl p-6 shadow-2xs space-y-6">
+        <div className="lg:col-span-4 bg-white border border-slate-200/80 rounded-xl p-6 shadow-2xs space-y-6">
           
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-100 pb-4">

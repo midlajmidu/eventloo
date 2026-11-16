@@ -263,9 +263,9 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
   };
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto py-2">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       {/* Header Card Box */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/90 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Results & Standings</h1>
             <p className="text-xs text-gray-500 mt-0.5">
@@ -339,7 +339,7 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
         
         {/* LEFT COLUMN: Competitions Table (7 Cols) */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-2xs space-y-4">
+          <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-2xs space-y-4">
             
             {/* Table Search & Actions */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -540,7 +540,7 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
 
         {/* RIGHT COLUMN: Team Points Leaderboard (5 Cols) */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-white border border-gray-200 rounded-2xl p-4 shadow-2xs space-y-4">
+          <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-2xs space-y-4">
             
             {/* Header & Filter Controls */}
             <div className="flex items-center justify-between gap-2">

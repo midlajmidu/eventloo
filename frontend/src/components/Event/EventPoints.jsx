@@ -66,15 +66,15 @@ const EventPoints = ({ event, eventId }) => {
   }
 
   return (
-    <div className="space-y-5 max-w-6xl mx-auto py-2">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-2xl border border-gray-100 shadow-2xs">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 tracking-tight flex items-center space-x-2">
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight flex items-center space-x-2">
             <span>Points Standings</span>
           </h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Official published team leaderboard for {event?.title || 'this Event'}
+            Official published team leaderboard for <span className="font-semibold text-gray-700">{event?.title || 'this Event'}</span>
           </p>
         </div>
 
@@ -84,7 +84,7 @@ const EventPoints = ({ event, eventId }) => {
             fetchData().finally(() => setRefreshing(false));
           }}
           disabled={refreshing}
-          className="px-3.5 py-2 bg-gray-900 hover:bg-gray-800 text-white text-xs font-bold rounded-xl transition-all inline-flex items-center space-x-1.5 self-start sm:self-auto cursor-pointer"
+          className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-2xs transition-all inline-flex items-center space-x-1.5 self-start sm:self-auto cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
           <span>{refreshing ? 'Syncing...' : 'Sync Points'}</span>
@@ -92,7 +92,7 @@ const EventPoints = ({ event, eventId }) => {
       </div>
 
       {/* Main Leaderboard Table */}
-      <div className="bg-white border border-gray-100 rounded-2xl shadow-2xs overflow-hidden">
+      <div className="bg-white border border-slate-200/80 rounded-xl shadow-2xs overflow-hidden">
         {teamPoints.length === 0 ? (
           <div className="py-16 text-center text-gray-400">
             <Trophy className="w-10 h-10 text-gray-300 mx-auto mb-2" />

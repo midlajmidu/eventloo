@@ -76,21 +76,20 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
   });
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto py-2">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       
-      {/* Top Header Title & Subtitle */}
-      <div className="rounded-2xl border border-indigo-100 bg-gradient-to-r from-white via-white to-indigo-50/70 px-5 py-4 shadow-sm">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-indigo-600">Performance</p>
-        <h1 className="mt-1 text-xl sm:text-2xl font-bold text-slate-950 tracking-tight flex items-center space-x-2">
-          <span>Top Scorers</span>
-        </h1>
-        <p className="text-xs sm:text-sm text-slate-500 mt-1">
-          View event top performers and their total points (only includes published results)
-        </p>
+      {/* Top Header Card Box */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight">Top Scorers</h1>
+          <p className="text-xs text-gray-500 mt-0.5">
+            View event top performers and their total points (only includes published results)
+          </p>
+        </div>
       </div>
 
       {/* Checkboxes & Filters Controls Card */}
-      <div className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-200/90 shadow-2xs space-y-4">
+      <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200/80 shadow-2xs space-y-4">
         
         {/* Checkboxes Row */}
         <div className="flex flex-wrap items-center gap-6 text-xs sm:text-sm font-semibold text-gray-800 border-b border-gray-100 pb-3">
@@ -178,7 +177,7 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
       </div>
 
       {/* Main Top Scorers Table */}
-      <div className="bg-white border border-gray-100 rounded-3xl shadow-2xs overflow-hidden">
+      <div className="bg-white border border-slate-200/80 rounded-xl shadow-2xs overflow-hidden">
         {loading ? (
           <div className="py-20 text-center">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3"></div>
