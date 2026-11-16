@@ -560,9 +560,29 @@ const TeamAssignments = () => {
         
         // Only list students whose category is allowed for this program
         const isCatAllowed = (sCat, pCat) => {
-          if (!pCat || pCat.toLowerCase() === 'all' || pCat.toLowerCase() === 'general') return true;
-          if (!sCat) return false;
-          return sCat.trim().toLowerCase() === pCat.trim().toLowerCase();
+          if (!pCat) return true;
+          const pLower = pCat.trim().toLowerCase();
+          const sLower = (sCat || '').trim().toLowerCase();
+
+          // Built-in universal general aliases
+          if (['all', 'general', 'gen', 'gn', 'open'].includes(pLower)) return true;
+
+          // Direct category match (standard category program)
+          if (sLower && sLower === pLower) return true;
+
+          // Check if program category is a tenant-configured mixed category
+          const catObj = (categories || []).find((c) => (c.code || '').toLowerCase() === pLower);
+          if (catObj?.is_mixing) {
+            const allowed = (catObj.mixed_category_codes || []).map((code) => String(code).toLowerCase());
+            // If specific categories are configured to mix (e.g. LP and UP), student must be in allowed list
+            if (allowed.length > 0) {
+              return allowed.includes(sLower);
+            }
+            // If no specific categories were checked, it is universal / open to all categories
+            return true;
+          }
+
+          return false;
         };
 
         const eligibleMembers = teamMembers.filter((m) => {

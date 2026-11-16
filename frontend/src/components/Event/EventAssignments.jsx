@@ -205,6 +205,30 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
     return false;
   };
 
+  const isStudentEligibleForProgramCategory = (studentCat, programCat) => {
+    if (!programCat) return true;
+    const pLower = String(programCat).trim().toLowerCase();
+    const sLower = String(studentCat || '').trim().toLowerCase();
+
+    // Universal open aliases
+    if (['all', 'general', 'gen', 'gn', 'open', 'general_a', 'cat-a'].includes(pLower)) return true;
+
+    // Direct match (e.g. program is 'lp' and student is 'lp')
+    if (sLower && sLower === pLower) return true;
+
+    // Check if category is defined in school categories
+    const catObj = (categories || []).find((c) => (c.code || '').toLowerCase() === pLower);
+    if (catObj?.is_mixing || catObj?.is_general) {
+      const allowed = (catObj.mixed_category_codes || []).map((code) => String(code).toLowerCase());
+      if (allowed.length > 0) {
+        return allowed.includes(sLower);
+      }
+      return true;
+    }
+
+    return false;
+  };
+
   // Selected Team Object
   const currentTeam = teams.find(t => t.id === parseInt(selectedTeamId, 10));
 
@@ -531,12 +555,10 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
           });
           if (isAssigned) return false;
 
-          // Category check: General competitions allow students of any category to participate
+          // Category compatibility check (respects standard, general, and mixed category rules)
           const progCat = activeDrawerProgram?.category;
-          if (progCat && !isGeneralCategory(progCat)) {
-            if (m.category && m.category.toLowerCase() !== progCat.toLowerCase()) {
-              return false;
-            }
+          if (!isStudentEligibleForProgramCategory(m.category, progCat)) {
+            return false;
           }
 
           if (!drawerSearch) return true;
