@@ -208,7 +208,7 @@ const TeamStudents = () => {
           <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
             <AlertCircle className="h-5 w-5" />
           </div>
-          <h2 className="mt-4 text-base font-semibold text-slate-900">Unable to load roster</h2>
+          <h2 className="mt-4 text-base font-semibold text-slate-900">Unable to load students</h2>
           <p className="mt-1 text-sm text-slate-500">{error}</p>
           <button
             type="button"
@@ -239,7 +239,7 @@ const TeamStudents = () => {
               Team Students
             </h1>
             <p className="mt-0.5 text-xs text-slate-500">
-              Enrolled student roster and categories for{' '}
+              Enrolled students and categories for{' '}
               <span className="font-semibold text-slate-700">{teamName}</span>.
             </p>
           </div>

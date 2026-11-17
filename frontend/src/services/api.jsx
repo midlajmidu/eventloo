@@ -43,15 +43,70 @@ reportApi.interceptors.request.use(
 );
 
 
+// Single-flight token refresh mutex & queue to prevent race conditions on concurrent 401s
+let isRefreshing = false;
+let failedQueue = [];
+
+const processQueue = (error, token = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token);
+    }
+  });
+  failedQueue = [];
+};
+
+const handleRefreshFailure = (refreshError) => {
+  const currentRole = localStorage.getItem('user_role');
+  const isTeamManager = currentRole === 'team_manager' || (!currentRole && !!localStorage.getItem('team_data') && !localStorage.getItem('user'));
+  
+  // Only clear auth and redirect to login on genuine auth rejection (401/403).
+  // Never log out on temporary 500s, 502/503 server restarts, or network drops during development reload.
+  const status = refreshError.response?.status;
+  const isAuthRejection = status === 401 || status === 403;
+
+  if (isAuthRejection) {
+    if (isTeamManager) {
+      localStorage.removeItem('team_data');
+      if (localStorage.getItem('user_role') === 'team_manager') {
+        localStorage.removeItem('user_role');
+      }
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login?tab=team';
+      }
+      return;
+    }
+
+    const loginPath = currentRole === 'super_admin' ? '/super-admin/login' : '/login';
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('user');
+    if (window.location.pathname !== loginPath) {
+      window.location.href = loginPath;
+    }
+  }
+};
+
 // Handle 401 on reportApi by refreshing token once, then retrying
 reportApi.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/token/refresh/')) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => reportApi(originalRequest))
+          .catch((err) => Promise.reject(err));
+      }
+
       originalRequest._retry = true;
-      const currentRole = localStorage.getItem('user_role');
-      const isTeamManager = currentRole === 'team_manager' || (!currentRole && !!localStorage.getItem('team_data') && !localStorage.getItem('user'));
+      isRefreshing = true;
 
       try {
         await axios.post(
@@ -60,29 +115,13 @@ reportApi.interceptors.response.use(
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
           }
         );
+        isRefreshing = false;
+        processQueue(null);
         return reportApi(originalRequest);
       } catch (refreshError) {
-        if (isTeamManager) {
-          localStorage.removeItem('team_data');
-          if (localStorage.getItem('user_role') === 'team_manager') {
-            localStorage.removeItem('user_role');
-          }
-          if (window.location.pathname !== '/login') {
-            window.location.href = '/login?tab=team';
-          }
-          return Promise.reject(refreshError);
-        }
-
-        // Clear and redirect to login on refresh failure
-        const loginPath = currentRole === 'super_admin' ? '/super-admin/login' : '/login';
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user_role');
-        localStorage.removeItem('user');
-        if (window.location.pathname !== loginPath) {
-          window.location.href = loginPath;
-        }
+        isRefreshing = false;
+        processQueue(refreshError, null);
+        handleRefreshFailure(refreshError);
         return Promise.reject(refreshError);
       }
     }
@@ -113,44 +152,31 @@ api.interceptors.response.use(
       && !requestPath.includes('token/refresh/')
       && !isAuthenticationRequest
     ) {
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          failedQueue.push({ resolve, reject });
+        })
+          .then(() => api(originalRequest))
+          .catch((err) => Promise.reject(err));
+      }
+
       originalRequest._retry = true;
-      const currentRole = localStorage.getItem('user_role');
-      const isTeamManager = currentRole === 'team_manager' || (!currentRole && !!localStorage.getItem('team_data') && !localStorage.getItem('user'));
+      isRefreshing = true;
       
       try {
-        // Use a fresh axios instance to avoid interceptors
         await axios.post(
           `${API_BASE_URL}token/refresh/`, {}, {
             withCredentials: true,
             headers: { 'X-Requested-With': 'XMLHttpRequest' },
           }
         );
-        
+        isRefreshing = false;
+        processQueue(null);
         return api(originalRequest);
       } catch (refreshError) {
-        if (isTeamManager) {
-          localStorage.removeItem('team_data');
-          if (localStorage.getItem('user_role') === 'team_manager') {
-            localStorage.removeItem('user_role');
-          }
-          if (window.location.pathname !== '/login') {
-            window.location.href = '/login?tab=team';
-          }
-          return Promise.reject(refreshError);
-        }
-
-        // Clear all auth data
-        const loginPath = currentRole === 'super_admin' ? '/super-admin/login' : '/login';
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user_role');
-        localStorage.removeItem('user');
-        
-        // Only redirect if not already on login page
-        if (window.location.pathname !== loginPath) {
-          window.location.href = loginPath;
-        }
+        isRefreshing = false;
+        processQueue(refreshError, null);
+        handleRefreshFailure(refreshError);
         return Promise.reject(refreshError);
       }
     }

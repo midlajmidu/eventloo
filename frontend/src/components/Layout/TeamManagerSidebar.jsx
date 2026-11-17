@@ -34,7 +34,7 @@ const TeamManagerSidebar = ({ isOpen = false, setIsOpen = () => { } }) => {
   const navigation = [
     { name: 'Dashboard', href: '/team-manager', icon: Home, exact: true },
     { name: 'My Students', href: '/team-manager/students', icon: Users },
-    { name: 'Events & Roster', href: '/team-manager/events', icon: Calendar },
+    { name: 'Events', href: '/team-manager/events', icon: Calendar },
     { name: 'Points & Rankings', href: '/team-manager/points', icon: Trophy },
   ];
 

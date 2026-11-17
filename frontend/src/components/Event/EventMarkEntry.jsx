@@ -6,7 +6,9 @@ import {
   X,
   ChevronRight,
   ArrowUpDown,
-  AlertCircle
+  AlertCircle,
+  Users,
+  User
 } from 'lucide-react';
 import { eventProgramsAPI, markEntryAPI } from '../../services/api';
 
@@ -472,11 +474,11 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto justify-end">
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700"
+            className="w-full sm:w-auto px-3 py-2 text-xs sm:text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700"
           >
             <option value="">All Categories</option>
             {categoriesList.map(cat => (
@@ -487,7 +489,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700"
+            className="w-full sm:w-auto px-3 py-2 text-xs sm:text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-gray-700"
           >
             <option value="">All Statuses</option>
             <option value="completed">Marks Entered</option>
@@ -496,7 +498,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
         </div>
       </div>
 
-      {/* Competitions Table */}
+      {/* Competitions View */}
       <div className="bg-white border border-slate-200/80 rounded-xl overflow-hidden shadow-2xs">
         {loadingPrograms ? (
           <div className="p-12 text-center text-gray-500">
@@ -504,57 +506,113 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
             <p className="text-sm">Loading competitions...</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead className="bg-gray-50/80 border-b border-gray-200">
-                <tr>
-                  <th className="px-6 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Competition</th>
-                  <th className="px-6 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
-                  <th className="px-6 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Gender</th>
-                  <th className="px-6 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
-                {filteredPrograms.length > 0 ? (
-                  filteredPrograms.map((prog) => (
-                    <tr key={prog.id} className="hover:bg-gray-50/80 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-semibold text-gray-900">{prog.name}</div>
-                        <div className="text-xs text-gray-400">
-                          {prog.is_team_based ? 'Team Competition' : 'Individual Competition'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 capitalize">
-                        {prog.category_display || prog.category || 'General'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 capitalize">
-                        {prog.gender || 'General'}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(prog.id)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <button
-                          onClick={() => openMarkEntryDrawer(prog)}
-                          className="px-3.5 py-1.5 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg transition-colors inline-flex items-center space-x-1.5 border border-indigo-200 shadow-2xs"
-                        >
-                          <span>Enter Mark</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
+          <>
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead className="bg-gray-50/80 border-b border-gray-200">
+                  <tr>
+                    <th className="px-6 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Competition</th>
+                    <th className="px-6 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Category</th>
+                    <th className="px-6 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Gender</th>
+                    <th className="px-6 py-3.5 text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3.5 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 bg-white">
+                  {filteredPrograms.length > 0 ? (
+                    filteredPrograms.map((prog) => (
+                      <tr key={prog.id} className="hover:bg-gray-50/80 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-semibold text-gray-900">{prog.name}</div>
+                          <div className="text-xs text-gray-400">
+                            {prog.is_team_based ? 'Team Competition' : 'Individual Competition'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 capitalize">
+                          {prog.category_display || prog.category || 'General'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 capitalize">
+                          {prog.gender || 'General'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {getStatusBadge(prog.id)}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right">
+                          <button
+                            onClick={() => openMarkEntryDrawer(prog)}
+                            className="px-3.5 py-1.5 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg transition-colors inline-flex items-center space-x-1.5 border border-indigo-200 shadow-2xs"
+                          >
+                            <span>Enter Mark</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan="5" className="px-6 py-12 text-center text-gray-400 text-sm">
+                        No competitions found matching filters.
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="5" className="px-6 py-12 text-center text-gray-400 text-sm">
-                      No competitions found matching filters.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View */}
+            <div className="block sm:hidden divide-y divide-gray-100 bg-white">
+              {filteredPrograms.length > 0 ? (
+                filteredPrograms.map((prog) => (
+                  <div key={prog.id} className="p-3.5 space-y-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-bold text-gray-900 leading-snug">
+                          {prog.name}
+                        </div>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 capitalize border border-slate-200">
+                            {prog.category_display || prog.category || 'General'}
+                          </span>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-50 text-gray-600 border border-gray-200 capitalize">
+                            {prog.gender || 'General'}
+                          </span>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-gray-500">
+                            {prog.is_team_based ? (
+                              <span className="inline-flex items-center gap-0.5 text-indigo-600 font-semibold">
+                                <Users className="w-2.5 h-2.5" /> Team
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-0.5 text-gray-600">
+                                <User className="w-2.5 h-2.5" /> Individual
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="shrink-0">
+                        {getStatusBadge(prog.id)}
+                      </div>
+                    </div>
+
+                    <div className="pt-1">
+                      <button
+                        onClick={() => openMarkEntryDrawer(prog)}
+                        className="w-full py-2 px-3 text-xs font-semibold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg transition-colors flex items-center justify-center space-x-1 border border-indigo-200 shadow-2xs"
+                      >
+                        <span>Enter Mark</span>
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-gray-400 text-xs">
+                  No competitions found matching filters.
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
 
@@ -567,41 +625,47 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
             onClick={closeDrawer}
           />
 
-          <div className="fixed inset-y-0 right-0 max-w-4xl lg:max-w-5xl w-full bg-white shadow-2xl flex flex-col z-50 transform transition-transform duration-300 ease-in-out">
+          <div className="fixed inset-y-0 right-0 w-full sm:max-w-4xl lg:max-w-5xl bg-white shadow-2xl flex flex-col z-50 transform transition-transform duration-300 ease-in-out">
             
             {/* Drawer Header */}
-            <div className="p-6 border-b border-gray-200 flex items-center justify-between bg-white sticky top-0 z-10">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">
-                  {selectedProgram?.name} - <span className="capitalize">{selectedProgram?.category_display || selectedProgram?.category}</span>
-                </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
+            <div className="p-3.5 sm:p-5 border-b border-gray-200 flex items-center justify-between bg-white sticky top-0 z-10 gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base sm:text-xl font-bold text-gray-900 truncate">
+                    {selectedProgram?.name}
+                  </h2>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] sm:text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200 capitalize shrink-0">
+                    {selectedProgram?.category_display || selectedProgram?.category}
+                  </span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-gray-500 mt-0.5 line-clamp-1 sm:line-clamp-none">
                   Anonymous evaluation by Chest Number &amp; Secret Code Letter. Absent participants can be left blank.
                 </p>
               </div>
               <button
                 onClick={closeDrawer}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors"
+                className="p-1.5 sm:p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
+                aria-label="Close"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Judges Config Info */}
-            <div className="px-6 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
-              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider flex items-center">
-                <Medal className="w-4 h-4 mr-1 text-indigo-600" />
+            <div className="px-3.5 py-2.5 sm:px-6 sm:py-3 bg-gray-50 border-b border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5 sm:gap-3">
+              <label className="text-[11px] sm:text-xs font-semibold text-gray-600 uppercase tracking-wider flex items-center">
+                <Medal className="w-4 h-4 mr-1.5 text-indigo-600 shrink-0" />
                 Judges ({numJudges} Active)
               </label>
-              <div className="text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-1 rounded-full font-medium">
+              <div className="text-[11px] sm:text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full font-medium">
                 Max {maxMarkPerJudge} marks per judge ➔ Scaled / {convertedTotalMark}
               </div>
             </div>
 
             {/* Drawer Error Banner at Top */}
             {drawerError && (
-              <div className="mx-6 mt-4 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start justify-between gap-3 animate-in fade-in duration-200 shadow-2xs shrink-0">
-                <div className="flex items-start gap-2.5 min-w-0">
+              <div className="mx-3.5 sm:mx-6 mt-3 sm:mt-4 p-3 sm:p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start justify-between gap-2.5 animate-in fade-in duration-200 shadow-2xs shrink-0">
+                <div className="flex items-start gap-2 min-w-0">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
                   <div className="text-xs font-semibold leading-relaxed">
                     {drawerError}
@@ -619,7 +683,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
             )}
 
             {/* Main Drawer Table Area */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-3 sm:space-y-4">
               {loadingParticipants ? (
                 <div className="py-20 text-center text-gray-500">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto mb-3"></div>
@@ -627,7 +691,8 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                 </div>
               ) : (
                 <>
-                  <div className="border border-gray-200 rounded-xl overflow-x-auto shadow-2xs">
+                  {/* Desktop Table View (md and up) */}
+                  <div className="hidden md:block border border-gray-200 rounded-xl overflow-x-auto shadow-2xs">
                     <table className="w-full text-left border-collapse min-w-[600px]">
                       <thead className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600">
                         <tr>
@@ -733,21 +798,164 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                     </table>
                   </div>
 
+                  {/* Mobile Touch Cards View (< md) */}
+                  <div className="block md:hidden space-y-3">
+                    {sortedParticipants.length > 0 ? (
+                      sortedParticipants.map((participant) => {
+                        const isCodeDuplicate = duplicateCodeLetters.has((participant.code_letter || '').trim().toUpperCase());
+                        const hasMissingCode = hasAnyJudgeMark(participant) && !(participant.code_letter || '').trim() && drawerError;
+
+                        return (
+                          <div 
+                            key={participant.id} 
+                            className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-2xs space-y-3 transition-colors hover:border-indigo-200"
+                          >
+                            {/* Card Top Header: Chest # & Final Score */}
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <div className="px-2.5 py-1 bg-slate-900 text-white rounded-lg font-mono font-bold text-xs tracking-wide">
+                                  Chest #{participant.chest_number || '#'}
+                                </div>
+                                {(participant.is_team_based || selectedProgram?.is_team_based || (participant.team_member_count && participant.team_member_count > 1)) && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    Group ({participant.team_member_count || selectedProgram?.team_size || 'Team'})
+                                  </span>
+                                )}
+                                {participant.sub_team_number && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                    Sub {participant.sub_team_number}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div>
+                                {participant.total_marks !== null && participant.total_marks !== undefined ? (
+                                  <div className="text-right">
+                                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200">
+                                      {safeFormatNumber(participant.total_marks)}
+                                    </span>
+                                    <div className="text-[10px] text-gray-400 mt-0.5">Final Mark</div>
+                                  </div>
+                                ) : (
+                                  <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-1 rounded">
+                                    Absent / Unmarked
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Inputs: Code Letter + Judge Marks */}
+                            <div className="bg-slate-50/70 p-2.5 rounded-lg border border-slate-100 space-y-2.5">
+                              {/* Secret Code Letter */}
+                              <div className="flex items-center justify-between gap-2">
+                                <label className="text-[11px] font-semibold text-gray-600 uppercase tracking-wider">
+                                  Code Letter <span className="text-rose-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength="10"
+                                  value={participant.code_letter || ''}
+                                  onChange={(e) => handleCodeLetterChange(participant.id, e.target.value)}
+                                  placeholder="e.g. A"
+                                  className={`w-28 px-2.5 py-1.5 text-center font-bold text-xs uppercase border rounded-lg focus:ring-2 focus:outline-none bg-white shadow-2xs transition-colors ${
+                                    isCodeDuplicate || hasMissingCode
+                                      ? 'border-rose-400 text-rose-900 bg-rose-50/40 focus:ring-rose-400 ring-1 ring-rose-300'
+                                      : 'border-gray-300 focus:ring-indigo-500'
+                                  }`}
+                                />
+                              </div>
+
+                              {/* Judges Marks Grid */}
+                              <div>
+                                <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                                  <span>Judge Marks (0 - {maxMarkPerJudge})</span>
+                                  {participant.average_marks !== null && participant.average_marks !== undefined && (
+                                    <span className="text-indigo-600 font-medium normal-case">
+                                      Avg: {safeFormatNumber(participant.average_marks)}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className={`grid gap-2 ${
+                                  numJudges === 1 
+                                    ? 'grid-cols-1' 
+                                    : numJudges === 2 
+                                    ? 'grid-cols-2' 
+                                    : numJudges === 3 
+                                    ? 'grid-cols-3' 
+                                    : 'grid-cols-2 sm:grid-cols-4'
+                                }`}>
+                                  {Array.from({ length: numJudges }).map((_, idx) => {
+                                    const judgeNum = idx + 1;
+                                    const fieldName = `judge${judgeNum}_marks`;
+                                    const val = participant[fieldName];
+                                    const isInvalidMark = val !== null && val !== undefined && val !== '' && (isNaN(val) || Number(val) < 0 || Number(val) > maxMarkPerJudge);
+                                    const isMissingMark = hasAnyJudgeMark(participant) && (val === null || val === undefined || val === '' || isNaN(val)) && drawerError;
+
+                                    return (
+                                      <div key={judgeNum} className="space-y-1">
+                                        <label className="block text-[10px] font-bold text-gray-600 text-center uppercase tracking-tight">
+                                          Judge {judgeNum}
+                                        </label>
+                                        <input
+                                          type="text"
+                                          inputMode="decimal"
+                                          value={participant[fieldName] ?? ''}
+                                          onChange={(e) => handleMarkChange(participant.id, fieldName, e.target.value)}
+                                          onWheel={(e) => e.target.blur()}
+                                          placeholder="0.00"
+                                          className={`w-full px-2 py-2 text-center font-bold text-xs border rounded-lg focus:ring-2 focus:outline-none bg-white shadow-2xs transition-colors no-spinner ${
+                                            isInvalidMark || isMissingMark
+                                              ? 'border-rose-400 text-rose-900 bg-rose-50/40 focus:ring-rose-400 ring-1 ring-rose-300'
+                                              : 'border-gray-300 focus:ring-indigo-500'
+                                          }`}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="p-8 text-center text-gray-400 text-xs bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                        No participants assigned to this competition yet.
+                      </div>
+                    )}
+                  </div>
+
                   {/* Sorting Action Buttons */}
-                  <div className="flex items-center space-x-3 pt-2">
+                  <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-2">
+                    <button
+                      onClick={() => {
+                        setSortField('chest');
+                        setSortOrder(prev => sortField === 'chest' && prev === 'asc' ? 'desc' : 'asc');
+                      }}
+                      className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center ${
+                        sortField === 'chest' 
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' 
+                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      <ArrowUpDown className="w-3 h-3 mr-1" />
+                      <span>Chest #</span>
+                    </button>
+
                     <button
                       onClick={() => {
                         setSortField('code');
                         setSortOrder(prev => sortField === 'code' && prev === 'asc' ? 'desc' : 'asc');
                       }}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center space-x-1 ${
+                      className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center ${
                         sortField === 'code' 
                           ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' 
                           : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                       }`}
                     >
                       <ArrowUpDown className="w-3 h-3 mr-1" />
-                      <span>Sort by Code Letter</span>
+                      <span>Code Letter</span>
                     </button>
 
                     <button
@@ -755,29 +963,14 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                         setSortField('marks');
                         setSortOrder(prev => sortField === 'marks' && prev === 'desc' ? 'asc' : 'desc');
                       }}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center space-x-1 ${
+                      className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center ${
                         sortField === 'marks' 
                           ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' 
                           : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                       }`}
                     >
                       <ArrowUpDown className="w-3 h-3 mr-1" />
-                      <span>Sort by Marks</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setSortField('chest');
-                        setSortOrder(prev => sortField === 'chest' && prev === 'asc' ? 'desc' : 'asc');
-                      }}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center space-x-1 ${
-                        sortField === 'chest' 
-                          ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' 
-                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <ArrowUpDown className="w-3 h-3 mr-1" />
-                      <span>Sort by Chest #</span>
+                      <span>Marks</span>
                     </button>
                   </div>
                 </>
@@ -787,7 +980,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
             {/* Bottom Sticky Action Bar */}
             <div className="border-t border-gray-200 bg-white sticky bottom-0 z-10 shadow-lg">
               {drawerError && (
-                <div className="px-6 py-2.5 bg-rose-50 border-b border-rose-200 flex items-center justify-between gap-2 text-xs text-rose-800 font-semibold animate-in fade-in">
+                <div className="px-4 sm:px-6 py-2.5 bg-rose-50 border-b border-rose-200 flex items-center justify-between gap-2 text-xs text-rose-800 font-semibold animate-in fade-in">
                   <div className="flex items-center gap-2 min-w-0">
                     <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                     <span className="truncate">{drawerError}</span>
@@ -803,16 +996,22 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                 </div>
               )}
 
-              <div className="p-4 sm:p-5 flex items-center justify-between gap-3">
-                <div className="text-[11px] text-gray-500 hidden sm:block">
-                  {participants.filter(p => hasAnyJudgeMark(p)).length} evaluated · {participants.length - participants.filter(p => hasAnyJudgeMark(p)).length} absent
+              <div className="p-3.5 sm:p-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="text-xs text-gray-500 flex items-center justify-between sm:justify-start gap-2">
+                  <span>
+                    <strong className="text-gray-800">{participants.filter(p => hasAnyJudgeMark(p)).length}</strong> evaluated
+                  </span>
+                  <span className="text-gray-300">·</span>
+                  <span>
+                    <strong className="text-gray-800">{participants.length - participants.filter(p => hasAnyJudgeMark(p)).length}</strong> absent
+                  </span>
                 </div>
 
-                <div className="flex items-center justify-end space-x-3 w-full sm:w-auto">
+                <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
                   <button
                     type="button"
                     onClick={closeDrawer}
-                    className="px-4 py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="px-4 py-2.5 sm:py-2 text-xs font-semibold text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-center order-1 sm:order-none"
                   >
                     Cancel
                   </button>
@@ -822,9 +1021,9 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                       type="button"
                       onClick={() => handleBulkSubmit(true)}
                       disabled={submitting}
-                      className="px-4 py-2 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+                      className="px-4 py-2.5 sm:py-2 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-center order-2 sm:order-none"
                     >
-                      {submitting ? 'Saving...' : 'Save as Draft'}
+                      {submitting ? 'Saving...' : 'Save Draft'}
                     </button>
                   )}
 
@@ -832,7 +1031,9 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                     type="button"
                     onClick={() => handleBulkSubmit(false)}
                     disabled={submitting}
-                    className="px-5 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs disabled:opacity-50"
+                    className={`px-5 py-2.5 sm:py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs disabled:opacity-50 text-center ${
+                      !selectedProgram?.is_published ? 'col-span-2 sm:col-span-1 order-3 sm:order-none' : 'order-2 sm:order-none'
+                    }`}
                   >
                     {submitting ? 'Submitting...' : 'Submit Marks'}
                   </button>

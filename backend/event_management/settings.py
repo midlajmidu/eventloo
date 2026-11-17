@@ -143,6 +143,9 @@ else:
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': Path(sqlite_db_path) if sqlite_db_path else (BASE_DIR / 'db.sqlite3'),
+            'OPTIONS': {
+                'timeout': 30,
+            },
         }
     }
 
@@ -237,6 +240,7 @@ REST_FRAMEWORK = {
         'anon': os.environ.get('DRF_ANON_RATE', '60/minute'),
         'user': os.environ.get('DRF_USER_RATE', '600/minute'),
         'login': os.environ.get('DRF_LOGIN_RATE', '10/minute'),
+        'token_refresh': os.environ.get('DRF_REFRESH_RATE', '60/minute'),
         'exports': os.environ.get('DRF_EXPORT_RATE', '20/hour'),
         'uploads': os.environ.get('DRF_UPLOAD_RATE', '10/hour'),
     },

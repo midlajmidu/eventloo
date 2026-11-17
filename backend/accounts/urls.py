@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
-from .throttles import LoginRateThrottle
+from .throttles import LoginRateThrottle, RefreshRateThrottle
 from django.conf import settings
 from rest_framework.response import Response
 from .views import (
@@ -21,7 +21,7 @@ router = DefaultRouter()
 
 
 class ThrottledTokenRefreshView(TokenRefreshView):
-    throttle_classes = [LoginRateThrottle]
+    throttle_classes = [RefreshRateThrottle]
     serializer_class = HardenedTokenRefreshSerializer
 
     def post(self, request, *args, **kwargs):
@@ -71,7 +71,8 @@ urlpatterns = [
     path('team-manager/<int:team_id>/events/<int:event_id>/programs/<int:program_id>/set-leader/', team_manager_set_subteam_leader, name='team_manager_set_subteam_leader'),
     path('team-manager/<int:team_id>/events/<int:event_id>/programs/<int:program_id>/students/<int:student_id>/remove/', team_manager_remove_student_from_program, name='team_manager_remove_student_from_program'),
     path('team-manager/<int:team_id>/assignments/<int:assignment_id>/remove/', team_manager_remove_assignment, name='team_manager_remove_assignment'),
-    path('team-manager/leaderboard/', PointsViewSet.as_view({'get': 'leaderboard'}), name='team_manager_leaderboard'),
+    # Endpoint handled by TeamManagerViewSet in events/urls.py
+    # path('team-manager/leaderboard/', ...)
     # OTP Password Reset & Settings Change
     path('auth/forgot-password/request-otp/', request_forgot_password_otp, name='forgot_password_request_otp'),
     path('auth/forgot-password/verify-reset/', verify_and_reset_password, name='forgot_password_verify_reset'),

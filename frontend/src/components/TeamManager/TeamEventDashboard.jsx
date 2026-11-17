@@ -292,7 +292,7 @@ const TeamEventDashboard = () => {
       icon: FileText,
       badge: 'Call List',
       badgeColor: 'bg-indigo-100 text-indigo-800',
-      description: 'Official team call lists, verified chest numbers & rosters',
+      description: 'Official team call lists, verified chest numbers & assignments',
     },
   ];
 

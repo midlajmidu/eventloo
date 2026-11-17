@@ -5,6 +5,10 @@ class LoginRateThrottle(ScopedRateThrottle):
     scope = 'login'
 
 
+class RefreshRateThrottle(ScopedRateThrottle):
+    scope = 'token_refresh'
+
+
 class UploadRateThrottle(ScopedRateThrottle):
     scope = 'uploads'
 

@@ -47,7 +47,7 @@ const EventPoints = ({ event, eventId }) => {
     try {
       setLoading(true);
       const pointsRes = await eventPointsAPI.getEventTeamPoints(eventId);
-      const teamPointsData = pointsRes.data?.results || pointsRes.data || [];
+      const teamPointsData = Array.isArray(pointsRes.data) ? pointsRes.data : (Array.isArray(pointsRes.data?.results) ? pointsRes.data.results : []);
       setTeamPoints(teamPointsData);
     } catch (error) {
       console.error('EventPoints: Error fetching team points:', error);

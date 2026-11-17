@@ -5683,10 +5683,10 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
     @action(detail=False, methods=['get'])
     def leaderboard(self, request):
         """Get global points and event-wise leaderboard for team manager portal"""
-        if request.user.role != 'team_manager':
+        if request.user.role not in ('team_manager', 'admin', 'super_admin', 'event_manager'):
             return Response({'error': 'Access denied'}, status=status.HTTP_403_FORBIDDEN)
         
-        managed_ids = set(self._managed_teams().values_list('id', flat=True))
+        managed_ids = set(self._managed_teams().values_list('id', flat=True)) if request.user.role == 'team_manager' else set()
         from .services import calculate_global_points_for_school
         scores = calculate_global_points_for_school(request.user.school)
 
@@ -5769,6 +5769,8 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
             for r, s in enumerate(edata['students'], 1):
                 s['rank'] = r
             events_list.append(edata)
+
+        events_list.sort(key=lambda x: (not any(t.get('is_managed') for t in x.get('teams', [])), x.get('name', '')))
 
         return Response({
             'teams': teams_with_global_points,

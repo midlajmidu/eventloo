@@ -77,22 +77,29 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [programsRes, teamsRes, studentsRes, assignmentsRes] = await Promise.all([
+      const [programsRes, teamsRes, studentsRes, assignmentsRes] = await Promise.allSettled([
         eventProgramsAPI.getPrograms(eventId, 'page_size=500'),
         teamsAPI.getTeams({ event: eventId }),
         studentsAPI.getStudents({ page_size: 1000 }),
         eventAssignmentsAPI.getEventAssignments(eventId)
       ]);
 
-      const progs = Array.isArray(programsRes.data) ? programsRes.data : (programsRes.data.results || []);
-      const tms = Array.isArray(teamsRes.data) ? teamsRes.data : (teamsRes.data.results || []);
-      const stds = Array.isArray(studentsRes.data) ? studentsRes.data : (studentsRes.data.results || []);
-      const assgs = Array.isArray(assignmentsRes.data) ? assignmentsRes.data : (assignmentsRes.data.results || []);
+      const parseArray = (res) => {
+        if (!res || res.status !== 'fulfilled' || !res.value?.data) return [];
+        const d = res.value.data;
+        if (Array.isArray(d)) return d;
+        if (Array.isArray(d.results)) return d.results;
+        return [];
+      };
 
-      setPrograms(progs);
-      setTeams(tms);
-      setStudents(stds);
-      setAssignments(assgs);
+      setPrograms(parseArray(programsRes));
+      setTeams(parseArray(teamsRes));
+      setStudents(parseArray(studentsRes));
+      setAssignments(parseArray(assignmentsRes));
+
+      if (programsRes.status === 'rejected' && teamsRes.status === 'rejected') {
+        setMessage('Error loading registration data');
+      }
     } catch (error) {
       console.error('Error fetching registration data:', error);
       setMessage('Error loading registration data');

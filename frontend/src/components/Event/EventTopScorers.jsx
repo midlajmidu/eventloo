@@ -39,7 +39,8 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
   const fetchTeams = async () => {
     try {
       const res = await teamsAPI.getTeams();
-      setTeams(res.data.results || res.data || []);
+      const list = Array.isArray(res.data) ? res.data : (Array.isArray(res.data?.results) ? res.data.results : []);
+      setTeams(list);
     } catch (err) {
       console.error('Error fetching teams:', err);
     }
@@ -55,7 +56,8 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
         team_id: selectedTeamId
       };
       const res = await eventsAPI.getTopScorers(eventId, params);
-      setScorers(res.data.scorers || []);
+      const list = Array.isArray(res.data?.scorers) ? res.data.scorers : (Array.isArray(res.data) ? res.data : []);
+      setScorers(list);
     } catch (err) {
       console.error('Error fetching top scorers:', err);
     } finally {

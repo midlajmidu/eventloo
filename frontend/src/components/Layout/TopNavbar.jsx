@@ -142,9 +142,9 @@ const TEAM_MANAGER_QUICK_ADD_ACTIONS = [
     badgeColor: 'bg-indigo-100 text-indigo-700',
   },
   {
-    id: 'view-roster',
-    title: 'My Students Roster',
-    description: 'Inspect assigned student roster and category details',
+    id: 'view-students',
+    title: 'My Students',
+    description: 'Inspect assigned students and category details',
     category: 'entities',
     tag: 'Students',
     path: '/team-manager/students',

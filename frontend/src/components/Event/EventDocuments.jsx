@@ -303,8 +303,10 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
         eventProgramsAPI.getPrograms(eventId, 'page_size=200').catch(() => ({ data: [] })),
         teamsAPI.getTeams().catch(() => ({ data: [] }))
       ]);
-      setPrograms(progRes.data?.results || progRes.data || []);
-      setTeams(teamRes.data?.results || teamRes.data || []);
+      const progs = Array.isArray(progRes?.data) ? progRes.data : (Array.isArray(progRes?.data?.results) ? progRes.data.results : []);
+      const tms = Array.isArray(teamRes?.data) ? teamRes.data : (Array.isArray(teamRes?.data?.results) ? teamRes.data.results : []);
+      setPrograms(progs);
+      setTeams(tms);
     } catch (err) {
       console.error('Error loading data:', err);
     } finally {

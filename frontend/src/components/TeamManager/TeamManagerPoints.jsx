@@ -29,15 +29,15 @@ const TeamManagerPoints = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // View modes: 'global' (Global Points System) or 'event_wise' (Event-Wise Points & Rankings)
-  const [viewMode, setViewMode] = useState('global');
+  // View modes: 'event_wise' (Event-Wise Points & Rankings) or 'global' (Global Points System)
+  const [viewMode, setViewMode] = useState('event_wise');
 
   // Global tab: 'teams' | 'students'
   const [activeGlobalTab, setActiveGlobalTab] = useState('teams');
   const [globalSearch, setGlobalSearch] = useState('');
 
   // Event-wise state: 'all' (matrix) or specific event id
-  const [selectedEventId, setSelectedEventId] = useState('all');
+  const [selectedEventId, setSelectedEventId] = useState(null);
   const [activeEventTab, setActiveEventTab] = useState('teams'); // 'teams' | 'students'
   const [eventSearch, setEventSearch] = useState('');
 
@@ -66,7 +66,18 @@ const TeamManagerPoints = () => {
       const rawTeams = teamsResponse?.data;
       const teamsList = Array.isArray(rawTeams) ? rawTeams : (rawTeams?.results || []);
       setMyTeams(teamsList);
-      setLeaderboard(leaderboardResponse?.data || { teams: [], students: [], events: [] });
+
+      const lbData = leaderboardResponse?.data || { teams: [], students: [], events: [] };
+      setLeaderboard(lbData);
+
+      const evs = Array.isArray(lbData.events) ? lbData.events : [];
+      if (evs.length > 0) {
+        const managedIds = new Set(teamsList.map((t) => t.id || t.team_id));
+        const managedEvent = evs.find((ev) =>
+          ev.teams?.some((t) => t.is_managed || managedIds.has(t.id))
+        );
+        setSelectedEventId(managedEvent ? managedEvent.id : evs[0].id);
+      }
     } catch (err) {
       console.error('Error fetching data:', err);
       setError('Failed to load points and ranking data');
@@ -107,9 +118,15 @@ const TeamManagerPoints = () => {
 
   // Active selected event object if an event is chosen
   const currentSelectedEvent = useMemo(() => {
-    if (selectedEventId === 'all') return null;
+    if (!selectedEventId || selectedEventId === 'all') {
+      if (selectedEventId !== 'all' && eventsList.length > 0) {
+        const managed = eventsList.find((ev) => ev.teams?.some((t) => managedTeamIds.has(t.id) || t.is_managed));
+        return managed || eventsList[0];
+      }
+      return null;
+    }
     return eventsList.find((e) => String(e.id) === String(selectedEventId)) || null;
-  }, [eventsList, selectedEventId]);
+  }, [eventsList, selectedEventId, managedTeamIds]);
 
   // Filtered lists for Global View
   const filteredGlobalTeams = useMemo(() => {
@@ -218,18 +235,6 @@ const TeamManagerPoints = () => {
           <div className="grid grid-cols-2 sm:inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-2xs w-full sm:w-auto">
             <button
               type="button"
-              onClick={() => setViewMode('global')}
-              className={`inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-3 sm:px-4 py-2 text-xs font-semibold transition-all ${
-                viewMode === 'global'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-            >
-              <Globe className="h-4 w-4 shrink-0" />
-              <span className="truncate">Global System</span>
-            </button>
-            <button
-              type="button"
               onClick={() => setViewMode('event_wise')}
               className={`inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-3 sm:px-4 py-2 text-xs font-semibold transition-all ${
                 viewMode === 'event_wise'
@@ -248,6 +253,18 @@ const TeamManagerPoints = () => {
                   {eventsList.length}
                 </span>
               )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('global')}
+              className={`inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-3 sm:px-4 py-2 text-xs font-semibold transition-all ${
+                viewMode === 'global'
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
+            >
+              <Globe className="h-4 w-4 shrink-0" />
+              <span className="truncate">Global System</span>
             </button>
           </div>
 
@@ -366,7 +383,7 @@ const TeamManagerPoints = () => {
                     <table className="min-w-full">
                       <thead className="bg-slate-50/80">
                         <tr>
-                          {['Rank', 'Team', 'Roster', 'Events Entered', 'Raw Points', 'Global Championship Score'].map((label) => (
+                          {['Rank', 'Team', 'Members', 'Events Entered', 'Raw Points', 'Global Championship Score'].map((label) => (
                             <th
                               key={label}
                               className={`px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400 ${
@@ -654,21 +671,9 @@ const TeamManagerPoints = () => {
 
               {/* Event Tabs Pills */}
               <div className="-mx-4 px-4 sm:mx-0 sm:px-0 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-                <button
-                  type="button"
-                  onClick={() => setSelectedEventId('all')}
-                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold whitespace-nowrap transition-all ${
-                    selectedEventId === 'all'
-                      ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-600/20'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-2xs'
-                  }`}
-                >
-                  <Layers className="h-3.5 w-3.5" />
-                  <span>All Events Comparison</span>
-                </button>
-
                 {eventsList.map((ev) => {
-                  const isSelected = String(selectedEventId) === String(ev.id);
+                  const isSelected = String(currentSelectedEvent?.id) === String(ev.id) && selectedEventId !== 'all';
+                  const isMyEvent = ev.teams?.some((t) => t.is_managed || managedTeamIds.has(t.id));
                   return (
                     <button
                       key={ev.id}
@@ -682,6 +687,15 @@ const TeamManagerPoints = () => {
                     >
                       <Calendar className="h-3.5 w-3.5 opacity-60" />
                       <span>{ev.name}</span>
+                      {isMyEvent && (
+                        <span
+                          className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                            isSelected ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-700'
+                          }`}
+                        >
+                          My Team
+                        </span>
+                      )}
                       <span
                         className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                           isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
@@ -692,6 +706,19 @@ const TeamManagerPoints = () => {
                     </button>
                   );
                 })}
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedEventId('all')}
+                  className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold whitespace-nowrap transition-all ${
+                    selectedEventId === 'all'
+                      ? 'bg-indigo-600 text-white shadow-sm ring-2 ring-indigo-600/20'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-2xs'
+                  }`}
+                >
+                  <Layers className="h-3.5 w-3.5" />
+                  <span>All Events Comparison</span>
+                </button>
               </div>
             </div>
 

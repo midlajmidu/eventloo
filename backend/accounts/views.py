@@ -2907,9 +2907,53 @@ class PointsViewSet(viewsets.ReadOnlyModelViewSet):
                 'event_breakdown': student_info['event_breakdown']
             })
         
+        # Event-wise compilation
+        events_dict = {}
+        for team in global_points.get('teams', []):
+            for eb in team.get('event_breakdown', []):
+                eid = eb['event_id']
+                if eid not in events_dict:
+                    events_dict[eid] = {
+                        'id': eid,
+                        'name': eb['event_name'],
+                        'total_points': eb['total_event_points'],
+                        'teams': [],
+                        'students': [],
+                    }
+                events_dict[eid]['teams'].append({
+                    'id': team['id'],
+                    'name': team['name'],
+                    'event_points': eb['event_points'],
+                    'percentage': eb['percentage'],
+                })
+
+        for student in global_points.get('students', []):
+            for eb in student.get('event_breakdown', []):
+                eid = eb['event_id']
+                if eid in events_dict:
+                    events_dict[eid]['students'].append({
+                        'id': student['id'],
+                        'name': student['name'],
+                        'student_id': student['student_id'],
+                        'category': student['category'],
+                        'event_points': eb['event_points'],
+                        'percentage': eb['percentage'],
+                    })
+
+        events_list = []
+        for eid, edata in events_dict.items():
+            edata['teams'].sort(key=lambda x: x['event_points'], reverse=True)
+            for r, t in enumerate(edata['teams'], 1):
+                t['rank'] = r
+            edata['students'].sort(key=lambda x: x['event_points'], reverse=True)
+            for r, s in enumerate(edata['students'], 1):
+                s['rank'] = r
+            events_list.append(edata)
+        
         return Response({
             'teams': team_data,
-            'students': student_data
+            'students': student_data,
+            'events': events_list,
         })
 
     @action(detail=True, methods=['get'])

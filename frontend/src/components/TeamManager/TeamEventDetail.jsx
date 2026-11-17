@@ -805,13 +805,13 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
             <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
-                  Event Details & Roster
+                  Event Details
                 </p>
                 <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
                   {eventData.title}
                 </h1>
                 <p className="text-xs text-slate-400 mt-1 font-normal">
-                  {eventData.description || 'Program items and allocated team roster.'}
+                  {eventData.description || 'Program items and allocated team assignments.'}
                 </p>
               </div>
 

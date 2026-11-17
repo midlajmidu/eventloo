@@ -103,13 +103,39 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
   const load = async () => {
     setLoading(true);
     try {
-      const [programResponse, stageResponse] = await Promise.all([
+      const [progResult, stageResult] = await Promise.allSettled([
         eventProgramsAPI.getPrograms(eventId, 'page_size=1000&ordering=start_time'),
         eventStagesAPI.list(eventId, { page_size: 1000 }),
       ]);
-      setPrograms(programResponse.data.results || programResponse.data || []);
-      setStages(stageResponse.data.results || stageResponse.data || []);
-      setError('');
+
+      const parseArray = (res) => {
+        if (!res || !res.data) return [];
+        if (Array.isArray(res.data)) return res.data;
+        if (Array.isArray(res.data.results)) return res.data.results;
+        return [];
+      };
+
+      if (progResult.status === 'fulfilled') {
+        setPrograms(parseArray(progResult.value));
+      } else {
+        console.error('Error fetching programs for schedule:', progResult.reason);
+      }
+
+      if (stageResult.status === 'fulfilled') {
+        setStages(parseArray(stageResult.value));
+      } else {
+        console.error('Error fetching stages for schedule:', stageResult.reason);
+      }
+
+      if (progResult.status === 'rejected' && stageResult.status === 'rejected') {
+        setError(getError(progResult.reason));
+      } else if (progResult.status === 'rejected') {
+        setError(getError(progResult.reason));
+      } else if (stageResult.status === 'rejected') {
+        setError(getError(stageResult.reason));
+      } else {
+        setError('');
+      }
     } catch (requestError) {
       setError(getError(requestError));
     } finally {
@@ -163,9 +189,10 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
   };
 
   const filtered = useMemo(() => {
+    const list = Array.isArray(programs) ? programs : [];
     const needle = query.trim().toLowerCase();
-    if (!needle) return programs;
-    return programs.filter((program) => [
+    if (!needle) return list;
+    return list.filter((program) => [
       program.name, program.category_display, program.stage?.display_name,
     ].some((value) => String(value || '').toLowerCase().includes(needle)));
   }, [programs, query]);
@@ -213,10 +240,11 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
   }, [editing, form.duration_minutes_per_entry, form.end_time, form.start_time]);
 
   const conflicts = useMemo(() => {
+    const list = Array.isArray(programs) ? programs : [];
     if (!editing || !form.stage_id || !form.start_time || !calculatedEnd) return [];
     const start = new Date(form.start_time);
     if (isNaN(start.getTime())) return [];
-    return programs.filter((program) => {
+    return list.filter((program) => {
       if (program.id === editing.id || String(program.stage?.id) !== String(form.stage_id) || !program.start_time) return false;
       const otherStart = new Date(program.start_time);
       if (isNaN(otherStart.getTime())) return false;

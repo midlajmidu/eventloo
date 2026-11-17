@@ -261,7 +261,7 @@ const TeamAssignments = () => {
               Program Assignments
             </h1>
             <p className="mt-0.5 text-xs text-slate-500">
-              Assign roster students of <span className="font-semibold text-slate-700">{teamName}</span> into competitive stage items.
+              Assign students of <span className="font-semibold text-slate-700">{teamName}</span> into competitive stage items.
             </p>
           </div>
 
@@ -274,7 +274,7 @@ const TeamAssignments = () => {
               onClick={() => navigate('/team-manager/students')}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs hover:border-indigo-200 hover:text-indigo-600 transition-colors"
             >
-              <span>View Roster</span>
+              <span>View Students</span>
             </button>
           </div>
         </header>

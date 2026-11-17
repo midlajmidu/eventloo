@@ -200,10 +200,10 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
                 </span>
               </div>
               <h1 className="text-xl font-extrabold text-slate-900 mt-1">
-                Official Call List & Roster
+                Official Call List
               </h1>
               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                View verified chest numbers, competition call lists, and downloadable PDF rosters for <strong>{event?.title}</strong>.
+                View verified chest numbers, competition call lists, and downloadable PDF documents for <strong>{event?.title}</strong>.
               </p>
             </div>
           </div>

@@ -458,7 +458,7 @@ const TeamManagerEvents = () => {
                               <button
                                 onClick={() => handleEventClick(event.id)}
                                 className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100"
-                                title="Assign team roster to programs in this event"
+                                title="Assign team students to programs in this event"
                               >
                                 <Target className="h-3.5 w-3.5" />
                                 <span>Assign Programs</span>
