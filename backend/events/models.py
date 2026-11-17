@@ -819,6 +819,12 @@ class Program(models.Model):
         validators=[MinValueValidator(1), MaxValueValidator(4)],
         help_text="Number of judges evaluating this program (1 to 4). If null, defaults to event.num_judges.",
     )
+    judging_mode = models.CharField(
+        max_length=20,
+        default='offline',
+        blank=True,
+        help_text="Judging mode for this program (offline or online)",
+    )
     max_participants = models.PositiveIntegerField(null=True, blank=True)  # Overall limit (for individual programs)
     max_participants_per_team = models.PositiveIntegerField(null=True, blank=True)  # Per-team limit (for team-based programs)
     team_size = models.PositiveIntegerField(null=True, blank=True)  # Fixed team size for team-based programs

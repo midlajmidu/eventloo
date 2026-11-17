@@ -740,6 +740,7 @@ class ProgramSerializer(serializers.ModelSerializer):
             'program_type', 'grading_points', 'total_max_participants', 'limit_description', 'total_teams',
             'num_judges', 'effective_num_judges',
             'has_custom_points', 'first_place_points', 'second_place_points', 'third_place_points', 'participation_points',
+            'judging_mode',
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at', 'status', 'is_published',
