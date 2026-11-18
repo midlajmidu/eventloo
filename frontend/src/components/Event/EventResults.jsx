@@ -17,6 +17,7 @@ import {
   eventResultsAPI, 
   eventPointsAPI 
 } from '../../services/api';
+import Pagination from '../common/Pagination';
 
 const addCompetitionRanks = (rows) => {
   let previousPoints = null;
@@ -39,6 +40,8 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
   const [loadingPrograms, setLoadingPrograms] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   // Team Points Leaderboard
   const [teamPoints, setTeamPoints] = useState([]);
@@ -213,14 +216,49 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
     return acc;
   }, { pending: 0, in_progress: 0, submitted: 0, published: 0 });
 
-  // Filtered Programs list
-  const filteredPrograms = programs.filter(p => {
-    const matchesCategory = !selectedCategory || p.category === selectedCategory;
-    const matchesSearch = !searchTerm || 
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  // Helper: Priority rank for competition sorting (Submitted marks come to the very top)
+  const getStatusRank = (program) => {
+    const status = getProgramStatus(program);
+    switch (status) {
+      case 'submitted':
+        return 1; // Submitted marks come first at the very top
+      case 'published':
+        return 2; // Published results
+      case 'in_progress':
+        return 3; // In progress
+      case 'pending':
+      default:
+        return 4; // Pending
+    }
+  };
+
+  // Filtered and sorted programs (submitted marks at the top)
+  const sortedPrograms = programs
+    .filter(p => {
+      const matchesCategory = !selectedCategory || p.category === selectedCategory;
+      const matchesSearch = !searchTerm || 
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.category.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    })
+    .sort((a, b) => {
+      const rankA = getStatusRank(a);
+      const rankB = getStatusRank(b);
+      if (rankA !== rankB) {
+        return rankA - rankB;
+      }
+      return (a.name || '').localeCompare(b.name || '');
+    });
+
+  // Reset pagination on search or category filter change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, selectedCategory]);
+
+  // Paginated programs for table display
+  const totalPages = Math.ceil(sortedPrograms.length / pageSize) || 1;
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedPrograms = sortedPrograms.slice(startIndex, startIndex + pageSize);
 
   // Prize badge helper
   const renderPrizeBadge = (position) => {
@@ -344,14 +382,24 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
             {/* Table Search & Actions */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="relative w-full sm:w-64">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search results..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
+                  className="w-full pl-9 pr-8 py-2 text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 font-medium"
                 />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 rounded-md"
+                    aria-label="Clear search"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               <div className="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-end">
@@ -398,8 +446,8 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                         <span>Loading competitions...</span>
                       </td>
                     </tr>
-                  ) : filteredPrograms.length > 0 ? (
-                    filteredPrograms.map((prog, idx) => {
+                  ) : paginatedPrograms.length > 0 ? (
+                    paginatedPrograms.map((prog, idx) => {
                       const status = getProgramStatus(prog);
                       const isPublished = prog.is_published || status === 'published';
                       const canPublish = isPublished || status === 'submitted';
@@ -412,7 +460,7 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                         >
                           {/* Index # */}
                           <td className="px-4 py-3 text-center text-gray-400 font-semibold">
-                            #{idx + 1}
+                            #{startIndex + idx + 1}
                           </td>
 
                           {/* Competition Name & Category */}
@@ -535,6 +583,24 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Controls for Competitions Table */}
+            {sortedPrograms.length > 0 && (
+              <div className="pt-2 border-t border-gray-100">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalCount={sortedPrograms.length}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(newSize) => {
+                    setPageSize(newSize);
+                    setCurrentPage(1);
+                  }}
+                  showPageSizeSelector={true}
+                />
+              </div>
+            )}
           </div>
         </div>
 
