@@ -6,7 +6,6 @@ import {
   Users,
   Search,
   Eye,
-  UserPlus,
   GraduationCap,
   Mail,
   MapPin,
@@ -17,6 +16,8 @@ import {
   X,
   Target,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Filter
 } from 'lucide-react';
 
@@ -43,6 +44,12 @@ const TeamStudents = () => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Mobile accordion expand state
+  const [expandedStudentId, setExpandedStudentId] = useState(null);
+  const toggleStudentExpand = (id) => {
+    setExpandedStudentId((prev) => (prev === id ? null : id));
+  };
 
   useEffect(() => {
     fetchInitialData();
@@ -465,21 +472,14 @@ const TeamStudents = () => {
 
                       {/* Actions */}
                       <td className="whitespace-nowrap px-5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-2">
+                        <div className="flex items-center justify-end">
                           <button
                             onClick={() => handleViewStudent(student)}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:border-indigo-200 hover:bg-indigo-100"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50 px-3 py-1.5 text-xs font-semibold text-indigo-700 transition hover:border-indigo-200 hover:bg-indigo-100"
                             title="View student profile"
                           >
                             <Eye className="h-3.5 w-3.5" />
-                            <span>View</span>
-                          </button>
-                          <button
-                            onClick={() => navigate('/team-manager/events')}
-                            className="rounded-lg border border-slate-200 p-1.5 text-slate-500 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
-                            title="Assign to programs in events"
-                          >
-                            <UserPlus className="h-4 w-4" />
+                            <span>View Profile</span>
                           </button>
                         </div>
                       </td>
@@ -490,77 +490,98 @@ const TeamStudents = () => {
             </table>
           </div>
 
-          {/* Mobile Native Cards */}
+          {/* Mobile Native Compact Table/Row View with Accordion */}
           <div className="md:hidden divide-y divide-slate-100">
             {paginatedStudents.map((student) => {
+              const studentKey = student.id || student.student_id;
               const studentName = student.name || `Student ${student.student_id}`;
               const studentInitial = studentName.charAt(0).toUpperCase() || 'S';
+              const isExpanded = expandedStudentId === studentKey;
 
               return (
-                <div key={student.id || student.student_id} className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-sm font-bold text-indigo-600">
+                <div key={studentKey} className="transition-colors hover:bg-slate-50/50">
+                  {/* Compact Clickable Row */}
+                  <div
+                    onClick={() => toggleStudentExpand(studentKey)}
+                    className="flex items-center justify-between p-3.5 cursor-pointer select-none gap-2"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-xs font-bold text-indigo-600">
                         {studentInitial}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-900">{studentName}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="font-mono text-xs text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
+                        <p className="truncate text-xs sm:text-sm font-semibold text-slate-900 leading-tight">
+                          {studentName}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono text-[11px] text-slate-500">
                             {student.student_id || '—'}
                           </span>
                           {student.gender && (
-                            <span className="text-[11px] capitalize text-slate-500">
+                            <span className="text-[10px] capitalize text-slate-400">
                               · {student.gender}
                             </span>
                           )}
                         </div>
                       </div>
                     </div>
-                    <span
-                      className={`shrink-0 inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${getCategoryBadgeStyle(
-                        student.category
-                      )}`}
-                    >
-                      {getCategoryDisplay(student.category)}
-                    </span>
-                  </div>
 
-                  <div className="grid grid-cols-2 gap-2 rounded-xl bg-slate-50 p-2.5 text-xs text-slate-600">
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Class / Grade</span>
-                      <p className="font-semibold text-slate-800 truncate mt-0.5">
-                        {student.grade ? `Grade ${student.grade}` : '—'}
-                        {student.section ? ` (${student.section})` : ''}
-                      </p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Contact</span>
-                      <p className="font-semibold text-slate-800 truncate mt-0.5">
-                        {student.phone_number || student.phone || student.email || '—'}
-                      </p>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span
+                        className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium ${getCategoryBadgeStyle(
+                          student.category
+                        )}`}
+                      >
+                        {getCategoryDisplay(student.category)}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={isExpanded ? 'Collapse student' : 'Expand student'}
+                        className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4 text-indigo-600" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => handleViewStudent(student)}
-                      className="min-h-[40px] flex-1 inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-700 active:bg-indigo-100 transition-colors"
-                    >
-                      <Eye className="h-3.5 w-3.5" />
-                      <span>View Profile</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => navigate('/team-manager/events')}
-                      className="min-h-[40px] inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-50 active:bg-slate-100 transition-colors"
-                      title="Assign in Events"
-                    >
-                      <UserPlus className="h-4 w-4" />
-                      <span>Assign</span>
-                    </button>
-                  </div>
+                  {/* Expanded Detail Panel */}
+                  {isExpanded && (
+                    <div className="px-3.5 pb-3.5 pt-1 space-y-2.5 bg-slate-50/70 border-t border-slate-100 animate-in fade-in duration-150">
+                      <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                        <div className="rounded-lg bg-white p-2.5 border border-slate-100 shadow-2xs">
+                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Class / Grade</span>
+                          <p className="font-semibold text-slate-800 truncate mt-0.5">
+                            {student.grade ? `Grade ${student.grade}` : '—'}
+                            {student.section ? ` · ${student.section}` : ''}
+                          </p>
+                        </div>
+                        <div className="rounded-lg bg-white p-2.5 border border-slate-100 shadow-2xs">
+                          <span className="text-[10px] uppercase tracking-wider text-slate-400 font-medium">Contact</span>
+                          <p className="font-semibold text-slate-800 truncate mt-0.5">
+                            {student.phone_number || student.phone || student.email || '—'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-0.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewStudent(student);
+                          }}
+                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 shadow-2xs hover:bg-indigo-50 active:bg-indigo-100 transition-colors min-h-[38px]"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                          <span>View Profile</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

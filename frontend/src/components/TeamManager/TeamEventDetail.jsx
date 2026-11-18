@@ -44,6 +44,12 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
 
+  // Mobile accordion expand state
+  const [expandedProgramId, setExpandedProgramId] = useState(null);
+  const toggleProgramExpand = (id) => {
+    setExpandedProgramId((prev) => (prev === id ? null : id));
+  };
+
   const isDeadlinePassed = useMemo(() => {
     if (!eventData?.registration_deadline) return false;
     return new Date(eventData.registration_deadline) < new Date();
@@ -1150,84 +1156,115 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                 </table>
               </div>
 
-              {/* Mobile Cards View */}
+              {/* Mobile Native Compact Table/Row View with Accordion */}
               <div className="md:hidden divide-y divide-slate-100">
                 {filteredPrograms.map((program) => {
                   const assignedList = program.assigned_students || [];
                   const maxAllowed = program.per_team_limit || (program.is_team_based ? 4 : 1);
                   const isFull = program.available_slots === 0 || assignedList.length >= maxAllowed;
+                  const isExpanded = expandedProgramId === program.id;
 
                   return (
-                    <article key={program.id} className="p-4 space-y-3 hover:bg-slate-50/60 transition-colors">
-                      {/* Top Header: Title, Category & Slots */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-slate-900 text-sm leading-snug">
+                    <div key={program.id} className="transition-colors hover:bg-slate-50/50">
+                      {/* Compact Clickable Row */}
+                      <div
+                        onClick={() => toggleProgramExpand(program.id)}
+                        className="flex items-center justify-between p-3.5 cursor-pointer select-none gap-2"
+                      >
+                        <div className="min-w-0 flex-1 pr-1">
+                          <p className="font-semibold text-slate-900 text-xs sm:text-sm leading-snug truncate">
                             {program.name}
                           </p>
-                          {program.description && (
-                            <p className="text-xs text-slate-400 line-clamp-2 mt-0.5">
-                              {program.description}
-                            </p>
-                          )}
-                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          <div className="flex items-center gap-1.5 mt-0.5">
                             <span
-                              className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getCategoryBadge(
+                              className={`inline-flex rounded-full border px-2 py-0.2 text-[10px] font-medium ${getCategoryBadge(
                                 program.category
                               )}`}
                             >
                               {getCategoryDisplay(program.category)}
                             </span>
-                            <span className="text-[11px] text-slate-500 font-medium">
-                              {program.is_team_based ? 'Team' : 'Individual'} · Limit {maxAllowed}
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {program.is_team_based ? 'Team' : 'Solo'}
                             </span>
                           </div>
                         </div>
 
-                        <span
-                          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold shrink-0 ${
-                            isFull
-                              ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
-                              : 'border-indigo-100 bg-indigo-50 text-indigo-700'
-                          }`}
-                        >
-                          {assignedList.length}/{maxAllowed} slots
-                        </span>
-                      </div>
-
-                      {/* Assigned Students */}
-                      <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
-                        <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                          {program.is_team_based ? 'Assigned Teams & Members' : 'Assigned Students'} ({assignedList.length})
-                        </div>
-                        {renderAssignedMembers(program)}
-                      </div>
-
-                      {/* Action Button */}
-                      <div>
-                        <button
-                          type="button"
-                          onClick={() => openAssignDrawer(program)}
-                          disabled={isFull || registrationLocked}
-                          className={`w-full inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors min-h-[42px] ${
-                            isFull || registrationLocked
-                              ? 'border border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
-                              : 'bg-indigo-600 text-white shadow-xs hover:bg-indigo-700'
-                          }`}
-                        >
-                          <UserPlus className="h-4 w-4" />
-                          <span>
-                            {registrationLocked
-                              ? 'Registration Closed'
-                              : isFull
-                                ? 'All Slots Filled'
-                                : program.is_team_based
-                                  ? 'Assign Team'
-                                  : 'Assign Student'}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                              isFull
+                                ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                                : 'border-indigo-100 bg-indigo-50 text-indigo-700'
+                            }`}
+                          >
+                            {assignedList.length}/{maxAllowed}
                           </span>
-                        </button>
+                          <button
+                            type="button"
+                            aria-label={isExpanded ? 'Collapse program' : 'Expand program'}
+                            className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4 text-indigo-600" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
                       </div>
-                    </article>
+
+                      {/* Expanded Program Details & Assignments */}
+                      {isExpanded && (
+                        <div className="px-3.5 pb-3.5 pt-1 space-y-3 bg-slate-50/70 border-t border-slate-100 animate-in fade-in duration-150">
+                          {program.description && (
+                            <p className="text-xs text-slate-500 leading-relaxed bg-white p-2.5 rounded-xl border border-slate-100">
+                              {program.description}
+                            </p>
+                          )}
+
+                          <div className="flex items-center justify-between text-xs text-slate-500 px-0.5">
+                            <span>Format: <strong className="text-slate-700">{program.is_team_based ? 'Group Team' : 'Individual Solo'}</strong></span>
+                            <span>Limit: <strong className="text-slate-700">{maxAllowed} per team</strong></span>
+                          </div>
+
+                          {/* Assigned Members Box */}
+                          <div className="space-y-1.5 bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                              {program.is_team_based ? 'Assigned Teams & Members' : 'Assigned Students'} ({assignedList.length})
+                            </div>
+                            {renderAssignedMembers(program)}
+                          </div>
+
+                          {/* Assign Action Button */}
+                          <div className="pt-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAssignDrawer(program);
+                              }}
+                              disabled={isFull || registrationLocked}
+                              className={`w-full inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors min-h-[40px] shadow-2xs ${
+                                isFull || registrationLocked
+                                  ? 'border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                                  : 'bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800'
+                              }`}
+                            >
+                              <UserPlus className="h-4 w-4" />
+                              <span>
+                                {registrationLocked
+                                  ? 'Registration Closed'
+                                  : isFull
+                                    ? 'All Slots Filled'
+                                    : program.is_team_based
+                                      ? 'Assign Team'
+                                      : 'Assign Student'}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>

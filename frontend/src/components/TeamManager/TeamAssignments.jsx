@@ -9,7 +9,9 @@ import {
   Search,
   Calendar,
   Target,
-  CheckCircle2
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { teamManagerAPI, categoriesAPI } from '../../services/api';
 import Pagination from '../common/Pagination';
@@ -33,6 +35,12 @@ const TeamAssignments = () => {
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+
+  // Mobile accordion expand state
+  const [expandedProgramId, setExpandedProgramId] = useState(null);
+  const toggleProgramExpand = (id) => {
+    setExpandedProgramId((prev) => (prev === id ? null : id));
+  };
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -382,142 +390,270 @@ const TeamAssignments = () => {
           </div>
 
           {paginatedPrograms.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-slate-50/60">
-                  <tr>
-                    {['Program', 'Category', 'Festival / Event', 'Slots / Capacity', 'Assigned Students'].map((label) => (
-                      <th
-                        key={label}
-                        className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400"
-                      >
-                        {label}
+            <>
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="bg-slate-50/60">
+                    <tr>
+                      {['Program', 'Category', 'Festival / Event', 'Slots / Capacity', 'Assigned Students'].map((label) => (
+                        <th
+                          key={label}
+                          className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-slate-400"
+                        >
+                          {label}
+                        </th>
+                      ))}
+                      <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                        Action
                       </th>
-                    ))}
-                    <th className="px-4 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-slate-400">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {paginatedPrograms.map((program) => {
-                    const programAssignments = getAssignmentsForProgram(program.id);
-                    const assignedCount = programAssignments.length;
-                    const maxAllowed = program.is_team_based
-                      ? (program.team_size || 4)
-                      : (program.max_participants || 1);
-                    const isFull = assignedCount >= maxAllowed;
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedPrograms.map((program) => {
+                      const programAssignments = getAssignmentsForProgram(program.id);
+                      const assignedCount = programAssignments.length;
+                      const maxAllowed = program.is_team_based
+                        ? (program.team_size || 4)
+                        : (program.max_participants || 1);
+                      const isFull = assignedCount >= maxAllowed;
 
-                    return (
-                      <tr key={program.id} className="transition hover:bg-indigo-50/30">
-                        {/* Program Name & Type */}
-                        <td className="px-4 py-3">
-                          <div>
-                            <p className="font-semibold text-slate-900 text-xs max-w-[240px] truncate">
-                              {program.name}
-                            </p>
-                            <span className="text-[10px] text-slate-400 font-medium capitalize">
-                              {program.is_team_based ? 'Group Team Event' : 'Individual Solo'}
-                            </span>
-                          </div>
-                        </td>
+                      return (
+                        <tr key={program.id} className="transition hover:bg-indigo-50/30">
+                          {/* Program Name & Type */}
+                          <td className="px-4 py-3">
+                            <div>
+                              <p className="font-semibold text-slate-900 text-xs max-w-[240px] truncate">
+                                {program.name}
+                              </p>
+                              <span className="text-[10px] text-slate-400 font-medium capitalize">
+                                {program.is_team_based ? 'Group Team Event' : 'Individual Solo'}
+                              </span>
+                            </div>
+                          </td>
 
-                        {/* Category */}
-                        <td className="whitespace-nowrap px-4 py-3">
-                          <span
-                            className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${getCategoryBadge(
-                              program.category
-                            )}`}
-                          >
-                            {getCategoryDisplay(program.category)}
-                          </span>
-                        </td>
-
-                        {/* Festival / Event */}
-                        <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">
-                          <div className="flex items-center gap-1.5">
-                            <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                            <span className="truncate max-w-[200px]">{program.event_title}</span>
-                          </div>
-                        </td>
-
-                        {/* Capacity / Slots */}
-                        <td className="whitespace-nowrap px-4 py-3">
-                          <div className="flex items-center gap-2">
+                          {/* Category */}
+                          <td className="whitespace-nowrap px-4 py-3">
                             <span
-                              className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium ${
+                              className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-medium ${getCategoryBadge(
+                                program.category
+                              )}`}
+                            >
+                              {getCategoryDisplay(program.category)}
+                            </span>
+                          </td>
+
+                          {/* Festival / Event */}
+                          <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-600">
+                            <div className="flex items-center gap-1.5">
+                              <Calendar className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate max-w-[200px]">{program.event_title}</span>
+                            </div>
+                          </td>
+
+                          {/* Capacity / Slots */}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-medium ${
+                                  isFull
+                                    ? 'border-slate-200 bg-slate-100 text-slate-600'
+                                    : 'border-indigo-100 bg-indigo-50 text-indigo-700'
+                                }`}
+                              >
+                                {assignedCount} / {maxAllowed} slots
+                              </span>
+                              <div className="h-1.5 w-14 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-300 ${
+                                    isFull ? 'bg-slate-400' : 'bg-indigo-600'
+                                  }`}
+                                  style={{
+                                    width: `${Math.min(100, (assignedCount / maxAllowed) * 100)}%`,
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Assigned Students */}
+                          <td className="px-4 py-3">
+                            {programAssignments.length > 0 ? (
+                              <div className="flex flex-wrap items-center gap-1 max-w-sm">
+                                {programAssignments.map((a) => (
+                                  <span
+                                    key={a.id}
+                                    className="inline-flex items-center gap-1 rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
+                                  >
+                                    <span className="truncate max-w-[120px]">{a.student_name}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveAssignment(a)}
+                                      className="text-slate-400 hover:text-rose-600 transition-colors p-0.5"
+                                      title={`Remove ${a.student_name}`}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">No students assigned</span>
+                            )}
+                          </td>
+
+                          {/* Action */}
+                          <td className="whitespace-nowrap px-4 py-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedProgram(program);
+                                setSelectedStudents([]);
+                                setShowAssignModal(true);
+                              }}
+                              disabled={isFull}
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
                                 isFull
-                                  ? 'border-slate-200 bg-slate-100 text-slate-600'
-                                  : 'border-indigo-100 bg-indigo-50 text-indigo-700'
+                                  ? 'border border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
+                                  : 'bg-indigo-600 text-white shadow-2xs hover:bg-indigo-700'
                               }`}
                             >
-                              {assignedCount} / {maxAllowed} slots
+                              <UserPlus className="h-3 w-3" />
+                              <span>{isFull ? 'Full' : 'Assign'}</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Native Compact Accordion View */}
+              <div className="md:hidden divide-y divide-slate-100">
+                {paginatedPrograms.map((program) => {
+                  const programAssignments = getAssignmentsForProgram(program.id);
+                  const assignedCount = programAssignments.length;
+                  const maxAllowed = program.is_team_based
+                    ? (program.team_size || 4)
+                    : (program.max_participants || 1);
+                  const isFull = assignedCount >= maxAllowed;
+                  const isExpanded = expandedProgramId === program.id;
+
+                  return (
+                    <div key={program.id} className="transition-colors hover:bg-slate-50/50">
+                      {/* Compact Row */}
+                      <div
+                        onClick={() => toggleProgramExpand(program.id)}
+                        className="flex items-center justify-between p-3.5 cursor-pointer select-none gap-2"
+                      >
+                        <div className="min-w-0 flex-1 pr-1">
+                          <p className="font-semibold text-slate-900 text-xs sm:text-sm leading-snug truncate">
+                            {program.name}
+                          </p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span
+                              className={`inline-flex rounded-full border px-2 py-0.2 text-[10px] font-medium ${getCategoryBadge(
+                                program.category
+                              )}`}
+                            >
+                              {getCategoryDisplay(program.category)}
                             </span>
-                            <div className="h-1.5 w-14 overflow-hidden rounded-full bg-slate-100">
-                              <div
-                                className={`h-full rounded-full transition-all duration-300 ${
-                                  isFull ? 'bg-slate-400' : 'bg-indigo-600'
-                                }`}
-                                style={{
-                                  width: `${Math.min(100, (assignedCount / maxAllowed) * 100)}%`,
-                                }}
-                              />
-                            </div>
+                            <span className="text-[10px] text-slate-400 font-medium truncate max-w-[140px]">
+                              {program.event_title}
+                            </span>
                           </div>
-                        </td>
+                        </div>
 
-                        {/* Assigned Students */}
-                        <td className="px-4 py-3">
-                          {programAssignments.length > 0 ? (
-                            <div className="flex flex-wrap items-center gap-1 max-w-sm">
-                              {programAssignments.map((a) => (
-                                <span
-                                  key={a.id}
-                                  className="inline-flex items-center gap-1 rounded-md border border-slate-200/80 bg-slate-50 px-2 py-0.5 text-xs text-slate-700"
-                                >
-                                  <span className="truncate max-w-[120px]">{a.student_name}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleRemoveAssignment(a)}
-                                    className="text-slate-400 hover:text-rose-600 transition-colors p-0.5"
-                                    title={`Remove ${a.student_name}`}
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-slate-400 italic">No students assigned</span>
-                          )}
-                        </td>
-
-                        {/* Action */}
-                        <td className="whitespace-nowrap px-4 py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedProgram(program);
-                              setSelectedStudents([]);
-                              setShowAssignModal(true);
-                            }}
-                            disabled={isFull}
-                            className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span
+                            className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                               isFull
-                                ? 'border border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
-                                : 'bg-indigo-600 text-white shadow-2xs hover:bg-indigo-700'
+                                ? 'border-slate-200 bg-slate-100 text-slate-600'
+                                : 'border-indigo-100 bg-indigo-50 text-indigo-700'
                             }`}
                           >
-                            <UserPlus className="h-3 w-3" />
-                            <span>{isFull ? 'Full' : 'Assign'}</span>
+                            {assignedCount}/{maxAllowed}
+                          </span>
+                          <button
+                            type="button"
+                            aria-label={isExpanded ? 'Collapse program' : 'Expand program'}
+                            className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
+                          >
+                            {isExpanded ? (
+                              <ChevronUp className="h-4 w-4 text-indigo-600" />
+                            ) : (
+                              <ChevronDown className="h-4 w-4" />
+                            )}
                           </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </div>
+                      </div>
+
+                      {/* Expanded Section */}
+                      {isExpanded && (
+                        <div className="px-3.5 pb-3.5 pt-1 space-y-3 bg-slate-50/70 border-t border-slate-100 animate-in fade-in duration-150">
+                          <div className="flex items-center justify-between text-xs text-slate-500 px-0.5">
+                            <span>Format: <strong className="text-slate-700">{program.is_team_based ? 'Group Team' : 'Individual Solo'}</strong></span>
+                            <span>Limit: <strong className="text-slate-700">{maxAllowed} per team</strong></span>
+                          </div>
+
+                          {/* Assigned Students */}
+                          <div className="space-y-1.5 bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                            <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                              Assigned Students ({assignedCount})
+                            </div>
+                            {programAssignments.length > 0 ? (
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                {programAssignments.map((a) => (
+                                  <span
+                                    key={a.id}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200/80 bg-slate-50 px-2 py-1 text-xs text-slate-700"
+                                  >
+                                    <span className="truncate max-w-[130px] font-medium">{a.student_name}</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveAssignment(a)}
+                                      className="text-slate-400 hover:text-rose-600 transition-colors p-0.5"
+                                      title={`Remove ${a.student_name}`}
+                                    >
+                                      <X className="h-3.5 w-3.5" />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic pt-1">No students assigned yet</p>
+                            )}
+                          </div>
+
+                          {/* Action Button */}
+                          <div className="pt-0.5">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProgram(program);
+                                setSelectedStudents([]);
+                                setShowAssignModal(true);
+                              }}
+                              disabled={isFull}
+                              className={`w-full inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors min-h-[40px] shadow-2xs ${
+                                isFull
+                                  ? 'border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
+                                  : 'bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800'
+                              }`}
+                            >
+                              <UserPlus className="h-4 w-4" />
+                              <span>{isFull ? 'All Slots Filled' : 'Assign Student'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           ) : (
             <div className="p-16 text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">

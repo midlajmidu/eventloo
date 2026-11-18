@@ -68,7 +68,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
       if (selectedCategory !== 'all') {
         params.category = selectedCategory;
       }
-      if (callListMode === 'team' && resolvedTeamId) {
+      if (resolvedTeamId) {
         params.team_id = resolvedTeamId;
       }
 
@@ -110,7 +110,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
       if (selectedCategory !== 'all') {
         params.category = selectedCategory;
       }
-      if (callListMode === 'team' && resolvedTeamId) {
+      if (resolvedTeamId) {
         params.team_id = resolvedTeamId;
       }
       const response = await eventCallListAPI.getCallListData(eventId, params);
@@ -132,7 +132,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
       if (selectedCategory !== 'all') {
         params.category = selectedCategory;
       }
-      if (callListMode === 'team' && resolvedTeamId) {
+      if (resolvedTeamId) {
         params.team_id = resolvedTeamId;
       }
 

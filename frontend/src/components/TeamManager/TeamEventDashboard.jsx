@@ -446,10 +446,32 @@ const TeamEventDashboard = () => {
                 </div>
               ) : pdfUrl ? (
                 <div className="w-full rounded-2xl border border-slate-200 overflow-hidden shadow-2xs bg-slate-900/5">
+                  <div className="sm:hidden flex items-center justify-between p-3 bg-slate-50 border-b border-slate-200">
+                    <span className="text-xs font-semibold text-slate-700">Official Schedule</span>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={pdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-white border border-slate-200 text-slate-700 shadow-2xs"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        <span>Open</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={downloadSchedulePdf}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white shadow-2xs"
+                      >
+                        <Download className="h-3 w-3" />
+                        <span>Save</span>
+                      </button>
+                    </div>
+                  </div>
                   <iframe
                     src={`${pdfUrl}#toolbar=1&navpanes=0`}
                     title="Official Event Schedule"
-                    className="h-[750px] w-full border-0"
+                    className="h-[520px] sm:h-[750px] w-full border-0"
                   />
                 </div>
               ) : (

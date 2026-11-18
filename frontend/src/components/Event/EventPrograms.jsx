@@ -27,6 +27,8 @@ import {
   FileSpreadsheet,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Layers,
   HelpCircle
 } from 'lucide-react';
@@ -81,6 +83,12 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
     general: 0,
     total: 0
   });
+
+  // Mobile accordion expand state
+  const [expandedProgramId, setExpandedProgramId] = useState(null);
+  const toggleProgramExpand = (id) => {
+    setExpandedProgramId((prev) => (prev === id ? null : id));
+  };
 
   const displayCategories = useMemo(() => {
     const list = [...(categories || [])];
@@ -708,7 +716,8 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
 
         {/* Programs Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="overflow-x-auto min-h-[220px] pb-24">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto min-h-[220px] pb-24">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -880,6 +889,98 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Native Compact Accordion View */}
+          <div className="md:hidden divide-y divide-gray-200">
+            {filteredPrograms.map((program) => {
+              const status = getStatusDisplay(program);
+              const isExpanded = expandedProgramId === program.id;
+
+              return (
+                <div key={program.id} className="transition-colors hover:bg-gray-50/50">
+                  {/* Compact Clickable Row */}
+                  <div
+                    onClick={() => toggleProgramExpand(program.id)}
+                    className="flex items-center justify-between p-3.5 cursor-pointer select-none gap-2"
+                  >
+                    <div className="min-w-0 flex-1 pr-1">
+                      <p className="font-semibold text-gray-900 text-xs sm:text-sm leading-snug truncate">
+                        {program.name}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <span className={`inline-flex rounded-full border px-2 py-0.2 text-[10px] font-semibold ${getCategoryBadge(program.category)}`}>
+                          {getCategoryDisplay(program.category)}
+                        </span>
+                        <span
+                          className="inline-flex px-1.5 py-0.2 text-[10px] font-medium rounded-md border"
+                          style={getProgramTypeBadgeStyle(program)}
+                        >
+                          {getProgramTypeLabel(program)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${getStatusColor(status)}`}>
+                        {status}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={isExpanded ? 'Collapse' : 'Expand'}
+                        className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4 text-indigo-600" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expanded Detail Panel */}
+                  {isExpanded && (
+                    <div className="px-3.5 pb-3.5 pt-1 space-y-2.5 bg-gray-50/80 border-t border-gray-100 animate-in fade-in duration-150">
+                      {program.description && (
+                        <p className="text-xs text-gray-500 leading-relaxed bg-white p-2.5 rounded-lg border border-gray-200">
+                          {program.description}
+                        </p>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                        <div className="rounded-lg bg-white p-2 border border-gray-200">
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Format</span>
+                          <p className="font-semibold text-gray-800 truncate mt-0.5">
+                            {program.is_team_based ? `Team (${program.team_size || 4})` : 'Individual Solo'}
+                          </p>
+                        </div>
+                        <div className="rounded-lg bg-white p-2 border border-gray-200">
+                          <span className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">Registered</span>
+                          <p className="font-semibold text-gray-800 truncate mt-0.5">
+                            {program.participants_count || 0} participants
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="pt-0.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenViewProgram(program);
+                          }}
+                          className="w-full inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3 py-2 text-xs font-semibold text-indigo-700 shadow-2xs hover:bg-indigo-50 active:bg-indigo-100 transition-colors min-h-[38px]"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-indigo-600" />
+                          <span>{readOnly ? 'View Participants' : 'Open Program Details'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* Empty State */}

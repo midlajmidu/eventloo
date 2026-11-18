@@ -9,9 +9,7 @@ import {
   Award,
   UsersRound,
   ArrowRight,
-  X,
-  Clock,
-  CheckCircle2
+  X
 } from 'lucide-react';
 import {
   BarChart,
@@ -289,13 +287,6 @@ const TeamManagerDashboard = () => {
     ];
   }, [activeTeam, globalPoints]);
 
-  const recentTeamActivities = useMemo(() => {
-    const activities = dashboardData?.recentActivities;
-    if (Array.isArray(activities) && activities.length > 0) {
-      return activities.slice(0, 5);
-    }
-    return [];
-  }, [dashboardData]);
 
   const handleOpenBreakdown = (team) => {
     setSelectedTeamBreakdown(team || activeTeam);
@@ -542,9 +533,9 @@ const TeamManagerDashboard = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* 4. TEAM PARTICIPATION & ACTIVITY (CLEAN, MINIMAL, TEAM-ONLY DATA) */}
+        {/* 4. TEAM PARTICIPATING EVENTS (CLEAN, MINIMAL, TEAM-ONLY DATA) */}
         {/* ========================================================================= */}
-        <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <section>
           {/* Active Competitions & Points */}
           <article className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -553,14 +544,14 @@ const TeamManagerDashboard = () => {
                   Participating Events
                 </h2>
                 <p className="text-[11px] text-slate-400">
-                  Competitions entered by {teamDisplayName}
+                  Active festival competitions entered by {teamDisplayName}
                 </p>
               </div>
               <button
                 onClick={() => navigate('/team-manager/events')}
                 className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-0.5"
               >
-                <span>View All</span>
+                <span>View All Events</span>
                 <ChevronRight className="h-3 w-3" />
               </button>
             </div>
@@ -589,66 +580,16 @@ const TeamManagerDashboard = () => {
                     </div>
                     <button
                       onClick={() => navigate('/team-manager/events')}
-                      className="rounded-lg bg-white border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+                      className="rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
                     >
-                      Open
+                      Open Event
                     </button>
                   </div>
                 </div>
               ))}
             </div>
-          </article>
 
-          {/* Recent Team Points & Milestones */}
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)] flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div>
-                  <h2 className="text-xs font-semibold text-slate-800">
-                    Team Activity & Milestones
-                  </h2>
-                  <p className="text-[11px] text-slate-400">
-                    Recent scored points and updates for {teamDisplayName}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1 text-[11px] font-medium text-slate-400">
-                  <Clock className="h-3 w-3" />
-                  <span>Live Feed</span>
-                </div>
-              </div>
-
-              <div className="mt-3.5 space-y-2">
-                {recentTeamActivities.length > 0 ? (
-                  recentTeamActivities.map((act, idx) => (
-                    <div
-                      key={act.id || idx}
-                      className="flex items-start gap-2.5 p-2.5 rounded-xl border border-slate-100 bg-slate-50/50"
-                    >
-                      <div className="mt-0.5 flex h-5 w-5 items-center justify-center rounded-md bg-emerald-50 text-emerald-600 shrink-0">
-                        <CheckCircle2 className="h-3 w-3" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs text-slate-700 font-medium leading-relaxed">
-                          {act.action}
-                        </p>
-                        {act.time && (
-                          <p className="text-[10px] text-slate-400 mt-0.5">{act.time}</p>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-xl border border-dashed border-slate-200 p-6 text-center">
-                    <p className="text-xs text-slate-600 font-medium">Official team score: {globalPoints} pts</p>
-                    <p className="text-[11px] text-slate-400 mt-1 max-w-xs mx-auto">
-                      All points scored by your team will appear here in real-time as judges submit results.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 mt-3 flex items-center justify-between">
+            <div className="pt-3 border-t border-slate-100 mt-3.5 flex items-center justify-between">
               <button
                 onClick={() => navigate('/team-manager/students')}
                 className="text-[11px] font-medium text-slate-600 hover:text-indigo-600 flex items-center gap-1"
@@ -660,7 +601,7 @@ const TeamManagerDashboard = () => {
                 onClick={() => navigate('/team-manager/events')}
                 className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
               >
-                <span>Go to Events</span>
+                <span>Go to Events Portal</span>
                 <ArrowRight className="h-3 w-3" />
               </button>
             </div>

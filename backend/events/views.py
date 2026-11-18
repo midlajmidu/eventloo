@@ -8060,18 +8060,28 @@ def generate_call_list(request, event_id):
             if first_managed:
                 token_team_id = first_managed.id
             else:
-                token_team_id = request.GET.get('team_id')
+                req_team = request.GET.get('team_id')
+                if req_team and req_team.isdigit():
+                    verified = Team.objects.filter(
+                        id=int(req_team),
+                        school_id=event.school_id,
+                        team_manager=request.user
+                    ).first()
+                    if verified:
+                        token_team_id = verified.id
 
         mode = request.GET.get('mode', 'team' if is_team_manager else 'competition')
         if is_team_manager:
-            if mode == 'team':
-                team_id = str(token_team_id) if token_team_id else request.GET.get('team_id', 'all')
+            # Strictly enforce isolation: Team managers can ONLY view their own team members
+            if token_team_id:
+                team_id = str(token_team_id)
             else:
-                req_team = request.GET.get('team_id')
-                if req_team and req_team != 'all':
-                    team_id = str(token_team_id) if token_team_id else req_team
-                else:
-                    team_id = 'all'
+                # If manager is not assigned to any team in this school/event, deny access
+                return HttpResponse(
+                    b"Access Denied: You do not manage any verified team for this event.",
+                    status=403,
+                    content_type='text/plain'
+                )
         else:
             team_id = request.GET.get('team_id', 'all')
 
