@@ -68,6 +68,17 @@ const handleRefreshFailure = (refreshError) => {
   const isAuthRejection = status === 401 || status === 403;
 
   if (isAuthRejection) {
+    const isPublicPage = window.location.pathname.includes('/public') || window.location.pathname.includes('/badge/');
+    if (isPublicPage) {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user_role');
+      localStorage.removeItem('user');
+      localStorage.removeItem('team_data');
+      return;
+    }
+
     if (isTeamManager) {
       localStorage.removeItem('team_data');
       if (localStorage.getItem('user_role') === 'team_manager') {

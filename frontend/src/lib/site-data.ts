@@ -158,7 +158,7 @@ export function mapEventlooToSiteData(data: any): SiteData {
         participant_name: r.student_name || "Participant",
         team_id: r.team_id || (teams.find((t) => t.name === r.team_name)?.id) || null,
         team_name: r.team_name || "",
-        points: r.points || (r.position === 1 ? 10 : r.position === 2 ? 5 : r.position === 3 ? 3 : 1),
+        points: r.points !== undefined && r.points !== null ? Number(r.points) : (r.position === 1 ? 10 : r.position === 2 ? 5 : r.position === 3 ? 3 : 1),
         grade: r.grade,
         chest_number: r.chest_number,
       });

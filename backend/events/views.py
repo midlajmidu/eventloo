@@ -9349,6 +9349,7 @@ def get_public_event_portal(request, event_id):
             'points': res.points_earned or 0,
             'student_name': student_name,
             'chest_number': chest_number,
+            'team_id': res.team_id,
             'team_name': team_name,
         })
 
@@ -9361,10 +9362,10 @@ def get_public_event_portal(request, event_id):
             'category_name': category_map.get(prog.category, prog.category),
             'program_type': prog.program_type or ('stage' if prog.stage else 'off_stage'),
             'is_stage': bool(prog.stage or prog.program_type == 'stage'),
-            'stage_name': prog.stage.name if prog.stage else None,
-            'venue': prog.venue or (prog.stage.name if prog.stage else None),
-            'start_time': prog.start_time.isoformat() if prog.start_time else None,
-            'end_time': prog.end_time.isoformat() if prog.end_time else None,
+            'stage_name': (prog.stage.name if prog.stage else None) if event.is_schedule_published else None,
+            'venue': prog.venue or ((prog.stage.name if prog.stage else None) if event.is_schedule_published else None),
+            'start_time': prog.start_time.isoformat() if (event.is_schedule_published and prog.start_time) else None,
+            'end_time': prog.end_time.isoformat() if (event.is_schedule_published and prog.end_time) else None,
             'is_published': prog.is_published,
             'results': results_by_program.get(prog.id, []) if prog.is_published else [],
         })
