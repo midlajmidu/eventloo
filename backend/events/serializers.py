@@ -767,6 +767,14 @@ class ProgramSerializer(serializers.ModelSerializer):
     def get_result_status(self, obj):
         if getattr(obj, 'is_published', False):
             return 'published'
+        # Check prefetched results to avoid N+1 queries
+        if hasattr(obj, '_prefetched_objects_cache') and 'results' in obj._prefetched_objects_cache:
+            res_list = obj._prefetched_objects_cache['results']
+            if any(r.entry_status == 'submitted' and r.average_marks is not None for r in res_list):
+                return 'submitted'
+            if any(r.average_marks is not None for r in res_list):
+                return 'in_progress'
+            return 'pending'
         submitted_results = obj.results.filter(
             entry_status='submitted', average_marks__isnull=False
         )

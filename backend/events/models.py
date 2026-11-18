@@ -901,6 +901,10 @@ class Program(models.Model):
     @property
     def program_type_display(self):
         if hasattr(self, 'event') and self.event_id:
+            if hasattr(self.event, '_prefetched_objects_cache') and 'program_types' in self.event._prefetched_objects_cache:
+                for pt in self.event._prefetched_objects_cache['program_types']:
+                    if pt.code == self.program_type:
+                        return pt.name
             pt = self.event.program_types.filter(code=self.program_type).first()
             if pt:
                 return pt.name
@@ -911,6 +915,10 @@ class Program(models.Model):
         if self.stage_id:
             return True
         if hasattr(self, 'event') and self.event_id:
+            if hasattr(self.event, '_prefetched_objects_cache') and 'program_types' in self.event._prefetched_objects_cache:
+                for pt in self.event._prefetched_objects_cache['program_types']:
+                    if pt.code == self.program_type:
+                        return pt.is_stage_based
             pt = self.event.program_types.filter(code=self.program_type).first()
             if pt:
                 return pt.is_stage_based

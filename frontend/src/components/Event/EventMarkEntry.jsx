@@ -11,6 +11,7 @@ import {
   User
 } from 'lucide-react';
 import { eventProgramsAPI, markEntryAPI } from '../../services/api';
+import Pagination from '../common/Pagination';
 
 const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }) => {
   const [programs, setPrograms] = useState([]);
@@ -27,6 +28,12 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, categoryFilter, statusFilter]);
   
   // Sort State in Drawer
   const [sortField, setSortField] = useState('chest'); // 'chest' | 'code' | 'marks'
@@ -412,6 +419,13 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
+  // Client-side Pagination for Competitions Table
+  const totalPages = Math.ceil(filteredPrograms.length / pageSize);
+  const paginatedPrograms = filteredPrograms.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   const getStatusBadge = (programId) => {
     const hasMarks = completedPrograms.has(programId);
     if (hasMarks) {
@@ -520,8 +534,8 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100 bg-white">
-                  {filteredPrograms.length > 0 ? (
-                    filteredPrograms.map((prog) => (
+                  {paginatedPrograms.length > 0 ? (
+                    paginatedPrograms.map((prog) => (
                       <tr key={prog.id} className="hover:bg-gray-50/80 transition-colors">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-semibold text-gray-900">{prog.name}</div>
@@ -562,8 +576,8 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
 
             {/* Mobile Cards View */}
             <div className="block sm:hidden divide-y divide-gray-100 bg-white">
-              {filteredPrograms.length > 0 ? (
-                filteredPrograms.map((prog) => (
+              {paginatedPrograms.length > 0 ? (
+                paginatedPrograms.map((prog) => (
                   <div key={prog.id} className="p-3.5 space-y-2.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
@@ -612,6 +626,25 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                 </div>
               )}
             </div>
+
+            {/* Pagination Controls */}
+            {filteredPrograms.length > 0 && totalPages > 1 && (
+              <div className="px-6 py-3 border-t border-gray-100 bg-gray-50/50">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalCount={filteredPrograms.length}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(newSize) => {
+                    setPageSize(newSize);
+                    setCurrentPage(1);
+                  }}
+                  compact={true}
+                  showPageSizeSelector={true}
+                />
+              </div>
+            )}
           </>
         )}
       </div>

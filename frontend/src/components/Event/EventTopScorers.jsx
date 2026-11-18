@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, ChevronDown } from 'lucide-react';
 import { eventsAPI, teamsAPI, eventProgramTypesAPI } from '../../services/api';
+import Pagination from '../common/Pagination';
 
 const EventTopScorers = ({ event, eventId, categories = [] }) => {
   const [scorers, setScorers] = useState([]);
@@ -11,9 +12,28 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
   // Filters & Checkboxes State
   const [includeTeamBased, setIncludeTeamBased] = useState(false);
   const [includeGeneralCategory, setIncludeGeneralCategory] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedTeamId, setSelectedTeamId] = useState('all');
+
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+      setCurrentPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [includeTeamBased, includeGeneralCategory, selectedCategory, selectedTeamId]);
 
   useEffect(() => {
     fetchTeams();
@@ -77,6 +97,13 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
     );
   });
 
+  // Client-side Pagination
+  const totalPages = Math.ceil(filteredScorers.length / pageSize);
+  const paginatedScorers = filteredScorers.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   return (
     <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       
@@ -132,8 +159,8 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
             <input
               type="text"
               placeholder="Search participants..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               className="w-full pl-9 pr-4 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all outline-none"
             />
           </div>
@@ -213,8 +240,8 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 bg-white">
-                {filteredScorers.length > 0 ? (
-                  filteredScorers.map((scorer, idx) => (
+                {paginatedScorers.length > 0 ? (
+                  paginatedScorers.map((scorer, idx) => (
                     <tr key={scorer.student_id || idx} className="hover:bg-gray-50/70 transition-colors">
                       
                       {/* Participant Name & Special Badges */}
@@ -284,6 +311,25 @@ const EventTopScorers = ({ event, eventId, categories = [] }) => {
                 )}
               </tbody>
             </table>
+
+            {/* Pagination Controls */}
+            {filteredScorers.length > 0 && totalPages > 1 && (
+              <div className="px-6 py-3 border-t border-gray-100 bg-gray-50/50">
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  totalCount={filteredScorers.length}
+                  pageSize={pageSize}
+                  onPageChange={setCurrentPage}
+                  onPageSizeChange={(newSize) => {
+                    setPageSize(newSize);
+                    setCurrentPage(1);
+                  }}
+                  compact={true}
+                  showPageSizeSelector={true}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

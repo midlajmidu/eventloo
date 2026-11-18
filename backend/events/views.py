@@ -1,6 +1,6 @@
 import logging
 from django.shortcuts import render
-from django.db.models import Q, Count, Sum, Avg, Max, Min, Case, When, Value
+from django.db.models import Q, Count, Sum, Avg, Max, Min, Case, When, Value, Prefetch
 from django.db import models, transaction
 from django.utils import timezone
 from django.http import HttpResponse
@@ -1694,17 +1694,21 @@ class EventViewSet(viewsets.ModelViewSet):
             ).values_list('student_id', flat=True)
         )
         missing_student_ids = set(assigned_student_ids) - existing_cn_student_ids
-        for s_id in missing_student_ids:
-            pa = assigned_query.filter(student_id=s_id).first()
-            pa_team = pa.team if pa else None
-            try:
-                ChestNumber.objects.create(
+        if missing_student_ids:
+            pa_assignments = assigned_query.filter(student_id__in=missing_student_ids).values('student_id', 'team_id')
+            pa_map = {pa['student_id']: pa['team_id'] for pa in pa_assignments}
+            new_cns = [
+                ChestNumber(
                     event=event,
                     student_id=s_id,
-                    team=pa_team,
+                    team_id=pa_map.get(s_id),
                 )
+                for s_id in missing_student_ids
+            ]
+            try:
+                ChestNumber.objects.bulk_create(new_cns, ignore_conflicts=True)
             except Exception as e:
-                logger.warning(f"Could not auto-create ChestNumber for student {s_id}: {e}")
+                logger.warning(f"Could not bulk-create ChestNumbers: {e}")
 
         chest_numbers = ChestNumber.objects.filter(
             event=event,
@@ -2925,12 +2929,23 @@ class ProgramViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
     
     def get_queryset(self):
-        """Filter programs based on query parameters"""
+        """Filter programs based on query parameters with prefetched relations to eliminate N+1 queries"""
         queryset = (
             Program.objects
             .filter(event__school_id=self.request.user.school_id)
             .select_related('stage', 'event')
-            .prefetch_related('assignments', 'assignments__student', 'assignments__team')
+            .prefetch_related(
+                'assignments',
+                'assignments__student',
+                'assignments__team',
+                'event__program_types',
+                Prefetch(
+                    'results',
+                    queryset=ProgramResult.objects.filter(average_marks__isnull=False).only(
+                        'id', 'program_id', 'entry_status', 'average_marks'
+                    ),
+                ),
+            )
         )
         
         # Filter by event if nested route

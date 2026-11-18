@@ -64,10 +64,20 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
   const [loadingAssignedStudents, setLoadingAssignedStudents] = useState(false);
   
   // Filter and sort states
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortBy, setSortBy] = useState('start_time');
+  
+  // Debounce search input to prevent rapid server requests while typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
   
   // Add program type filter state
   const [programTypeFilter, setProgramTypeFilter] = useState('all'); // 'all', or any dynamic type code
@@ -497,10 +507,9 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
     return program.program_type === programTypeFilter;
   });
 
-  // Handle search - reset to first page when searching
+  // Handle search - debounced via searchInput
   const handleSearch = (value) => {
-    setSearchTerm(value);
-    setCurrentPage(1);
+    setSearchInput(value);
   };
 
   const getCategoryDisplay = (category) => {
@@ -614,7 +623,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                 <input
                   type="text"
                   placeholder="Search programs..."
-                  value={searchTerm}
+                  value={searchInput}
                   onChange={(e) => handleSearch(e.target.value)}
                   className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
@@ -683,6 +692,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
 
             <button
               onClick={() => {
+                setSearchInput('');
                 setSearchTerm('');
                 setCategoryFilter('all');
                 setStatusFilter('all');

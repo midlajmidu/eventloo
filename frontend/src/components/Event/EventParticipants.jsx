@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Search, ChevronDown, User, RefreshCw, X, ExternalLink, Eye, QrCode, Copy, Check, ShieldCheck } from 'lucide-react';
 import { eventsAPI, teamsAPI } from '../../services/api';
 import QRCodeSVG from '../common/QRCodeSVG';
+import Pagination from '../common/Pagination';
 
 const EventParticipants = ({ 
   eventId, 
@@ -18,11 +19,30 @@ const EventParticipants = ({
   // Drawer state for viewing student program details
   const [selectedParticipant, setSelectedParticipant] = useState(null);
 
-  // Filter States
+  // Filter States with Debounced Search
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedTeam, setSelectedTeam] = useState('all');
   const [selectedGender, setSelectedGender] = useState('all');
+
+  // Pagination States
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+      setCurrentPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  // Reset page when dropdown filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory, selectedTeam, selectedGender]);
 
   useEffect(() => {
     if (eventId) {
@@ -127,6 +147,13 @@ const EventParticipants = ({
     return true;
   });
 
+  // Paginated Participants
+  const totalPages = Math.ceil(filteredParticipants.length / pageSize);
+  const paginatedParticipants = filteredParticipants.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
   // Calculate drawer point summary totals
   const drawerPrograms = selectedParticipant?.assigned_programs || [];
   const offstagePoints = drawerPrograms
@@ -175,8 +202,8 @@ const EventParticipants = ({
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             placeholder="Search participants..."
             className="w-full pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-2xs"
           />
@@ -283,8 +310,8 @@ const EventParticipants = ({
                     <td className="px-6 py-4 text-right"><div className="h-4 w-20 bg-gray-200 rounded ml-auto" /></td>
                   </tr>
                 ))
-              ) : filteredParticipants.length > 0 ? (
-                filteredParticipants.map((item) => {
+              ) : paginatedParticipants.length > 0 ? (
+                paginatedParticipants.map((item) => {
                   const sName = item.student_name || item.student_details?.full_name || 'Participant Name';
                   return (
                     <tr 
@@ -373,6 +400,25 @@ const EventParticipants = ({
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {filteredParticipants.length > 0 && totalPages > 1 && (
+          <div className="px-6 py-3 border-t border-gray-100 bg-gray-50/50">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalCount={filteredParticipants.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(newSize) => {
+                setPageSize(newSize);
+                setCurrentPage(1);
+              }}
+              compact={true}
+              showPageSizeSelector={true}
+            />
+          </div>
+        )}
       </div>
 
       {/* Side Drawer for Participant Details (Matching User's Provided Mock Screenshot) */}
