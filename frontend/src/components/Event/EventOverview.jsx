@@ -14,6 +14,45 @@ import { eventReportsAPI, eventPointsAPI, eventStagesAPI, publicEventAPI } from 
 import EventlooLogo from '../common/EventlooLogo';
 import { downloadEventQrPoster } from '../../utils/qrPosterGenerator';
 
+const CATEGORY_COLORS = [
+  {
+    bar: 'bg-gradient-to-r from-indigo-500 to-indigo-600',
+    dot: 'bg-indigo-500',
+    badge: 'bg-indigo-50 text-indigo-700 border-indigo-200/80',
+    text: 'text-indigo-600',
+  },
+  {
+    bar: 'bg-gradient-to-r from-emerald-500 to-teal-500',
+    dot: 'bg-emerald-500',
+    badge: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
+    text: 'text-emerald-600',
+  },
+  {
+    bar: 'bg-gradient-to-r from-amber-500 to-orange-500',
+    dot: 'bg-amber-500',
+    badge: 'bg-amber-50 text-amber-700 border-amber-200/80',
+    text: 'text-amber-600',
+  },
+  {
+    bar: 'bg-gradient-to-r from-purple-500 to-violet-600',
+    dot: 'bg-purple-500',
+    badge: 'bg-purple-50 text-purple-700 border-purple-200/80',
+    text: 'text-purple-600',
+  },
+  {
+    bar: 'bg-gradient-to-r from-rose-500 to-pink-500',
+    dot: 'bg-rose-500',
+    badge: 'bg-rose-50 text-rose-700 border-rose-200/80',
+    text: 'text-rose-600',
+  },
+  {
+    bar: 'bg-gradient-to-r from-sky-500 to-cyan-500',
+    dot: 'bg-sky-500',
+    badge: 'bg-sky-50 text-sky-700 border-sky-200/80',
+    text: 'text-sky-600',
+  },
+];
+
 const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTab }) => {
   const [analytics, setAnalytics] = useState(null);
   const [teamPoints, setTeamPoints] = useState([]);
@@ -110,6 +149,12 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
   const totalStages = stages.length;
 
   const completionPercent = totalPrograms > 0 ? Math.round((completedPrograms / totalPrograms) * 100) : 0;
+
+  // Maximum programs count among categories for relative bar graph widths
+  const maxProgCount = Math.max(1, ...categories.map(c => {
+    const code = c.code || c.id;
+    return programs.filter(p => p.category === code).length;
+  }));
 
   // Format dates
   const formatDate = (isoString) => {
@@ -291,75 +336,20 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         
-        {/* Left Column (2 Cols): Quick Operations + Categories Breakdown */}
+        {/* Left Column (2 Cols): Categories Breakdown (Colored Bar Graph) */}
         <div className="lg:col-span-2 space-y-5">
           
-          {/* Quick Operations Shortcuts */}
-          <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Quick Operations
-              </h3>
-              <span className="text-xs text-slate-400">Direct Navigation</span>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-              <button
-                onClick={() => setActiveTab('programs')}
-                className="p-3 rounded-lg border border-slate-200/70 hover:border-slate-300 hover:bg-slate-50 transition-all text-left cursor-pointer"
-              >
-                <span className="text-xs font-semibold text-slate-900 block">Programs</span>
-                <span className="text-[11px] text-slate-400 block mt-0.5">Manage events list</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('schedule')}
-                className="p-3 rounded-lg border border-slate-200/70 hover:border-slate-300 hover:bg-slate-50 transition-all text-left cursor-pointer"
-              >
-                <span className="text-xs font-semibold text-slate-900 block">Schedule</span>
-                <span className="text-[11px] text-slate-400 block mt-0.5">Stages & timetable</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('assignments')}
-                className="p-3 rounded-lg border border-slate-200/70 hover:border-slate-300 hover:bg-slate-50 transition-all text-left cursor-pointer"
-              >
-                <span className="text-xs font-semibold text-slate-900 block">Assignments</span>
-                <span className="text-[11px] text-slate-400 block mt-0.5">Assign participants</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('mark-entry')}
-                className="p-3 rounded-lg border border-slate-200/70 hover:border-slate-300 hover:bg-slate-50 transition-all text-left cursor-pointer"
-              >
-                <span className="text-xs font-semibold text-slate-900 block">Mark Entry</span>
-                <span className="text-[11px] text-slate-400 block mt-0.5">Score & evaluations</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('documents')}
-                className="p-3 rounded-lg border border-slate-200/70 hover:border-slate-300 hover:bg-slate-50 transition-all text-left cursor-pointer"
-              >
-                <span className="text-xs font-semibold text-slate-900 block">Documents</span>
-                <span className="text-[11px] text-slate-400 block mt-0.5">Calling sheets & forms</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('certificates')}
-                className="p-3 rounded-lg border border-slate-200/70 hover:border-slate-300 hover:bg-slate-50 transition-all text-left cursor-pointer"
-              >
-                <span className="text-xs font-semibold text-slate-900 block">Certificates & Badges</span>
-                <span className="text-[11px] text-slate-400 block mt-0.5">Print passes & awards</span>
-              </button>
-            </div>
-          </div>
-
           {/* Categories Breakdown */}
-          <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Categories Breakdown
-              </h3>
+          <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs">
+            <div className="flex items-center justify-between mb-4 pb-2.5 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Categories Breakdown
+                </h3>
+                <span className="text-[11px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                  {categories.length} Categories
+                </span>
+              </div>
               <button
                 onClick={() => setActiveTab('programs')}
                 className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-0.5 cursor-pointer"
@@ -370,41 +360,62 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
             </div>
 
             {categories && categories.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {categories.map((cat) => {
+              <div className="space-y-3.5">
+                {categories.map((cat, idx) => {
                   const catCode = cat.code || cat.id;
                   const catPrograms = programs.filter(p => p.category === catCode);
                   const progCount = catPrograms.length;
                   const analyticsCat = analytics?.category_stats?.[catCode];
                   const partCount = analyticsCat?.participants ?? catPrograms.reduce((acc, p) => acc + (p.participants_count || 0), 0);
+                  const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+                  const progPct = totalPrograms > 0 ? Math.round((progCount / totalPrograms) * 100) : 0;
+                  const barWidthPct = maxProgCount > 0 ? Math.round((progCount / maxProgCount) * 100) : 0;
 
                   return (
                     <div
                       key={catCode}
-                      className="p-3 rounded-lg border border-slate-200/70 hover:bg-slate-50 transition-colors flex items-center justify-between gap-3"
+                      className="p-3.5 rounded-xl border border-slate-100 hover:border-slate-200/90 hover:bg-slate-50/40 transition-all space-y-2.5"
                     >
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200/60 shrink-0">
-                            {catCode}
-                          </span>
-                          <span className="text-xs font-semibold text-slate-900 truncate">
+                      {/* Category Header Info */}
+                      <div className="flex items-center justify-between text-xs gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`w-2.5 h-2.5 rounded-full ${color.dot} shrink-0`} />
+                          <span className="font-bold text-slate-900 truncate">
                             {cat.name}
                           </span>
+                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold uppercase tracking-wider ${color.badge} shrink-0`}>
+                            {catCode}
+                          </span>
                         </div>
-                        <span className="text-[11px] text-slate-400 block mt-1">
-                          {partCount} registered entries
-                        </span>
+
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <span className="text-[11px] text-slate-400 hidden sm:inline">
+                            {partCount} registered entries
+                          </span>
+                          <span className="text-xs font-bold text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-200/70 shadow-2xs">
+                            {progCount} <span className="text-[10px] font-medium text-slate-400">progs ({progPct}%)</span>
+                          </span>
+                        </div>
                       </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-sm font-bold text-slate-900 block leading-tight">
-                          {progCount}
-                        </span>
-                        <span className="text-[10px] text-slate-400">programs</span>
+
+                      {/* The Colored Bar Graph Track */}
+                      <div className="w-full bg-slate-100/90 rounded-full h-2.5 overflow-hidden p-0.5">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${color.bar}`}
+                          style={{ width: `${Math.max(progCount > 0 ? 5 : 0, barWidthPct)}%` }}
+                        />
                       </div>
                     </div>
                   );
                 })}
+
+                {/* Footer summary legend */}
+                <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-100">
+                  <span>Total festival load</span>
+                  <span className="font-semibold text-slate-600">
+                    {totalPrograms} total programs · {totalParticipants} participants
+                  </span>
+                </div>
               </div>
             ) : (
               <div className="text-center py-6 text-xs text-slate-400">
@@ -440,18 +451,51 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
                   return (
                     <div
                       key={team.team_id || team.id || idx}
-                      className="p-2.5 rounded-lg border border-slate-100 hover:bg-slate-50 transition-colors flex items-center justify-between gap-2.5"
+                      className={`p-2.5 rounded-lg border transition-colors flex items-center justify-between gap-2.5 ${
+                        rank === 1
+                          ? 'border-amber-200/80 bg-amber-50/40'
+                          : rank === 2
+                          ? 'border-slate-200 bg-slate-50/50'
+                          : rank === 3
+                          ? 'border-amber-100 bg-amber-50/20'
+                          : 'border-slate-100 hover:bg-slate-50'
+                      }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="w-5 h-5 rounded text-[11px] font-bold text-slate-500 bg-slate-100 flex items-center justify-center shrink-0">
-                          #{rank}
-                        </span>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {rank === 1 ? (
+                          <span
+                            className="w-6 h-6 rounded-md bg-amber-100/80 border border-amber-300 text-amber-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs"
+                            title="1st Place - Gold"
+                          >
+                            <span className="text-sm">🥇</span>
+                          </span>
+                        ) : rank === 2 ? (
+                          <span
+                            className="w-6 h-6 rounded-md bg-slate-200/70 border border-slate-300 text-slate-700 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs"
+                            title="2nd Place - Silver"
+                          >
+                            <span className="text-sm">🥈</span>
+                          </span>
+                        ) : rank === 3 ? (
+                          <span
+                            className="w-6 h-6 rounded-md bg-amber-100/60 border border-amber-300/80 text-amber-800 font-extrabold text-xs flex items-center justify-center shrink-0 shadow-2xs"
+                            title="3rd Place - Bronze"
+                          >
+                            <span className="text-sm">🥉</span>
+                          </span>
+                        ) : (
+                          <span className="w-6 h-6 rounded-md text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-200/70 flex items-center justify-center shrink-0">
+                            #{rank}
+                          </span>
+                        )}
                         <span className="text-xs font-semibold text-slate-900 truncate">
                           {team.team_name || team.name || 'Team'}
                         </span>
                       </div>
 
-                      <span className="text-xs font-bold text-slate-900 shrink-0">
+                      <span className={`text-xs shrink-0 ${
+                        rank === 1 ? 'font-extrabold text-amber-700' : 'font-bold text-slate-900'
+                      }`}>
                         {team.total_points ?? team.points ?? 0} pts
                       </span>
                     </div>
