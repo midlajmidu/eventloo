@@ -51,8 +51,9 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Create persistent storage directories
-RUN mkdir -p /app/data /app/media /app/backend/staticfiles
+# Create persistent storage directories & Nginx cache
+RUN mkdir -p /app/data /app/media /app/backend/staticfiles /var/cache/nginx/api && \
+    chown -R www-data:www-data /var/cache/nginx || true
 
 EXPOSE 80
 

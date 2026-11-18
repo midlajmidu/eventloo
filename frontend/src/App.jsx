@@ -1,41 +1,49 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import ErrorBoundary from './components/common/ErrorBoundary';
 import Login from './components/Login';
-import SuperAdminLogin from './components/SuperAdmin/SuperAdminLogin';
-import SuperAdminDashboard from './components/SuperAdmin/SuperAdminDashboard';
-import AdminDashboard from './components/AdminDashboard';
-import UserDashboard from './components/UserDashboard';
-import TeamManagerDashboard from './components/TeamManagerDashboard';
-import TeamLoginDashboard from './components/TeamLoginDashboard';
-import EventDashboard from './components/Event/EventDashboard';
-import EventTopPerformers from './components/Event/EventTopPerformers';
 import AdminLayout from './components/Layout/AdminLayout';
 import TeamManagerLayout from './components/Layout/TeamManagerLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 import TeamProtectedRoute from './components/TeamProtectedRoute';
 
+// Lazy-loaded pages for high-speed code-splitting & minimal initial bundle
+const SuperAdminLogin = lazy(() => import('./components/SuperAdmin/SuperAdminLogin'));
+const SuperAdminDashboard = lazy(() => import('./components/SuperAdmin/SuperAdminDashboard'));
+const AdminDashboard = lazy(() => import('./components/AdminDashboard'));
+const UserDashboard = lazy(() => import('./components/UserDashboard'));
+const TeamManagerDashboard = lazy(() => import('./components/TeamManagerDashboard'));
+const TeamLoginDashboard = lazy(() => import('./components/TeamLoginDashboard'));
+const EventDashboard = lazy(() => import('./components/Event/EventDashboard'));
+const EventTopPerformers = lazy(() => import('./components/Event/EventTopPerformers'));
+
 // Admin Components
-import EventsPage from './components/Admin/EventsPage';
-import StudentsPage from './components/Admin/StudentsPage';
-import TeamsPage from './components/Admin/TeamsPage';
-import PointsPage from './components/Admin/PointsPage';
-import AdminSettings from './components/Admin/AdminSettings';
-import DocsPage from './components/Admin/DocsPage';
-import UsersPage from './components/Admin/UsersPage';
+const EventsPage = lazy(() => import('./components/Admin/EventsPage'));
+const StudentsPage = lazy(() => import('./components/Admin/StudentsPage'));
+const TeamsPage = lazy(() => import('./components/Admin/TeamsPage'));
+const PointsPage = lazy(() => import('./components/Admin/PointsPage'));
+const AdminSettings = lazy(() => import('./components/Admin/AdminSettings'));
+const DocsPage = lazy(() => import('./components/Admin/DocsPage'));
+const UsersPage = lazy(() => import('./components/Admin/UsersPage'));
 
 // Team Manager Components
-import TeamAssignments from './components/TeamManager/TeamAssignments';
-import TeamManagerEvents from './components/TeamManager/TeamManagerEvents';
-import TeamManagerPoints from './components/TeamManager/TeamManagerPoints';
-import TeamEventDetail from './components/TeamManager/TeamEventDetail';
-import TeamStudents from './components/TeamManager/TeamStudents';
-import ProgramAssignmentPage from './components/TeamManager/ProgramAssignmentPage';
-import TeamEventDashboard from './components/TeamManager/TeamEventDashboard';
-import PublicParticipantBadge from './components/Public/PublicParticipantBadge';
-import ThemedPage from './components/Public/themes/ThemedPage';
+const TeamAssignments = lazy(() => import('./components/TeamManager/TeamAssignments'));
+const TeamManagerEvents = lazy(() => import('./components/TeamManager/TeamManagerEvents'));
+const TeamManagerPoints = lazy(() => import('./components/TeamManager/TeamManagerPoints'));
+const TeamEventDetail = lazy(() => import('./components/TeamManager/TeamEventDetail'));
+const TeamStudents = lazy(() => import('./components/TeamManager/TeamStudents'));
+const ProgramAssignmentPage = lazy(() => import('./components/TeamManager/ProgramAssignmentPage'));
+const TeamEventDashboard = lazy(() => import('./components/TeamManager/TeamEventDashboard'));
+const PublicParticipantBadge = lazy(() => import('./components/Public/PublicParticipantBadge'));
+const ThemedPage = lazy(() => import('./components/Public/themes/ThemedPage'));
 
 import './index.css';
+
+const PageLoader = () => (
+  <div className="flex min-h-[60vh] items-center justify-center">
+    <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" />
+  </div>
+);
 
 // Auth utility functions
 const isAuthenticated = () => {
@@ -67,7 +75,8 @@ function App() {
     <ErrorBoundary>
       <Router>
         <div className="App">
-          <Routes>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
           {/* Public Routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/team-manager/login" element={<Navigate to="/login?tab=team" replace />} />
@@ -218,6 +227,7 @@ function App() {
             element={<Navigate to="/" replace />} 
           />
         </Routes>
+        </Suspense>
       </div>
     </Router>
     </ErrorBoundary>

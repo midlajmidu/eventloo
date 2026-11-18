@@ -31,7 +31,6 @@ from accounts.authentication import SchoolJWTAuthentication
 from accounts.security_audit import audit_security_event
 from accounts.models import User
 from accounts.quotas import lock_and_enforce_quota
-import pandas as pd
 from accounts.upload_security import (
     sanitize_spreadsheet_dataframe,
     validate_excel_upload,
@@ -45,12 +44,6 @@ from openpyxl.styles import Font, PatternFill, Alignment
 from collections import defaultdict
 from .pdf_utils import add_eventloo_footer, build_pdf_header
 from .pagination import StandardPagination, LargePagination, SmallPagination, CustomPagination
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter, A4
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.pdfgen import canvas
 import json
 import csv
 from datetime import datetime, timedelta, time
@@ -104,7 +97,14 @@ class EventViewSet(viewsets.ModelViewSet):
     pagination_class = StandardPagination
 
     def get_queryset(self):
-        return Event.objects.filter(school_id=getattr(self.request.user, 'school_id', None))
+        qs = Event.objects.filter(school_id=getattr(self.request.user, 'school_id', None))
+        if self.action == 'retrieve':
+            return qs.prefetch_related(
+                'programs__stage',
+                'programs__assignments__student',
+                'programs__assignments__team',
+            )
+        return qs
     
     def get_serializer_class(self):
         if self.action == 'list':
@@ -176,6 +176,7 @@ class EventViewSet(viewsets.ModelViewSet):
         else:
             event.is_schedule_published = bool(desired)
         event.save(update_fields=['is_schedule_published', 'updated_at'])
+        invalidate_public_portal_cache(event.id)
         audit_security_event(
             request, 'event_schedule_publish_state', 'success',
             school_id=event.school_id, target=event.id,
@@ -849,6 +850,7 @@ class EventViewSet(viewsets.ModelViewSet):
             return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         
         try:
+            import pandas as pd
             # Read Excel file
             try:
                 if file.name.endswith('.xlsx'):
@@ -958,6 +960,7 @@ class EventViewSet(viewsets.ModelViewSet):
     
     def _process_program_excel_with_ai(self, df, event):
         """AI-powered Excel processing for program data with comprehensive validation and structured error reporting."""
+        import pandas as pd
         results = {
             'valid_programs': [],
             'errors': [],
@@ -2049,6 +2052,7 @@ class EventViewSet(viewsets.ModelViewSet):
             program.save()
             from .services import recalculate_program_results
             recalculate_program_results(program)
+            invalidate_public_portal_cache(event.id)
             audit_security_event(
                 request, 'program_results_publish_state', 'success',
                 school_id=event.school_id, target=program.id,
@@ -2080,6 +2084,7 @@ class EventViewSet(viewsets.ModelViewSet):
             program.save(update_fields=['is_published', 'updated_at'])
             recalculate_program_results(program)
             published.append(program.id)
+        invalidate_public_portal_cache(event.id)
         audit_security_event(
             request, 'event_results_publish_all', 'success',
             school_id=event.school_id, target=event.id,
@@ -3395,6 +3400,7 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
             
             # Read Excel / CSV file
             try:
+                import pandas as pd
                 fname = file.name.lower()
                 if fname.endswith('.csv'):
                     try:
@@ -3490,6 +3496,7 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
     
     def _process_excel_with_ai(self, df, program):
         """AI-powered processing of Excel data with smart column detection and validation"""
+        import pandas as pd
         results = {
             'valid_students': [],
             'errors': [],
@@ -3656,6 +3663,8 @@ class ProgramAssignmentViewSet(viewsets.ModelViewSet):
                 id=program_pk, event__school_id=request.user.school_id
             )
             
+            import pandas as pd
+            import io
             # Create template data
             template_data = {
                 'student_id': ['HS2025001', 'HSS2025002', 'HS2025003'],
@@ -9721,8 +9730,10 @@ def get_public_event_portal(request, event_id):
     }
     try:
         from django.core.cache import cache
-        cache.set(cache_key, portal_payload, 30)
+        cache.set(cache_key, portal_payload, 300)
     except Exception:
         pass
-    return Response(portal_payload)
+    response = Response(portal_payload)
+    response['Cache-Control'] = 'public, max-age=10, s-maxage=30'
+    return response
 

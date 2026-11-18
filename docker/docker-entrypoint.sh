@@ -21,8 +21,9 @@ export ALLOW_LOCAL_CACHE="${ALLOW_LOCAL_CACHE:-true}"
 export SQLITE_DB_PATH="${SQLITE_DB_PATH:-/app/data/db.sqlite3}"
 export MEDIA_ROOT="${MEDIA_ROOT:-/app/media}"
 
-# Ensure persistent mount directories exist
-mkdir -p /app/data /app/media /app/backend/staticfiles
+# Ensure persistent mount directories and Nginx cache directory exist
+mkdir -p /app/data /app/media /app/backend/staticfiles /var/cache/nginx/api
+chown -R www-data:www-data /var/cache/nginx 2>/dev/null || true
 
 # Auto-generate and persist cryptographic keys if not supplied in environment
 if [ -z "$SECRET_KEY" ]; then
@@ -76,9 +77,26 @@ else
     echo "[2/6] Using persistent local SQLite database at ${SQLITE_DB_PATH}..."
 fi
 
-# 4. Run Database Migrations
+# 4. Run Database Migrations & Configure High-Performance SQLite WAL
 echo "[3/6] Running database migrations..."
 python3 manage.py migrate --noinput
+
+if [ -z "$DATABASE_URL" ] || [[ ! "$DATABASE_URL" =~ ^postgres ]]; then
+    python3 -c "
+import sqlite3, os
+db_path = os.environ.get('SQLITE_DB_PATH', '/app/data/db.sqlite3')
+if os.path.exists(db_path):
+    conn = sqlite3.connect(db_path)
+    cur = conn.cursor()
+    cur.execute('PRAGMA journal_mode=WAL;')
+    cur.execute('PRAGMA synchronous=NORMAL;')
+    cur.execute('PRAGMA cache_size=-64000;')
+    cur.execute('PRAGMA busy_timeout=5000;')
+    conn.commit()
+    conn.close()
+    print('Persistent SQLite optimized with WAL mode and 64MB cache.')
+" || true
+fi
 
 # 5. Collect Static Files for Nginx Direct Delivery
 echo "[4/6] Collecting backend static assets..."

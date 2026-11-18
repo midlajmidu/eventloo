@@ -710,6 +710,12 @@ def recalculate_program_results(program):
         previous_score = score
 
     rebuild_program_points(program)
+    try:
+        from django.core.cache import cache
+        if getattr(program, 'event_id', None):
+            cache.delete(f"public_portal_v2_{program.event_id}")
+    except Exception:
+        pass
     return results
 
 

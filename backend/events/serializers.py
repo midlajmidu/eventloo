@@ -780,9 +780,19 @@ class ProgramSerializer(serializers.ModelSerializer):
         return str(obj.category or 'general').upper()
 
     def get_total_teams(self, obj):
-        """Get total active teams count"""
+        """Get total active teams count (cached on context/event to eliminate N+1 queries)"""
+        cache_key = f"_total_teams_count_{getattr(getattr(obj, 'event', None), 'school_id', 'none')}"
+        if self.context and cache_key in self.context:
+            return self.context[cache_key]
+        if hasattr(obj, 'event') and hasattr(obj.event, '_total_teams_cached'):
+            return obj.event._total_teams_cached
         from events.models import Team
-        return Team.objects.filter(school=obj.event.school).count()
+        count = Team.objects.filter(school=obj.event.school).count() if (getattr(obj, 'event', None) and obj.event.school_id) else 0
+        if self.context is not None:
+            self.context[cache_key] = count
+        if hasattr(obj, 'event') and obj.event:
+            obj.event._total_teams_cached = count
+        return count
 
     def get_total_max_participants(self, obj):
         """Calculate overall total participant capacity across all teams"""
@@ -824,11 +834,16 @@ class ProgramSerializer(serializers.ModelSerializer):
     
     def get_participants_count(self, obj):
         """Get total number of participants in this program"""
+        if hasattr(obj, '_prefetched_objects_cache') and 'assignments' in obj._prefetched_objects_cache:
+            return len(obj.assignments.all())
         return obj.assignments.count()
     
     def get_assigned_students(self, obj):
         """Get list of assigned students with their details"""
-        assignments = obj.assignments.select_related('student', 'team')
+        if hasattr(obj, '_prefetched_objects_cache') and 'assignments' in obj._prefetched_objects_cache:
+            assignments = obj.assignments.all()
+        else:
+            assignments = obj.assignments.select_related('student', 'team')
         return [
             {
                 'id': assignment.student.id,

@@ -13,7 +13,6 @@ from .models import User, School, SchoolSettings, StudentCategory, StudentClass,
 from events.permissions import CanManageStudents, IsTeamManagerOrAdmin, TeamManagerAuthentication, IsSuperAdmin, IsAdminOrEventManager, IsApplicationStaff, IsSchoolAdmin, IsSameSchool
 from .authentication import SchoolJWTAuthentication
 from events.pagination import StandardPagination, LargePagination, SmallPagination
-import pandas as pd
 import re
 import random
 import string
@@ -2080,6 +2079,8 @@ class StudentViewSet(viewsets.ModelViewSet):
         """AI-powered bulk upload students via Excel file with team assignments"""
         if 'file' not in request.FILES:
             return Response({'error': 'No file uploaded'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        import pandas as pd
         
         file = request.FILES['file']
         try:
