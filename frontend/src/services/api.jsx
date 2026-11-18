@@ -785,32 +785,35 @@ export const eventAssignmentsAPI = {
   // Get assignments for a specific program
   getProgramAssignments: (eventId, programId) => api.get(`events/${eventId}/programs/${programId}/assignments/`),
   
-  // Get all assignments for an event
+  // Get all assignments for an event in a single fast call
   getEventAssignments: async (eventId) => {
-    // First get all programs for the event
-    const programsRes = await api.get(`events/${eventId}/programs/?page_size=1000`);
-    const programs = programsRes.data.results || programsRes.data;
-    
-    // Then get assignments for each program
-    const allAssignments = [];
-    for (const program of programs) {
-      try {
-        const assignmentsRes = await api.get(`events/${eventId}/programs/${program.id}/assignments/`);
-        const assignments = assignmentsRes.data.results || assignmentsRes.data;
-        
-        // Add program info to each assignment
-        assignments.forEach(assignment => {
-          assignment.program_id = program.id;
-          assignment.program_name = program.name;
-          assignment.program_category = program.category;
-        });
-        allAssignments.push(...assignments);
-      } catch (error) {
-        console.warn(`Failed to get assignments for program ${program.id}:`, error);
+    try {
+      const res = await api.get(`events/${eventId}/assignments/`);
+      return res;
+    } catch (directError) {
+      // Fallback if dedicated endpoint fails
+      const programsRes = await api.get(`events/${eventId}/programs/?page_size=1000`);
+      const programs = programsRes.data.results || programsRes.data;
+      
+      const allAssignments = [];
+      for (const program of programs) {
+        try {
+          const assignmentsRes = await api.get(`events/${eventId}/programs/${program.id}/assignments/`);
+          const assignments = assignmentsRes.data.results || assignmentsRes.data;
+          
+          assignments.forEach(assignment => {
+            assignment.program_id = program.id;
+            assignment.program_name = program.name;
+            assignment.program_category = program.category;
+          });
+          allAssignments.push(...assignments);
+        } catch (error) {
+          console.warn(`Failed to get assignments for program ${program.id}:`, error);
+        }
       }
+      
+      return { data: allAssignments };
     }
-    
-    return { data: allAssignments };
   },
   
   // Assign students to a program (bulk assignment)

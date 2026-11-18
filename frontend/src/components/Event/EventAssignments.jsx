@@ -78,10 +78,10 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
   const fetchInitialData = async () => {
     setLoading(true);
     try {
-      const [programsRes, teamsRes, studentsRes, assignmentsRes] = await Promise.allSettled([
+      // 1. Fetch only essential data upfront (fast, non-blocking)
+      const [programsRes, teamsRes, assignmentsRes] = await Promise.allSettled([
         eventProgramsAPI.getPrograms(eventId, 'page_size=500'),
         teamsAPI.getTeams({ event: eventId }),
-        studentsAPI.getStudents({ page_size: 1000 }),
         eventAssignmentsAPI.getEventAssignments(eventId)
       ]);
 
@@ -95,8 +95,14 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
 
       setPrograms(parseArray(programsRes));
       setTeams(parseArray(teamsRes));
-      setStudents(parseArray(studentsRes));
       setAssignments(parseArray(assignmentsRes));
+
+      // 2. Load global student fallback asynchronously in the background so it never blocks page render
+      studentsAPI.getStudents({ page_size: 500 }).then(res => {
+        const d = res?.data;
+        const list = Array.isArray(d) ? d : (Array.isArray(d?.results) ? d.results : []);
+        setStudents(list);
+      }).catch(() => {});
 
       if (programsRes.status === 'rejected' && teamsRes.status === 'rejected') {
         setMessage('Error loading registration data');

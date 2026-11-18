@@ -125,7 +125,7 @@ class EventViewSet(viewsets.ModelViewSet):
             permission_classes = [IsAdminOrEventManager]
         elif self.action in [
             'retrieve', 'list', 'points_teams', 'schedule_export',
-            'chest_numbers', 'search_by_chest_number', 'analytics',
+            'chest_numbers', 'search_by_chest_number', 'analytics', 'assignments',
         ]:
             permission_classes = [IsTeamManagerOrAdmin]
         else:
@@ -2138,6 +2138,53 @@ class EventViewSet(viewsets.ModelViewSet):
         
         return Response(program_data)
 
+    @action(detail=True, methods=['get'])
+    def assignments(self, request, pk=None):
+        """Get all program assignments for this event in a single fast, prefetched query"""
+        event = self.get_object()
+        assignments_qs = (
+            ProgramAssignment.objects
+            .filter(program__event=event)
+            .select_related('student', 'team', 'program')
+            .order_by('program_id', 'sub_team_number', 'id')
+        )
+        if getattr(request.user, 'role', '') == 'team_manager':
+            token_team_id = getattr(request.user, 'team_id', None)
+            if token_team_id:
+                assignments_qs = assignments_qs.filter(team_id=token_team_id)
+            elif hasattr(request.user, 'managed_teams'):
+                assignments_qs = assignments_qs.filter(team__in=request.user.managed_teams.filter(school_id=request.user.school_id))
+
+        data = [
+            {
+                'id': a.id,
+                'program_id': a.program_id,
+                'program': a.program_id,
+                'program_name': a.program.name if a.program else '',
+                'program_category': a.program.category if a.program else '',
+                'student_id': a.student_id,
+                'student': {
+                    'id': a.student.id,
+                    'name': a.student.get_full_name(),
+                    'student_id': a.student.student_id,
+                    'category': a.student.category,
+                    'grade': a.student.grade,
+                    'section': a.student.section,
+                } if a.student else None,
+                'team_id': a.team_id,
+                'team': {
+                    'id': a.team.id,
+                    'name': a.team.name,
+                } if a.team else None,
+                'sub_team_number': a.sub_team_number or 1,
+                'is_leader': a.is_leader,
+                'chest_number': a.chest_number,
+                'assigned_at': a.assigned_at.isoformat() if a.assigned_at else None,
+            }
+            for a in assignments_qs
+        ]
+        return Response(data)
+
 class TeamViewSet(viewsets.ModelViewSet):
     """ViewSet for Team management"""
     serializer_class = TeamSerializer
@@ -2879,7 +2926,12 @@ class ProgramViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Filter programs based on query parameters"""
-        queryset = Program.objects.filter(event__school_id=self.request.user.school_id)
+        queryset = (
+            Program.objects
+            .filter(event__school_id=self.request.user.school_id)
+            .select_related('stage', 'event')
+            .prefetch_related('assignments', 'assignments__student', 'assignments__team')
+        )
         
         # Filter by event if nested route
         event_pk = self.kwargs.get('event_pk')
