@@ -39,8 +39,10 @@ const StudentsPage = () => {
   const location = useLocation();
   const [students, setStudents] = useState([]);
   const [teams, setTeams] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedGrade, setSelectedGrade] = useState('');
   const [selectedTeam, setSelectedTeam] = useState('');
@@ -122,11 +124,11 @@ const StudentsPage = () => {
 
   const fetchStudents = async () => {
     try {
-      setLoading(true);
+      setIsSearching(true);
       const response = await studentsAPI.getStudents({
         page: currentPage,
         page_size: pageSize,
-        search: searchTerm,
+        search: debouncedSearch.trim(),
         category: selectedCategory,
         grade: selectedGrade,
         section: selectedSection,
@@ -149,7 +151,8 @@ const StudentsPage = () => {
       setStudents([]);
       setTotalCount(0);
     } finally {
-      setLoading(false);
+      setIsSearching(false);
+      setInitialLoading(false);
     }
   };
 
@@ -164,12 +167,18 @@ const StudentsPage = () => {
     }
   };
 
+  // Debounce search input so typing is instantaneous and doesn't fire requests on every letter
   useEffect(() => {
-    const debounceTimer = setTimeout(() => {
-      fetchStudents();
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchInput);
+      setCurrentPage(1);
     }, 300);
-    return () => clearTimeout(debounceTimer);
-  }, [currentPage, pageSize, searchTerm, selectedCategory, selectedGrade, selectedSection, selectedGender, selectedTeam]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    fetchStudents();
+  }, [currentPage, pageSize, debouncedSearch, selectedCategory, selectedGrade, selectedSection, selectedGender, selectedTeam]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleAddStudent = async (e) => {
     e.preventDefault();
@@ -353,7 +362,7 @@ const StudentsPage = () => {
     setCurrentPage(1); // Reset to first page when page size changes
   };
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="flex min-h-[65vh] items-center justify-center bg-[#f7f8fb]">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" />
@@ -383,15 +392,27 @@ const StudentsPage = () => {
         <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
           <div className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-[minmax(230px,2fr)_repeat(5,minmax(115px,1fr))_auto]">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none" />
               <input
                 type="search"
                 aria-label="Search students"
                 placeholder="Search name, ID or class"
-                value={searchTerm}
-                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-9 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
               />
+              {isSearching ? (
+                <RefreshCw className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-indigo-500" />
+              ) : searchInput ? (
+                <button
+                  type="button"
+                  onClick={() => { setSearchInput(''); setDebouncedSearch(''); setCurrentPage(1); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  aria-label="Clear search text"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
             </div>
             <select aria-label="Category" value={selectedCategory} onChange={(e) => { setSelectedCategory(e.target.value); setSelectedGrade(''); setCurrentPage(1); }} className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100">
               <option value="">All categories</option>
@@ -416,16 +437,23 @@ const StudentsPage = () => {
               <option value="">All teams</option><option value="unassigned">Unassigned</option>
               {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
             </select>
-            <button onClick={() => { setSearchTerm(''); setSelectedCategory(''); setSelectedGrade(''); setSelectedSection(''); setSelectedGender(''); setSelectedTeam(''); }} className="h-10 rounded-xl px-3 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700">Clear</button>
+            <button onClick={() => { setSearchInput(''); setDebouncedSearch(''); setSelectedCategory(''); setSelectedGrade(''); setSelectedSection(''); setSelectedGender(''); setSelectedTeam(''); setCurrentPage(1); }} className="h-10 rounded-xl px-3 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700">Clear</button>
           </div>
         </section>
 
         <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-            <p className="text-sm font-semibold text-slate-900">Student directory</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-slate-900">Student directory</p>
+              {isSearching && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                  <RefreshCw className="h-3 w-3 animate-spin" /> Searching...
+                </span>
+              )}
+            </div>
             <p className="text-xs text-slate-400">{totalCount} students</p>
           </div>
-          <div className="overflow-x-auto">
+          <div className={`overflow-x-auto transition-opacity duration-150 ${isSearching ? 'opacity-60' : 'opacity-100'}`}>
             <table className="min-w-full">
               <thead className="bg-slate-50/80">
                 <tr>

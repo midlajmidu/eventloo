@@ -343,8 +343,11 @@ class StudentSerializer(serializers.ModelSerializer):
     def get_team(self, obj):
         """Get the team information for this student"""
         try:
-            # Check if student is a team member
-            member_team = Team.objects.filter(members=obj, school=obj.school).first()
+            if hasattr(obj, '_prefetched_objects_cache') and 'team_memberships' in obj._prefetched_objects_cache:
+                teams = [t for t in obj.team_memberships.all() if t.school_id == obj.school_id]
+                member_team = teams[0] if teams else None
+            else:
+                member_team = Team.objects.filter(members=obj, school=obj.school).first()
             if member_team:
                 return {
                     'id': member_team.id,
@@ -359,8 +362,11 @@ class StudentSerializer(serializers.ModelSerializer):
     def get_team_id(self, obj):
         """Get the team ID for this student"""
         try:
-            # Check if student is a team member
-            member_team = Team.objects.filter(members=obj, school=obj.school).first()
+            if hasattr(obj, '_prefetched_objects_cache') and 'team_memberships' in obj._prefetched_objects_cache:
+                teams = [t for t in obj.team_memberships.all() if t.school_id == obj.school_id]
+                member_team = teams[0] if teams else None
+            else:
+                member_team = Team.objects.filter(members=obj, school=obj.school).first()
             if member_team:
                 return member_team.id
             

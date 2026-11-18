@@ -1631,9 +1631,10 @@ class StudentViewSet(viewsets.ModelViewSet):
             return User.objects.none()
         
         # Apply search filter
-        search = self.request.query_params.get('search', '')
+        search = self.request.query_params.get('search', '').strip()
         if search:
             queryset = queryset.filter(
+                Q(name__icontains=search) |
                 Q(first_name__icontains=search) |
                 Q(last_name__icontains=search) |
                 Q(student_id__icontains=search) |
@@ -1681,7 +1682,7 @@ class StudentViewSet(viewsets.ModelViewSet):
                 except Team.DoesNotExist:
                     return queryset.none()
         
-        return queryset.order_by('first_name', 'last_name')
+        return queryset.prefetch_related('team_memberships').order_by('first_name', 'last_name')
     
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
