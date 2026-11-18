@@ -238,3 +238,28 @@ class TeamManagerAuditTests(TestCase):
         ev = events[0]
         self.assertIn('logo', ev)
         self.assertIn('event_logo', ev)
+
+    def test_team_manager_login_and_profile_includes_school_logo(self):
+        """Team manager login and profile return school metadata including school_logo."""
+        # 1. Login endpoint test
+        login_res = self.client.post(
+            "/api/team-manager/login/",
+            {
+                "team_username": "alpha_lions",
+                "team_password": "Password123!",
+                "school_code": "alpha"
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest"
+        )
+        self.assertEqual(login_res.status_code, status.HTTP_200_OK)
+        self.assertIn('school', login_res.data)
+        self.assertIn('school_logo', login_res.data['school'])
+        self.assertIn('logo', login_res.data['school'])
+
+        # 2. Profile endpoint test
+        self.client.force_authenticate(user=self.tm_principal_a1)
+        profile_res = self.client.get(f"/api/team-manager/profile/{self.team_a1.id}/")
+        self.assertEqual(profile_res.status_code, status.HTTP_200_OK)
+        self.assertIn('school', profile_res.data)
+        self.assertIn('school_logo', profile_res.data['school'])
+        self.assertIn('logo', profile_res.data['school'])

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
   Home,
@@ -11,6 +11,23 @@ import {
   X
 } from 'lucide-react';
 import EventlooLogo from '../common/EventlooLogo';
+import { schoolSettingsAPI } from '../../services/api';
+
+const resolveLogoUrl = (rawLogo) => {
+  if (!rawLogo || typeof rawLogo !== 'string') return null;
+  const trimmed = rawLogo.trim();
+  if (!trimmed) return null;
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:') ||
+    trimmed.startsWith('blob:') ||
+    trimmed.startsWith('/')
+  ) {
+    return trimmed;
+  }
+  return `/media/${trimmed}`;
+};
 
 const TeamManagerSidebar = ({ isOpen = false, setIsOpen = () => { } }) => {
   const location = useLocation();
@@ -30,6 +47,55 @@ const TeamManagerSidebar = ({ isOpen = false, setIsOpen = () => { } }) => {
       return {};
     }
   })();
+
+  const [schoolLogo, setSchoolLogo] = useState(() => {
+    const raw = schoolData?.school_logo || schoolData?.logo || localStorage.getItem('school_logo');
+    return resolveLogoUrl(raw);
+  });
+  const [logoError, setLogoError] = useState(false);
+
+  useEffect(() => {
+    const raw = schoolData?.school_logo || schoolData?.logo || localStorage.getItem('school_logo');
+    const resolved = resolveLogoUrl(raw);
+    if (resolved) {
+      setSchoolLogo(resolved);
+      setLogoError(false);
+    } else {
+      schoolSettingsAPI.get()
+        .then((res) => {
+          const fetchedLogo = res.data?.school_logo;
+          if (fetchedLogo) {
+            const fullUrl = resolveLogoUrl(fetchedLogo);
+            setSchoolLogo(fullUrl);
+            setLogoError(false);
+            try {
+              const current = JSON.parse(localStorage.getItem('school_data') || '{}');
+              current.school_logo = fetchedLogo;
+              current.logo = fetchedLogo;
+              localStorage.setItem('school_data', JSON.stringify(current));
+              localStorage.setItem('school_logo', fetchedLogo);
+            } catch (_) { }
+          }
+        })
+        .catch(() => { });
+    }
+
+    const handleSchoolUpdated = (e) => {
+      const newLogo = e?.detail?.school_logo || localStorage.getItem('school_logo');
+      const resolvedNew = resolveLogoUrl(newLogo);
+      if (resolvedNew) {
+        setSchoolLogo(resolvedNew);
+        setLogoError(false);
+      }
+    };
+
+    window.addEventListener('eventloo_school_updated', handleSchoolUpdated);
+    window.addEventListener('storage', handleSchoolUpdated);
+    return () => {
+      window.removeEventListener('eventloo_school_updated', handleSchoolUpdated);
+      window.removeEventListener('storage', handleSchoolUpdated);
+    };
+  }, []);
 
   const navigation = [
     { name: 'Dashboard', href: '/team-manager', icon: Home, exact: true },
@@ -108,8 +174,17 @@ const TeamManagerSidebar = ({ isOpen = false, setIsOpen = () => { } }) => {
         {/* Team Identity card */}
         <div className="p-4 border-t border-slate-100 bg-slate-50/70 shrink-0">
           <div className="flex items-center space-x-3 p-2.5 bg-white border border-slate-200/80 rounded-xl shadow-xs">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0">
-              {teamInitial}
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-600 text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0 overflow-hidden border border-slate-200/80 bg-white">
+              {schoolLogo && !logoError ? (
+                <img
+                  src={schoolLogo}
+                  alt={schoolData?.name || 'School Logo'}
+                  className="w-full h-full object-contain p-0.5 bg-white"
+                  onError={() => setLogoError(true)}
+                />
+              ) : (
+                <span>{teamInitial}</span>
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">

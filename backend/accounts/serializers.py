@@ -143,14 +143,24 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
             raise serializers.ValidationError('Invalid school code or credentials.')
         
         # Add custom user data to the response
+        request = self.context.get('request')
         school_logo_url = None
         try:
             if self.user.school:
                 settings_obj = getattr(self.user.school, 'settings', None)
-                if settings_obj and settings_obj.school_logo:
-                    school_logo_url = settings_obj.school_logo.url
-                elif self.user.school.logo:
-                    school_logo_url = self.user.school.logo.url
+                logo_file = None
+                if settings_obj and getattr(settings_obj, 'school_logo', None):
+                    logo_file = settings_obj.school_logo
+                elif getattr(self.user.school, 'logo', None):
+                    logo_file = self.user.school.logo
+                if logo_file:
+                    if request:
+                        try:
+                            school_logo_url = request.build_absolute_uri(logo_file.url)
+                        except Exception:
+                            school_logo_url = logo_file.url
+                    else:
+                        school_logo_url = logo_file.url
         except Exception:
             pass
 

@@ -215,7 +215,7 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
     if (resolved) {
       setSchoolLogo(resolved);
       setLogoImgError(false);
-    } else if (!isTeamManager && userRole !== 'super_admin') {
+    } else if (userRole !== 'super_admin') {
       schoolSettingsAPI.get()
         .then((res) => {
           const fetchedLogo = res.data?.school_logo;

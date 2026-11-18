@@ -671,6 +671,28 @@ def super_admin_dashboard(request):
         }
     })
 
+def _get_school_logo_url(request, school):
+    if not school:
+        return None
+    logo_file = None
+    try:
+        settings_obj = getattr(school, 'settings', None)
+        if settings_obj and getattr(settings_obj, 'school_logo', None):
+            logo_file = settings_obj.school_logo
+        elif getattr(school, 'logo', None):
+            logo_file = school.logo
+    except Exception:
+        pass
+
+    if logo_file:
+        try:
+            if request:
+                return request.build_absolute_uri(logo_file.url)
+            return logo_file.url
+        except Exception:
+            return getattr(logo_file, 'url', None)
+    return None
+
 @api_view(['GET'])
 @permission_classes([permissions.IsAuthenticated])
 def user_profile(request):
@@ -682,16 +704,7 @@ def user_profile(request):
         team = getattr(user, 'team', None)
         team_data = TeamManagerResponseSerializer(team).data if team else None
         school_obj = getattr(user, 'school', None)
-        school_logo_url = None
-        try:
-            if school_obj:
-                settings_obj = getattr(school_obj, 'settings', None)
-                if settings_obj and settings_obj.school_logo:
-                    school_logo_url = settings_obj.school_logo.url
-                elif school_obj.logo:
-                    school_logo_url = school_obj.logo.url
-        except Exception:
-            pass
+        school_logo_url = _get_school_logo_url(request, school_obj)
 
         return Response({
             'id': team.id if team else None,
@@ -957,16 +970,7 @@ def team_manager_login(request):
         access['access_type'] = 'team_manager'
         access['credential_hash'] = refresh['credential_hash']
         
-        school_logo_url = None
-        try:
-            if team.school:
-                settings_obj = getattr(team.school, 'settings', None)
-                if settings_obj and settings_obj.school_logo:
-                    school_logo_url = settings_obj.school_logo.url
-                elif team.school.logo:
-                    school_logo_url = team.school.logo.url
-        except Exception:
-            pass
+        school_logo_url = _get_school_logo_url(request, team.school)
 
         response_data = {
             'success': True,
@@ -1075,6 +1079,7 @@ def team_manager_profile(request, team_id):
             'assigned_at': assignment.assigned_at
         } for assignment in assignments]
         
+        school_logo_url = _get_school_logo_url(request, team.school)
         profile_data = {
             'team': {
                 'id': team.id,
@@ -1086,6 +1091,13 @@ def team_manager_profile(request, team_id):
                 'member_count': team.member_count,
                 'created_at': team.created_at
             },
+            'school': {
+                'id': team.school_id,
+                'name': getattr(team.school, 'name', ''),
+                'code': getattr(team.school, 'code', ''),
+                'logo': school_logo_url,
+                'school_logo': school_logo_url,
+            } if getattr(team, 'school', None) else None,
             'members': member_data,
             'events': event_data,
             'assignments': assignment_data

@@ -188,7 +188,13 @@ const Login = () => {
           localStorage.removeItem('team_welcome_message');
           localStorage.setItem('user', JSON.stringify(data.user));
           localStorage.setItem('user_role', data.user.role);
-          localStorage.setItem('school_data', JSON.stringify(data.user.school));
+          if (data.user.school) {
+            localStorage.setItem('school_data', JSON.stringify(data.user.school));
+            const logo = data.user.school.school_logo || data.user.school.logo;
+            if (logo) {
+              localStorage.setItem('school_logo', logo);
+            }
+          }
 
           const redirectPath = getRedirectPath();
           if (redirectPath) {
@@ -219,7 +225,13 @@ const Login = () => {
         if (data.team) {
           localStorage.setItem('team_data', JSON.stringify(data.team));
         }
-        if (data.school) localStorage.setItem('school_data', JSON.stringify(data.school));
+        if (data.school) {
+          localStorage.setItem('school_data', JSON.stringify(data.school));
+          const logo = data.school.school_logo || data.school.logo;
+          if (logo) {
+            localStorage.setItem('school_logo', logo);
+          }
+        }
 
         const redirectPath = getRedirectPath();
         if (redirectPath) {
