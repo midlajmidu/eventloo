@@ -35,7 +35,7 @@ class ThrottledTokenRefreshView(TokenRefreshView):
         response = Response(serializer.validated_data, status=200)
         refresh = response.data.pop('refresh', None)
         access = response.data.pop('access', None)
-        if refresh and access:
+        if refresh or access:
             from .views import set_auth_cookies
             set_auth_cookies(response, refresh, access)
         return response

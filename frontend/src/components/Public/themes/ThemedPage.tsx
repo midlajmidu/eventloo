@@ -9,6 +9,13 @@ import type { ThemePageKey } from "./themeTypes";
 import type { SiteData } from "@/lib/site-types";
 import { RefreshCw, AlertCircle } from "lucide-react";
 
+interface CacheEntry {
+  data: SiteData;
+  timestamp: number;
+}
+const portalMemoryCache = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 25000; // 25s cache to eliminate server overload and enable instant tab transitions
+
 /** Central theme resolver: reads the event's saved theme (or an admin preview) and renders that theme's page. */
 export function ThemedPage({
   page = "landing",
@@ -31,8 +38,11 @@ export function ThemedPage({
   const code = propCode || searchParams.get("code") || undefined;
   const scan = propScan ?? (searchParams.has("scan") ? (searchParams.get("scan") !== "false" && searchParams.get("scan") !== "0") : true);
 
-  const [siteData, setSiteData] = useState<SiteData | null>(initialData || null);
-  const [loading, setLoading] = useState(!initialData);
+  const cached = portalMemoryCache.get(eventId);
+  const isFresh = Boolean(cached && (Date.now() - cached.timestamp < CACHE_TTL_MS));
+
+  const [siteData, setSiteData] = useState<SiteData | null>(initialData || (cached ? cached.data : null));
+  const [loading, setLoading] = useState(!initialData && !cached);
   const [error, setError] = useState<string | null>(null);
 
   useThemeFavicon(preview || siteData?.event?.website_theme || "enchanted-illustrated");
@@ -40,17 +50,24 @@ export function ThemedPage({
   useEffect(() => {
     if (initialData) return;
     let active = true;
+
+    // If memory cache is fresh and we already have data, skip network fetch entirely
+    if (isFresh && siteData) {
+      return;
+    }
+
     const fetchPortal = async () => {
       try {
-        setLoading(true);
+        if (!siteData) setLoading(true);
         setError(null);
         const res = await publicEventAPI.getPublicPortal(eventId);
         if (active) {
           const mapped = mapEventlooToSiteData(res.data);
+          portalMemoryCache.set(eventId, { data: mapped, timestamp: Date.now() });
           setSiteData(mapped);
         }
       } catch (err: any) {
-        if (active) {
+        if (active && !siteData) {
           console.error("Failed to load public portal:", err);
           setError(err?.response?.data?.error || "This event public portal is unavailable.");
         }

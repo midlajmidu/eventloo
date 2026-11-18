@@ -13,8 +13,18 @@ const TeamProtectedRoute = ({ children }) => {
         if (!team?.id) throw new Error('Missing team session metadata');
         await teamManagerAPI.getTeamProfile(team.id);
         if (active) setState('valid');
-      } catch (_) {
-        if (active) setState('invalid');
+      } catch (err) {
+        if (!active) return;
+        const status = err?.response?.status;
+        const isAuthError = status === 401 || status === 403;
+        const team = JSON.parse(localStorage.getItem('team_data') || 'null');
+
+        if (isAuthError || !team?.id) {
+          setState('invalid');
+        } else {
+          // Network error, temporary 5xx, or offline: preserve existing team session
+          setState('valid');
+        }
       }
     };
     verify();
@@ -24,7 +34,7 @@ const TeamProtectedRoute = ({ children }) => {
   if (state === 'checking') {
     return <div className="min-h-screen bg-slate-50" aria-busy="true" />;
   }
-  if (state === 'invalid') return <Navigate to="/login" replace />;
+  if (state === 'invalid') return <Navigate to="/login?tab=team" replace />;
   return children;
 };
 

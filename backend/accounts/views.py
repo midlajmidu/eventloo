@@ -44,26 +44,28 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def set_auth_cookies(response, refresh_token, access_token):
+def set_auth_cookies(response, refresh_token=None, access_token=None):
     samesite = getattr(settings, 'REFRESH_COOKIE_SAMESITE', 'Lax') or 'Lax'
-    response.set_cookie(
-        settings.REFRESH_COOKIE_NAME,
-        refresh_token,
-        max_age=int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
-        httponly=True,
-        secure=settings.REFRESH_COOKIE_SECURE,
-        samesite=samesite,
-        path='/',
-    )
-    response.set_cookie(
-        settings.ACCESS_COOKIE_NAME,
-        access_token,
-        max_age=int(settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds()),
-        httponly=True,
-        secure=settings.REFRESH_COOKIE_SECURE,
-        samesite=samesite,
-        path='/',
-    )
+    if refresh_token:
+        response.set_cookie(
+            settings.REFRESH_COOKIE_NAME,
+            refresh_token,
+            max_age=int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+            httponly=True,
+            secure=settings.REFRESH_COOKIE_SECURE,
+            samesite=samesite,
+            path='/',
+        )
+    if access_token:
+        response.set_cookie(
+            settings.ACCESS_COOKIE_NAME,
+            access_token,
+            max_age=int(settings.SIMPLE_JWT['ACCESS_TOKEN_LIFETIME'].total_seconds()),
+            httponly=True,
+            secure=settings.REFRESH_COOKIE_SECURE,
+            samesite=samesite,
+            path='/',
+        )
     return response
 
 def get_paginated_response(data, request, pagination_class=StandardPagination):

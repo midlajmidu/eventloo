@@ -14,6 +14,8 @@ from .models import User, School, SchoolSettings, StudentCategory, StudentClass
 from events.models import Team
 from rest_framework_simplejwt.utils import get_md5_hash_password
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken
+from django.utils import timezone
+from datetime import timedelta
 from secrets import compare_digest
 import hashlib
 
@@ -32,8 +34,15 @@ class HardenedTokenRefreshSerializer(TokenRefreshSerializer):
             outstanding = OutstandingToken.objects.select_for_update().filter(
                 jti=refresh['jti']
             ).first()
-            if not outstanding or BlacklistedToken.objects.filter(token=outstanding).exists():
-                raise AuthenticationFailed('This refresh token has already been used.')
+            if not outstanding:
+                raise AuthenticationFailed('This session is unrecognized.')
+
+            blacklisted = BlacklistedToken.objects.filter(token=outstanding).first()
+            if blacklisted:
+                # Leeway window to absorb concurrent multi-tab token rotations gracefully
+                if timezone.now() - blacklisted.blacklisted_at > timedelta(seconds=30):
+                    raise AuthenticationFailed('This refresh token has already been used.')
+
             return self._validate_locked(attrs, refresh)
 
     def _validate_locked(self, attrs, refresh):

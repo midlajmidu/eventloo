@@ -41,8 +41,30 @@ const ProtectedRoute = ({ children, requiredRole = null, allowedRoles = null }) 
         if (active) {
           setState({ loading: false, role, valid: Boolean(role) });
         }
-      } catch (_) {
-        if (active) setState({ loading: false, role: null, valid: false });
+      } catch (err) {
+        if (!active) return;
+        const status = err?.response?.status;
+        const isAuthError = status === 401 || status === 403;
+        
+        if (isAuthError) {
+          setState({ loading: false, role: null, valid: false });
+        } else {
+          // Temporary network issue, 5xx server response, or offline:
+          // Fall back gracefully to the stored session role to avoid unwanted logouts!
+          const fallbackRole = localStorage.getItem('user_role');
+          const hasStoredSession = Boolean(
+            fallbackRole && (
+              localStorage.getItem('user') ||
+              localStorage.getItem('team_data') ||
+              fallbackRole === 'super_admin'
+            )
+          );
+          if (hasStoredSession) {
+            setState({ loading: false, role: fallbackRole, valid: true });
+          } else {
+            setState({ loading: false, role: null, valid: false });
+          }
+        }
       }
     };
     verify();

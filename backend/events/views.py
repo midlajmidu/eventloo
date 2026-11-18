@@ -9112,7 +9112,19 @@ def generate_qr_svg_string(url_or_text, size=200):
         return ""
 
 
+def invalidate_public_portal_cache(event_id):
+    """Purge cached public portal payload to reflect live schedule/results immediately."""
+    if not event_id:
+        return
+    try:
+        from django.core.cache import cache
+        cache.delete(f"public_portal_v2_{event_id}")
+    except Exception:
+        pass
+
+
 @api_view(['GET'])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def get_public_participant_badge(request, event_id, student_identifier):
     """
@@ -9120,6 +9132,15 @@ def get_public_participant_badge(request, event_id, student_identifier):
     Allows parents, judges, and attendees to scan a QR code on mobile
     and view verified participant information without authentication.
     """
+    cache_key = f"public_badge_v2_{event_id}_{student_identifier}"
+    try:
+        from django.core.cache import cache
+        cached_badge = cache.get(cache_key)
+        if cached_badge is not None:
+            return Response(cached_badge)
+    except Exception:
+        pass
+
     try:
         event = Event.objects.select_related('school').get(id=event_id)
     except Event.DoesNotExist:
@@ -9184,6 +9205,20 @@ def get_public_participant_badge(request, event_id, student_identifier):
         student=student
     ).select_related('program', 'program__stage', 'team').order_by('program__start_time', 'program__name')
 
+    # Batch fetch all results for these programs to eliminate N+1 queries
+    prog_ids = [pa.program_id for pa in assignments if pa.program_id]
+    all_results = ProgramResult.objects.filter(
+        program_id__in=prog_ids
+    ).select_related('participant', 'team')
+
+    indiv_results = {}
+    team_results = {}
+    for r in all_results:
+        if r.participant_id:
+            indiv_results[(r.program_id, r.participant_id)] = r
+        if r.team_id:
+            team_results[(r.program_id, r.team_id, r.sub_team_number or 1)] = r
+
     programs_list = []
     total_points = 0
     stage_count = 0
@@ -9222,12 +9257,10 @@ def get_public_participant_badge(request, event_id, student_identifier):
 
         result = None
         if not prog.is_team_based:
-            result = ProgramResult.objects.filter(program=prog, participant=student).first()
+            result = indiv_results.get((prog.id, student.id))
         elif team or pa.team:
             effective_team = pa.team or team
-            result = ProgramResult.objects.filter(
-                program=prog, team=effective_team, sub_team_number=pa.sub_team_number or 1
-            ).first()
+            result = team_results.get((prog.id, effective_team.id, pa.sub_team_number or 1))
 
         status_str = 'Scheduled'
         grade_str = '-'
@@ -9319,7 +9352,7 @@ def get_public_participant_badge(request, event_id, student_identifier):
 
     qr_svg = generate_qr_svg_string(public_url, size=240)
 
-    return Response({
+    badge_data = {
         'status': 'success',
         'school': {
             'id': school.id if school else None,
@@ -9370,10 +9403,17 @@ def get_public_participant_badge(request, event_id, student_identifier):
         'programs': programs_list,
         'public_url': public_url,
         'qr_code_svg': qr_svg,
-    })
+    }
+    try:
+        from django.core.cache import cache
+        cache.set(cache_key, badge_data, 30)
+    except Exception:
+        pass
+    return Response(badge_data)
 
 
 @api_view(['GET'])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def get_participant_qr_code(request, event_id, student_identifier):
     """
@@ -9403,12 +9443,21 @@ def get_participant_qr_code(request, event_id, student_identifier):
 
 
 @api_view(['GET'])
+@authentication_classes([])
 @permission_classes([AllowAny])
 def get_public_event_portal(request, event_id):
     """
     Public endpoint providing event results, team points table, schedule,
     and QR code for students, parents, and attendees without authentication.
     """
+    cache_key = f"public_portal_v2_{event_id}"
+    try:
+        from django.core.cache import cache
+        cached_portal = cache.get(cache_key)
+        if cached_portal is not None:
+            return Response(cached_portal)
+    except Exception:
+        pass
     try:
         event = Event.objects.select_related('school').get(id=event_id)
     except Event.DoesNotExist:
@@ -9631,7 +9680,7 @@ def get_public_event_portal(request, event_id):
         except Exception:
             event_logo_url = getattr(event.logo, 'url', None)
 
-    return Response({
+    portal_payload = {
         'event': {
             'id': event.id,
             'title': event.title,
@@ -9669,5 +9718,11 @@ def get_public_event_portal(request, event_id):
         ],
         'public_url': public_url,
         'qr_code_svg': qr_svg,
-    })
+    }
+    try:
+        from django.core.cache import cache
+        cache.set(cache_key, portal_payload, 30)
+    except Exception:
+        pass
+    return Response(portal_payload)
 

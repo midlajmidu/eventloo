@@ -30,6 +30,16 @@ const reportApi = axios.create({
   withCredentials: true,
 });
 
+// Create a dedicated axios instance for public, unauthenticated views (portal, results, standings, schedule, badges)
+export const publicApi = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: getApiTimeout(),
+  // Do NOT include withCredentials so public visitors never send cookies or trigger auth 401 interceptors
+});
+
 // Attach access token to reportApi if available in localStorage
 reportApi.interceptors.request.use(
   (config) => {
@@ -70,12 +80,7 @@ const handleRefreshFailure = (refreshError) => {
   if (isAuthRejection) {
     const isPublicPage = window.location.pathname.includes('/public') || window.location.pathname.includes('/badge/');
     if (isPublicPage) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user_role');
-      localStorage.removeItem('user');
-      localStorage.removeItem('team_data');
+      // Do NOT clear user session when browsing a public portal or digital badge
       return;
     }
 
@@ -292,11 +297,8 @@ export const usersAPI = {
 // Public API for unauthenticated views (e.g., QR-scanned digital participant badges)
 export const publicAPI = {
   getParticipantBadge: (eventId, studentIdentifier, params = {}) => {
-    return axios.get(`${API_BASE_URL}events/${eventId}/participants/${studentIdentifier}/public-badge/`, {
+    return publicApi.get(`events/${eventId}/participants/${studentIdentifier}/public-badge/`, {
       params,
-      headers: {
-        'Content-Type': 'application/json',
-      },
     });
   },
   getParticipantQrUrl: (eventId, studentIdentifier, targetUrl = '', size = 240) => {
@@ -970,9 +972,10 @@ export const classesAPI = {
 
 // Public Event Portal API (Unauthenticated public endpoints)
 export const publicEventAPI = {
-  getPublicPortal: (eventId) => api.get(`events/${eventId}/public-portal/`),
+  getPublicPortal: (eventId) => publicApi.get(`events/${eventId}/public-portal/`),
+  getPublicEventPortal: (eventId) => publicApi.get(`events/${eventId}/public-portal/`),
   getParticipantBadge: (eventId, studentIdentifier) =>
-    api.get(`events/${eventId}/participants/${studentIdentifier}/public-badge/`),
+    publicApi.get(`events/${eventId}/participants/${studentIdentifier}/public-badge/`),
 };
 
 // Export default api instance for custom requests
