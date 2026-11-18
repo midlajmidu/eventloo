@@ -597,7 +597,8 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                     setPageSize(newSize);
                     setCurrentPage(1);
                   }}
-                  showPageSizeSelector={true}
+                  showPageSizeSelector={false}
+                  compact={true}
                 />
               </div>
             )}
