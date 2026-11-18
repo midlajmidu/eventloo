@@ -152,6 +152,11 @@ const UsersPage = () => {
     setForm({ name: user.name || '', email: user.email, role: user.role, password: '', confirmPassword: '', is_active: user.is_active });
     setError(''); setModal('edit');
   };
+  const openDelete = (user) => {
+    setSelected(user);
+    setError('');
+    setModal('delete');
+  };
 
   const save = async (event) => {
     event.preventDefault();
@@ -207,7 +212,7 @@ const UsersPage = () => {
         <select value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-indigo-500"><option value="">All statuses</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
       </div>
       <div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="bg-slate-50 text-xs uppercase tracking-wider text-slate-500"><tr><th className="px-5 py-3 font-semibold">User</th><th className="px-5 py-3 font-semibold">Role</th><th className="px-5 py-3 font-semibold">Status</th><th className="px-5 py-3 font-semibold">Joined</th><th className="px-5 py-3 text-right font-semibold">Actions</th></tr></thead><tbody className="divide-y divide-slate-100">
-        {loading ? <tr><td colSpan="5" className="px-5 py-12 text-center text-slate-500">Loading users…</td></tr> : users.length === 0 ? <tr><td colSpan="5" className="px-5 py-14 text-center"><Users className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-2 font-semibold text-slate-700">No users found</p><p className="mt-1 text-xs text-slate-500">Add a dashboard user to get started.</p></td></tr> : users.map((user) => <tr key={user.id} className="hover:bg-slate-50/70"><td className="px-5 py-3.5"><div className="flex items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 font-bold text-indigo-600">{(user.name || user.email).charAt(0).toUpperCase()}</span><div><p className="font-semibold text-slate-900">{user.name || 'Unnamed user'} {user.id === currentUser.id && <span className="ml-1 text-xs font-medium text-indigo-600">You</span>}</p><p className="text-xs text-slate-500">{user.email}</p></div></div></td><td className="px-5 py-3.5"><span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{roleLabel(user.role)}</span></td><td className="px-5 py-3.5"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${user.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{user.is_active ? 'Active' : 'Inactive'}</span></td><td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{joined(user.date_joined)}</td><td className="px-5 py-3.5 text-right"><div className="inline-flex gap-1"><button onClick={() => openView(user)} className="rounded-lg p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600" aria-label={`View ${user.name || user.email}`}><Eye className="h-4 w-4" /></button><button onClick={() => openEdit(user)} className="rounded-lg p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600" aria-label={`Edit ${user.name || user.email}`}><Pencil className="h-4 w-4" /></button></div></td></tr>)}
+        {loading ? <tr><td colSpan="5" className="px-5 py-12 text-center text-slate-500">Loading users…</td></tr> : users.length === 0 ? <tr><td colSpan="5" className="px-5 py-14 text-center"><Users className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-2 font-semibold text-slate-700">No users found</p><p className="mt-1 text-xs text-slate-500">Add a dashboard user to get started.</p></td></tr> : users.map((user) => <tr key={user.id} className="hover:bg-slate-50/70"><td className="px-5 py-3.5"><div className="flex items-center gap-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 font-bold text-indigo-600">{(user.name || user.email).charAt(0).toUpperCase()}</span><div><p className="font-semibold text-slate-900">{user.name || 'Unnamed user'} {user.id === currentUser.id && <span className="ml-1 text-xs font-medium text-indigo-600">You</span>}</p><p className="text-xs text-slate-500">{user.email}</p></div></div></td><td className="px-5 py-3.5"><span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-semibold text-violet-700">{roleLabel(user.role)}</span></td><td className="px-5 py-3.5"><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${user.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{user.is_active ? 'Active' : 'Inactive'}</span></td><td className="whitespace-nowrap px-5 py-3.5 text-slate-600">{joined(user.date_joined)}</td><td className="px-5 py-3.5 text-right"><div className="inline-flex items-center gap-1"><button onClick={() => openView(user)} className="rounded-lg p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition" aria-label={`View ${user.name || user.email}`} title="View user details"><Eye className="h-4 w-4" /></button><button onClick={() => openEdit(user)} className="rounded-lg p-2 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 transition" aria-label={`Edit ${user.name || user.email}`} title="Edit user"><Pencil className="h-4 w-4" /></button>{user.id !== currentUser.id && <button onClick={() => openDelete(user)} className="rounded-lg p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition" aria-label={`Delete ${user.name || user.email}`} title="Delete user"><Trash2 className="h-4 w-4" /></button>}</div></td></tr>)}
       </tbody></table></div>
       <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-5 py-3"><p className="text-xs text-slate-500">{count ? `Showing ${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, count)} of ${count}` : 'No records'}</p><div className="flex items-center gap-2"><button disabled={page === 1 || loading} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-600 disabled:opacity-40"><ChevronLeft className="h-4 w-4" /></button><span className="text-xs font-medium text-slate-600">{page} / {totalPages}</span><button disabled={page >= totalPages || loading} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-600 disabled:opacity-40"><ChevronRight className="h-4 w-4" /></button></div></div>
     </section>
@@ -282,19 +287,32 @@ const UsersPage = () => {
             {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 font-medium">{error}</div>}
           </div>
           <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50/80 px-6 py-4 shrink-0">
-            <button
-              type="button"
-              onClick={close}
-              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
-            >
-              Cancel
-            </button>
-            <button
-              disabled={saving}
-              className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition shadow-sm"
-            >
-              {saving ? 'Saving…' : modal === 'create' ? 'Create Staff User' : 'Save Changes'}
-            </button>
+            {modal === 'edit' && selected?.id !== currentUser.id ? (
+              <button
+                type="button"
+                onClick={() => setModal('delete')}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-100 transition"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Delete user
+              </button>
+            ) : (
+              <div />
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={close}
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={saving}
+                className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition shadow-sm"
+              >
+                {saving ? 'Saving…' : modal === 'create' ? 'Create Staff User' : 'Save Changes'}
+              </button>
+            </div>
           </div>
         </form>
       </Drawer>
@@ -348,23 +366,26 @@ const UsersPage = () => {
 
     {modal === 'delete' && selected && (
       <ConfirmDialog title="Delete staff user?" subtitle="This action cannot be undone." onClose={close}>
-        <div className="space-y-5 p-6">
-          <p className="text-sm leading-6 text-slate-600">
-            Permanently delete <strong className="text-slate-900">{selected.name || selected.email}</strong>? They will immediately lose access to this school dashboard.
-          </p>
+        <div className="mt-4 space-y-4">
+          <div className="rounded-xl border border-rose-100 bg-rose-50/70 p-4 text-sm text-slate-700 leading-relaxed">
+            Are you sure you want to permanently delete <strong className="font-semibold text-slate-900">{selected.name || selected.email}</strong> (<span className="text-slate-600">{selected.email}</span>)?
+            <p className="mt-1 text-xs text-rose-600 font-medium">They will immediately lose all access to this school dashboard.</p>
+          </div>
           {error && <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 font-medium">{error}</div>}
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+          <div className="flex justify-end gap-2.5 border-t border-slate-100 pt-4">
             <button
+              type="button"
               onClick={close}
-              className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition"
             >
               Cancel
             </button>
             <button
               disabled={saving}
               onClick={remove}
-              className="rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-50 transition shadow-sm"
             >
+              <Trash2 className="h-4 w-4" />
               {saving ? 'Deleting…' : 'Delete user'}
             </button>
           </div>
