@@ -5031,6 +5031,20 @@ def generate_formatted_evaluation_sheet(request, program_id):
         logger.exception('Evaluation sheet PDF generation failed')
         return Response({'error': 'Unable to generate the evaluation sheet.'}, status=500)
 
+def _resolve_event_logo_url(request, event):
+    if not event:
+        return None
+    if getattr(event, 'logo', None):
+        if request:
+            try:
+                return request.build_absolute_uri(event.logo.url)
+            except Exception:
+                pass
+        return getattr(event.logo, 'url', None)
+    if getattr(event, 'image', None):
+        return event.image
+    return None
+
 class TeamManagerViewSet(viewsets.GenericViewSet):
     """ViewSet for Team Manager specific functionality"""
     permission_classes = [IsTeamManagerOrAdmin]
@@ -5207,12 +5221,16 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                 assigned_programs = assigned_counts_by_event.get(event.id, 0)
                 team_points = team_points_by_event.get(event.id, 0) or 0
                 total_progs = total_programs_by_event.get(event.id, 0)
+                ev_logo = _resolve_event_logo_url(request, event)
                 event_data.append({
                     'id': event.id,
                     'title': event.title,
                     'description': event.description,
                     'event_type': event.event_type,
                     'status': event.status,
+                    'logo': ev_logo,
+                    'event_logo': ev_logo,
+                    'image': getattr(event, 'image', '') or '',
                     'team_points': team_points,
                     'total_programs': total_progs,
                     'programs_assigned': assigned_programs,
@@ -5340,12 +5358,16 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                 'total_count': assignments_by_student.get(member.id, {}).get('total_count', 0),
             } for member in team_students.order_by('first_name', 'last_name')]
 
+            ev_logo = _resolve_event_logo_url(request, event)
             return Response({
                 'event': {
                     'id': event.id,
                     'title': event.title,
                     'description': event.description,
                     'status': event.status,
+                    'logo': ev_logo,
+                    'event_logo': ev_logo,
+                    'image': getattr(event, 'image', '') or '',
                     'start_date': event.start_date,
                     'end_date': event.end_date,
                     'start_time': event.start_time,
@@ -5363,6 +5385,14 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                             or timezone.now() <= event.registration_deadline
                         )
                     ),
+                    'is_registration_open': (
+                        event.status in ('published', 'ongoing')
+                        and (
+                            not event.registration_deadline
+                            or timezone.now() <= event.registration_deadline
+                        )
+                    ),
+                    'is_schedule_published': bool(getattr(event, 'is_schedule_published', False)),
                 },
                 'programs': program_data,
                 'team_members': member_data

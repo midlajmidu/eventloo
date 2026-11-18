@@ -808,17 +808,39 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
               </button>
             </div>
 
-            <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
-                  Event Details
-                </p>
-                <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-                  {eventData.title}
-                </h1>
-                <p className="text-xs text-slate-400 mt-1 font-normal">
-                  {eventData.description || 'Program items and allocated team assignments.'}
-                </p>
+            <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3.5 min-w-0">
+                {(eventData.logo || eventData.event_logo) ? (
+                  <img
+                    src={eventData.logo || eventData.event_logo}
+                    alt={eventData.title || 'Event Logo'}
+                    className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl object-contain bg-slate-50 border border-slate-200/80 p-0.5 shrink-0 shadow-2xs"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                      if (e.currentTarget.nextSibling) {
+                        e.currentTarget.nextSibling.style.display = 'flex';
+                      }
+                    }}
+                  />
+                ) : null}
+                <div
+                  className={`w-11 h-11 sm:w-12 sm:h-12 rounded-xl bg-indigo-50 border border-indigo-200/70 items-center justify-center text-indigo-600 shrink-0 shadow-2xs ${
+                    (eventData.logo || eventData.event_logo) ? 'hidden' : 'flex'
+                  }`}
+                >
+                  <Calendar className="w-5 h-5 sm:w-6 sm:h-6" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
+                    Event Details
+                  </p>
+                  <h1 className="mt-0.5 text-xl sm:text-2xl font-bold tracking-tight text-slate-900 truncate">
+                    {eventData.title}
+                  </h1>
+                  <p className="text-xs text-slate-400 mt-0.5 font-normal truncate">
+                    {eventData.description || 'Program items and allocated team assignments.'}
+                  </p>
+                </div>
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5">

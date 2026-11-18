@@ -362,7 +362,24 @@ const TeamManagerEvents = () => {
                           {/* Event Name & Category */}
                           <td className="px-5 py-3.5">
                             <div className="flex items-center gap-3">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600">
+                              {(event.logo || event.event_logo) ? (
+                                <img
+                                  src={event.logo || event.event_logo}
+                                  alt={event.title || 'Event Logo'}
+                                  className="h-9 w-9 shrink-0 rounded-xl object-contain bg-slate-50 border border-slate-200/80 p-0.5 shadow-2xs"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    if (e.currentTarget.nextSibling) {
+                                      e.currentTarget.nextSibling.style.display = 'flex';
+                                    }
+                                  }}
+                                />
+                              ) : null}
+                              <div
+                                className={`h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-2xs ${
+                                  (event.logo || event.event_logo) ? 'hidden' : 'flex'
+                                }`}
+                              >
                                 <Calendar className="h-4 w-4" />
                               </div>
                               <div className="min-w-0">
@@ -486,7 +503,24 @@ const TeamManagerEvents = () => {
                       {/* Top: Icon + Title + Status */}
                       <div className="flex items-start justify-between gap-2.5">
                         <div className="flex items-start gap-3 min-w-0">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 mt-0.5">
+                          {(event.logo || event.event_logo) ? (
+                            <img
+                              src={event.logo || event.event_logo}
+                              alt={event.title || 'Event Logo'}
+                              className="h-10 w-10 shrink-0 rounded-xl object-contain bg-slate-50 border border-slate-200/80 p-0.5 shadow-2xs mt-0.5"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                                if (e.currentTarget.nextSibling) {
+                                  e.currentTarget.nextSibling.style.display = 'flex';
+                                }
+                              }}
+                            />
+                          ) : null}
+                          <div
+                            className={`h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 mt-0.5 border border-indigo-100 shadow-2xs ${
+                              (event.logo || event.event_logo) ? 'hidden' : 'flex'
+                            }`}
+                          >
                             <Calendar className="h-5 w-5" />
                           </div>
                           <div className="min-w-0">

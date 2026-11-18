@@ -219,7 +219,22 @@ class TeamManagerAuditTests(TestCase):
         self.assertEqual(res.status_code, status.HTTP_200_OK)
         self.assertIn('programs', res.data)
         self.assertIn('team_members', res.data)
+        self.assertIn('event', res.data)
+        self.assertIn('logo', res.data['event'])
+        self.assertIn('event_logo', res.data['event'])
         programs = res.data['programs']
         self.assertEqual(len(programs), 1)
         self.assertEqual(programs[0]['id'], self.program_single.id)
         self.assertEqual(programs[0]['assigned_count'], 1)
+
+    def test_team_manager_events_includes_logo(self):
+        """Team manager events list returns logo and event_logo for sync with UI."""
+        self.client.force_authenticate(user=self.tm_principal_a1)
+
+        res = self.client.get(f"/api/team-manager/{self.team_a1.id}/events/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        events = res.data.get('events', [])
+        self.assertTrue(len(events) >= 1)
+        ev = events[0]
+        self.assertIn('logo', ev)
+        self.assertIn('event_logo', ev)

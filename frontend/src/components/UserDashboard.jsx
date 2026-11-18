@@ -142,9 +142,31 @@ const UserDashboard = () => {
                     >
                       <div>
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="text-xs font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                            {ev.title}
-                          </h3>
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {(ev.logo || ev.event_logo) ? (
+                              <img
+                                src={ev.logo || ev.event_logo}
+                                alt={ev.title || 'Event Logo'}
+                                className="w-8 h-8 rounded-lg object-contain bg-white border border-slate-200/80 p-0.5 shrink-0 shadow-2xs"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                  if (e.currentTarget.nextSibling) {
+                                    e.currentTarget.nextSibling.style.display = 'flex';
+                                  }
+                                }}
+                              />
+                            ) : null}
+                            <div
+                              className={`w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 items-center justify-center shrink-0 border border-indigo-100 shadow-2xs ${
+                                (ev.logo || ev.event_logo) ? 'hidden' : 'flex'
+                              }`}
+                            >
+                              <Calendar className="w-4 h-4" />
+                            </div>
+                            <h3 className="text-xs font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors truncate">
+                              {ev.title}
+                            </h3>
+                          </div>
                           <span
                             className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
                               ev.status === 'published'

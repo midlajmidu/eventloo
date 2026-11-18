@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
+import EventlooLogo from '../common/EventlooLogo';
 import {
   Menu,
   Search,
@@ -366,15 +367,36 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-40 backdrop-blur-lg bg-white/95">
       <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
-        {/* Left section: Mobile menu + Search Bar */}
-        <div className="flex items-center space-x-4">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors duration-200"
-            aria-label="Toggle sidebar menu"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
+        {/* Left section: Mobile menu + Brand Logo + Search Bar */}
+        <div className="flex items-center space-x-3 sm:space-x-4 min-w-0">
+          {typeof setSidebarOpen === 'function' ? (
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="lg:hidden p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors duration-200 shrink-0"
+              aria-label="Toggle sidebar menu"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          ) : null}
+
+          {/* Brand Logo for Mobile (or when no sidebar is mounted like Event Manager Portal) */}
+          <div className={`${typeof setSidebarOpen === 'function' ? 'lg:hidden' : 'flex'} items-center gap-2 shrink-0`}>
+            <Link
+              to={userRole === 'event_manager' ? '/user/dashboard' : isTeamManager ? '/team-manager' : '/admin'}
+              className="flex items-center gap-2 hover:opacity-90 transition-opacity"
+            >
+              {schoolLogo && !logoImgError ? (
+                <img
+                  src={schoolLogo}
+                  alt={schoolData?.name || 'School Logo'}
+                  className="h-8 w-8 rounded-lg object-contain bg-slate-50 border border-slate-200/80 p-0.5"
+                  onError={() => setLogoImgError(true)}
+                />
+              ) : null}
+              <EventlooLogo variant="full" size="sm" />
+            </Link>
+          </div>
 
           {/* Search Bar */}
           <div className="hidden md:block">

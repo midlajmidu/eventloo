@@ -191,12 +191,21 @@ const EventDashboard = () => {
                   src={event.logo || event.event_logo}
                   alt={event.title || 'Event Logo'}
                   className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain bg-slate-50 border border-slate-200/80 p-0.5 shrink-0 mr-3 shadow-2xs"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    if (e.currentTarget.nextSibling) {
+                      e.currentTarget.nextSibling.style.display = 'flex';
+                    }
+                  }}
                 />
-              ) : (
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-200/70 flex items-center justify-center text-indigo-600 shrink-0 mr-3 shadow-2xs">
-                  <Calendar className="w-5 h-5" />
-                </div>
-              )}
+              ) : null}
+              <div
+                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-200/70 items-center justify-center text-indigo-600 shrink-0 mr-3 shadow-2xs ${
+                  (event.logo || event.event_logo) ? 'hidden' : 'flex'
+                }`}
+              >
+                <Calendar className="w-5 h-5" />
+              </div>
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600 truncate">
                   {event.school_name || 'Event Portal'}
@@ -224,17 +233,17 @@ const EventDashboard = () => {
                 }
               </span>
 
-              <div className="h-5 w-px bg-slate-200 hidden sm:block" />
+              <div className="h-5 w-px bg-slate-200" />
 
               <a
                 href="/"
                 title="Eventloo"
-                className="hidden sm:flex items-center hover:opacity-90 transition-opacity"
+                className="flex items-center hover:opacity-90 transition-opacity shrink-0"
               >
                 <img
                   src="/eventloo-loop-logo.svg"
                   alt="Eventloo"
-                  className="h-6 sm:h-7 w-auto object-contain"
+                  className="h-5 sm:h-7 w-auto object-contain"
                 />
               </a>
             </div>

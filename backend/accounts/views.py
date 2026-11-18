@@ -991,6 +991,20 @@ def team_manager_login(request):
     audit_security_event(request, 'team_manager_login', 'denied')
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+def _get_event_logo_url(request, event):
+    if not event:
+        return None
+    if getattr(event, 'logo', None):
+        if request:
+            try:
+                return request.build_absolute_uri(event.logo.url)
+            except Exception:
+                pass
+        return getattr(event.logo, 'url', None)
+    if getattr(event, 'image', None):
+        return event.image
+    return None
+
 def _check_team_manager_access(request, team_id):
     """
     Defense-in-depth: validates that if request.user is a team manager,
@@ -1042,6 +1056,9 @@ def team_manager_profile(request, team_id):
             'title': event.title,
             'event_type': event.event_type,
             'status': event.status,
+            'logo': _get_event_logo_url(request, event),
+            'event_logo': _get_event_logo_url(request, event),
+            'image': getattr(event, 'image', '') or '',
             'start_date': event.start_date,
             'end_date': event.end_date
         } for event in events]
@@ -1196,11 +1213,15 @@ def team_manager_events(request, team_id):
                     'is_team_based': program.is_team_based,
                     'assigned_students': assigned_students,
                 })
+            event_logo_url = _get_event_logo_url(request, event)
             event_data.append({
                 'id': event.id,
                 'title': event.title,
                 'event_type': event.event_type,
                 'status': event.status,
+                'logo': event_logo_url,
+                'event_logo': event_logo_url,
+                'image': getattr(event, 'image', '') or '',
                 'start_date': event.start_date,
                 'end_date': event.end_date,
                 'registration_deadline': event.registration_deadline,
@@ -1356,12 +1377,16 @@ def team_manager_event_programs(request, team_id, event_id):
             'section': member.section
         } for member in team_members]
         
+        event_logo_url = _get_event_logo_url(request, event)
         return Response({
             'event': {
                 'id': event.id,
                 'title': event.title,
                 'event_type': event.event_type,
                 'status': event.status,
+                'logo': event_logo_url,
+                'event_logo': event_logo_url,
+                'image': getattr(event, 'image', '') or '',
                 'start_date': event.start_date,
                 'end_date': event.end_date,
                 'start_time': event.start_time,
