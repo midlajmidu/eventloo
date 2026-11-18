@@ -282,11 +282,11 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
         {/* Total Programs */}
         <div
           onClick={() => setActiveTab('programs')}
-          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-indigo-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
+          className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total Programs</p>
-            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100/80 flex items-center justify-center text-indigo-600 group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100/80 flex items-center justify-center text-indigo-600 shrink-0">
               <BookOpen className="w-4 h-4" />
             </div>
           </div>
@@ -300,11 +300,11 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
         {/* Registered Participants */}
         <div
           onClick={() => setActiveTab('participants')}
-          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-emerald-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
+          className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Participants</p>
-            <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100/80 flex items-center justify-center text-emerald-600 group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100/80 flex items-center justify-center text-emerald-600 shrink-0">
               <UserCheck className="w-4 h-4" />
             </div>
           </div>
@@ -318,11 +318,11 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
         {/* Competing Teams */}
         <div
           onClick={() => setActiveTab('points')}
-          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-violet-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
+          className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Teams</p>
-            <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-100/80 flex items-center justify-center text-violet-600 group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-100/80 flex items-center justify-center text-violet-600 shrink-0">
               <Shield className="w-4 h-4" />
             </div>
           </div>
@@ -336,11 +336,11 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
         {/* Completed & Scored */}
         <div
           onClick={() => setActiveTab('results')}
-          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-amber-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
+          className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs cursor-pointer"
         >
           <div className="flex items-center justify-between">
             <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Completed & Scored</p>
-            <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-100/80 flex items-center justify-center text-amber-600 group-hover:scale-105 transition-transform shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-100/80 flex items-center justify-center text-amber-600 shrink-0">
               <Award className="w-4 h-4" />
             </div>
           </div>
@@ -355,7 +355,7 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
           </div>
           <div className="mt-2 w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
             <div
-              className="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
+              className="bg-amber-500 h-1.5 rounded-full"
               style={{ width: `${Math.min(100, completionPercent)}%` }}
             />
           </div>
