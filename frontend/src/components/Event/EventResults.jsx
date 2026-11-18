@@ -9,7 +9,8 @@ import {
   Globe, 
   CheckCircle,
   FileSpreadsheet,
-  MoreVertical
+  MoreVertical,
+  AlertCircle
 } from 'lucide-react';
 import { 
   eventProgramsAPI, 
@@ -723,11 +724,35 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                 <h2 className="text-lg font-extrabold text-gray-900">
                   #{drawerProgram?.id} {getCategoryName(drawerProgram?.category)} - {drawerProgram?.name}
                 </h2>
-                <span className={`px-3 py-1 font-bold rounded-full text-xs ${
-                  drawerProgram?.is_published ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                }`}>
-                  {drawerProgram?.is_published ? 'Published' : 'Submitted'}
-                </span>
+                {(() => {
+                  const status = getProgramStatus(drawerProgram);
+                  if (status === 'published') {
+                    return (
+                      <span className="px-3 py-1 font-bold rounded-full text-xs bg-emerald-100 text-emerald-800">
+                        Published
+                      </span>
+                    );
+                  }
+                  if (status === 'submitted') {
+                    return (
+                      <span className="px-3 py-1 font-bold rounded-full text-xs bg-amber-100 text-amber-800">
+                        Submitted
+                      </span>
+                    );
+                  }
+                  if (status === 'in_progress') {
+                    return (
+                      <span className="px-3 py-1 font-bold rounded-full text-xs bg-indigo-100 text-indigo-800">
+                        In Progress
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="px-3 py-1 font-bold rounded-full text-xs bg-gray-100 text-gray-700">
+                      Pending
+                    </span>
+                  );
+                })()}
               </div>
 
               <button
@@ -740,6 +765,14 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
 
             {/* Drawer Body Table */}
             <div className="p-6 flex-1 overflow-x-auto">
+              {getProgramStatus(drawerProgram) === 'in_progress' && (
+                <div className="mb-4 p-3 bg-indigo-50 border border-indigo-200/90 rounded-xl text-xs text-indigo-800 flex items-center space-x-2.5">
+                  <AlertCircle className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <span>
+                    These scores are currently saved as a <strong>draft</strong>. Final evaluation has not been formally submitted in Mark Entry.
+                  </span>
+                </div>
+              )}
               {loadingDrawerResults ? (
                 <div className="py-20 text-center">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-600 mx-auto mb-3"></div>
