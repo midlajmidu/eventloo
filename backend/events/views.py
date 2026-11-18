@@ -5118,14 +5118,14 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
         try:
             team = self._get_team_for_request(pk)
             
-            students = team.members.filter(role='student')
+            students = team.members.filter(role='student').order_by('first_name', 'last_name', 'student_id')
             
-            # Apply pagination
-            page = self.paginate_queryset(students)
-            if page is not None:
-                student_data = []
-                for student in page:
-                    student_data.append({
+            # Apply pagination only if page or page_size query parameters are explicitly requested
+            should_paginate = 'page' in request.query_params or 'page_size' in request.query_params
+            if should_paginate:
+                page = self.paginate_queryset(students)
+                if page is not None:
+                    student_data = [{
                         'id': student.id,
                         'name': student.get_full_name(),
                         'student_id': student.student_id,
@@ -5138,29 +5138,30 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                         'total_points': student.total_points,
                         'phone_number': student.phone_number,
                         'address': student.address,
-                    })
-                
-                return self.get_paginated_response(student_data)
+                    } for student in page]
+                    return self.get_paginated_response(student_data)
             
-            # Fallback if pagination is not configured
-            student_data = []
-            for student in students:
-                student_data.append({
-                    'id': student.id,
-                    'name': student.get_full_name(),
-                    'student_id': student.student_id,
-                    'email': student.email,
-                    'gender': student.gender or '—',
-                    'category': student.category,
-                    'grade': student.grade,
-                    'section': student.section,
-                    'chest_code': student.chest_code,
-                    'total_points': student.total_points,
-                    'phone_number': student.phone_number,
-                    'address': student.address,
-                })
+            # Return complete team roster when directory view is requested
+            student_data = [{
+                'id': student.id,
+                'name': student.get_full_name(),
+                'student_id': student.student_id,
+                'email': student.email,
+                'gender': student.gender or '—',
+                'category': student.category,
+                'grade': student.grade,
+                'section': student.section,
+                'chest_code': student.chest_code,
+                'total_points': student.total_points,
+                'phone_number': student.phone_number,
+                'address': student.address,
+            } for student in students]
             
-            return Response({'students': student_data})
+            return Response({
+                'students': student_data,
+                'results': student_data,
+                'count': len(student_data)
+            })
         except Team.DoesNotExist:
             return Response({'error': 'Team not found'}, status=status.HTTP_404_NOT_FOUND)
         except Exception as exc:
@@ -5176,18 +5177,36 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
             team = self._get_team_for_request(pk)
             events = Event.objects.filter(school_id=request.user.school_id).order_by('-start_date')
             
-            # Simplify the response - just return basic event info
-            event_data = []
-            for event in events:
-                assigned_programs = ProgramAssignment.objects.filter(
-                    team=team, program__event=event
-                ).values('program_id').distinct().count()
-                team_points = ProgramResult.objects.filter(
+            # Pre-aggregate counts and points across all events for this team in 3 efficient queries
+            assigned_counts_by_event = dict(
+                ProgramAssignment.objects.filter(team=team)
+                .values('program__event_id')
+                .annotate(count=Count('program_id', distinct=True))
+                .values_list('program__event_id', 'count')
+            )
+            team_points_by_event = dict(
+                ProgramResult.objects.filter(
                     team=team,
-                    program__event=event,
                     program__is_published=True,
                     entry_status='submitted',
-                ).aggregate(total=Sum('points_earned'))['total'] or 0
+                )
+                .values('program__event_id')
+                .annotate(total=Sum('points_earned'))
+                .values_list('program__event_id', 'total')
+            )
+            total_programs_by_event = dict(
+                Program.objects.filter(event__school_id=request.user.school_id, is_active=True)
+                .values('event_id')
+                .annotate(count=Count('id'))
+                .values_list('event_id', 'count')
+            )
+            
+            event_data = []
+            now_dt = timezone.now()
+            for event in events:
+                assigned_programs = assigned_counts_by_event.get(event.id, 0)
+                team_points = team_points_by_event.get(event.id, 0) or 0
+                total_progs = total_programs_by_event.get(event.id, 0)
                 event_data.append({
                     'id': event.id,
                     'title': event.title,
@@ -5195,7 +5214,7 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                     'event_type': event.event_type,
                     'status': event.status,
                     'team_points': team_points,
-                    'total_programs': event.programs.filter(is_active=True).count(),
+                    'total_programs': total_progs,
                     'programs_assigned': assigned_programs,
                     'start_date': event.start_date,
                     'end_date': event.end_date,
@@ -5205,7 +5224,7 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                         event.status in ('published', 'ongoing')
                         and (
                             not event.registration_deadline
-                            or timezone.now() <= event.registration_deadline
+                            or now_dt <= event.registration_deadline
                         )
                     ),
                 })
@@ -5222,23 +5241,34 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
             team = self._get_team_for_request(pk)
             event = Event.objects.get(id=event_id, school_id=request.user.school_id)
 
-            programs = Program.objects.filter(event=event, is_active=True).order_by('category', 'name')
+            programs = list(Program.objects.filter(event=event, is_active=True).order_by('category', 'name'))
+            
+            # Pre-fetch all team assignments for this event in a single query
+            all_team_assignments = list(
+                ProgramAssignment.objects.filter(
+                    program__event=event,
+                    team=team
+                ).select_related('student')
+                .order_by('sub_team_number', '-is_leader', 'student__first_name')
+            )
+            
+            assignments_by_program = defaultdict(list)
+            for a in all_team_assignments:
+                assignments_by_program[a.program_id].append({
+                    'id': a.student_id,
+                    'assignment_id': a.id,
+                    'name': a.student.get_full_name(),
+                    'student_id': a.student.student_id,
+                    'category': a.student.category or 'general',
+                    'grade': a.student.grade,
+                    'chest_number': a.chest_number,
+                    'sub_team_number': a.sub_team_number or 1,
+                    'is_leader': a.is_leader,
+                })
+
             program_data = []
             for program in programs:
-                assignments = ProgramAssignment.objects.filter(
-                    program=program, team=team
-                ).select_related('student').order_by('sub_team_number', '-is_leader', 'student__first_name')
-                assigned_students = [{
-                    'id': assignment.student_id,
-                    'assignment_id': assignment.id,
-                    'name': assignment.student.get_full_name(),
-                    'student_id': assignment.student.student_id,
-                    'category': assignment.student.category or 'general',
-                    'grade': assignment.student.grade,
-                    'chest_number': assignment.chest_number,
-                    'sub_team_number': assignment.sub_team_number or 1,
-                    'is_leader': assignment.is_leader,
-                } for assignment in assignments]
+                assigned_students = assignments_by_program.get(program.id, [])
                 assigned_count = len(assigned_students)
                 if program.is_team_based:
                     per_team_limit = (program.team_size or 0) * (program.max_teams_per_school or 1)
@@ -5267,7 +5297,16 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                     'is_finished': program.is_finished,
                 })
 
-            from .services import program_is_general_or_mixed
+            # Pre-fetch mixed/general category codes for this school in 1 query
+            from .services import GENERAL_CATEGORY_ALIASES
+            mixing_category_codes = set(
+                StudentCategory.objects.filter(
+                    school_id=request.user.school_id,
+                    is_mixing=True
+                ).values_list('code', flat=True)
+            )
+            mixing_codes_lower = {c.strip().lower() for c in mixing_category_codes if c} | set(GENERAL_CATEGORY_ALIASES)
+
             team_students = team.members.filter(role='student')
             assignments = ProgramAssignment.objects.filter(
                 program__event=event,
@@ -5280,12 +5319,13 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
                 if s_id not in assignments_by_student:
                     assignments_by_student[s_id] = {'total_count': 0, 'single_count': 0, 'group_count': 0}
                 assignments_by_student[s_id]['total_count'] += 1
-                if not program_is_general_or_mixed(a.program):
+                prog_cat = (a.program.category or '').strip().lower()
+                is_general_or_mixed = prog_cat in mixing_codes_lower
+                if not is_general_or_mixed:
                     if a.program.is_team_based:
                         assignments_by_student[s_id]['group_count'] += 1
                     else:
                         assignments_by_student[s_id]['single_count'] += 1
-
 
             member_data = [{
                 'id': member.id,
@@ -5542,11 +5582,16 @@ class TeamManagerViewSet(viewsets.GenericViewSet):
         from django.db import transaction
         from .services import assign_students
         try:
-            team = (
-                Team.objects.get(id=request.user.team_id, school_id=request.user.school_id)
-                if getattr(request.user, 'team_id', None)
-                else Team.objects.get(team_manager=request.user, school_id=request.user.school_id)
-            )
+            target_team_id = request.data.get('team_id') or getattr(request.user, 'team_id', None)
+            if target_team_id:
+                team = self._get_team_for_request(target_team_id)
+            else:
+                managed = self._managed_teams()
+                if managed.count() == 1:
+                    team = managed.first()
+                else:
+                    return Response({'error': 'A specific team_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
             with transaction.atomic():
                 assignments = []
                 if program.is_team_based:
@@ -7348,6 +7393,7 @@ def get_grouped_assignments_for_report(program, assignments, event):
             team_name = leader.team.name if (leader and leader.team) else ""
 
             entries.append({
+                'team_id': leader.team_id if leader else (a_list[0].team_id if a_list else None),
                 'chest_no': chest_display,
                 'participant_names': combined_names,
                 'team_name': team_name,
@@ -7367,6 +7413,7 @@ def get_grouped_assignments_for_report(program, assignments, event):
             team_name = a.team.name if a.team else ""
 
             entries.append({
+                'team_id': a.team_id,
                 'chest_no': chest_display,
                 'participant_names': nm,
                 'team_name': team_name,

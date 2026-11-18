@@ -991,58 +991,72 @@ def team_manager_login(request):
     audit_security_event(request, 'team_manager_login', 'denied')
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+def _check_team_manager_access(request, team_id):
+    """
+    Defense-in-depth: validates that if request.user is a team manager,
+    they are only authorized to access and modify their assigned team.
+    """
+    if getattr(request.user, 'role', None) == 'team_manager':
+        token_team_id = getattr(request.user, 'team_id', None)
+        if token_team_id is not None and str(token_team_id) != str(team_id):
+            return Response(
+                {'error': 'You do not have permission to access another team\'s resources.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        if token_team_id is None and hasattr(request.user, 'managed_teams'):
+            if not request.user.managed_teams.filter(id=team_id).exists():
+                return Response(
+                    {'error': 'You do not have permission to access another team\'s resources.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+    return None
+
 @api_view(['GET'])
 @authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
 @permission_classes([IsTeamManagerOrAdmin])
 def team_manager_profile(request, team_id):
     """Get team manager profile and team details"""
+    denial = _check_team_manager_access(request, team_id)
+    if denial:
+        return denial
     try:
         team = Team.objects.get(id=team_id, school_id=request.user.school_id)
         
         # Get team members
         members = team.members.all()
-        member_data = []
-        
-        for member in members:
-            member_data.append({
-                'id': member.id,
-                'name': member.display_name,
-                'student_id': member.student_id,
-                'gender': member.gender,
-                'category': member.category,
-                'grade': member.grade,
-                'section': member.section,
-                'total_points': member.total_points
-            })
+        member_data = [{
+            'id': member.id,
+            'name': member.display_name,
+            'student_id': member.student_id,
+            'gender': member.gender,
+            'category': member.category,
+            'grade': member.grade,
+            'section': member.section,
+            'total_points': member.total_points
+        } for member in members]
         
         # Get team's events
         events = Event.objects.filter(programs__assignments__team=team).distinct()
-        event_data = []
-        
-        for event in events:
-            event_data.append({
-                'id': event.id,
-                'title': event.title,
-                'event_type': event.event_type,
-                'status': event.status,
-                'start_date': event.start_date,
-                'end_date': event.end_date
-            })
+        event_data = [{
+            'id': event.id,
+            'title': event.title,
+            'event_type': event.event_type,
+            'status': event.status,
+            'start_date': event.start_date,
+            'end_date': event.end_date
+        } for event in events]
         
         # Get team's program assignments
         from events.models import ProgramAssignment
         assignments = ProgramAssignment.objects.filter(team=team).select_related('program', 'student')
-        assignment_data = []
-        
-        for assignment in assignments:
-            assignment_data.append({
-                'id': assignment.id,
-                'program_name': assignment.program.name,
-                'program_category': assignment.program.category,
-                'student_name': assignment.student.display_name,
-                'chest_number': assignment.chest_number,
-                'assigned_at': assignment.assigned_at
-            })
+        assignment_data = [{
+            'id': assignment.id,
+            'program_name': assignment.program.name,
+            'program_category': assignment.program.category,
+            'student_name': assignment.student.display_name,
+            'chest_number': assignment.chest_number,
+            'assigned_at': assignment.assigned_at
+        } for assignment in assignments]
         
         profile_data = {
             'team': {
@@ -1069,34 +1083,67 @@ def team_manager_profile(request, team_id):
 @authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
 @permission_classes([IsTeamManagerOrAdmin])
 def team_manager_students(request, team_id):
-    """Get team's students with their points"""
+    """Get team's students with their points (batch optimized)"""
+    denial = _check_team_manager_access(request, team_id)
+    if denial:
+        return denial
     try:
         team = Team.objects.get(id=team_id, school_id=request.user.school_id)
-        members = team.members.all()
+        members = team.members.all().order_by('name', 'student_id')
         
-        student_data = []
-        for member in members:
-            # Get student's points from different sources
-            from events.models import PointsRecord
-            event_points = PointsRecord.objects.filter(student=member, team=team).aggregate(
-                total=Sum('points')
-            )['total'] or 0
-            
-            student_data.append({
-                'id': member.id,
-                'name': member.display_name,
-                'student_id': member.student_id,
-                'gender': member.gender,
-                'category': member.category,
-                'grade': member.grade,
-                'section': member.section,
-                'total_points': member.total_points,
-                'team_points': event_points,
-                'chest_code': member.chest_code
-            })
+        # Apply pagination if requested
+        should_paginate = 'page' in request.query_params or 'page_size' in request.query_params
+        if should_paginate:
+            from events.pagination import CustomPagination
+            paginator = CustomPagination()
+            page = paginator.paginate_queryset(members, request)
+            if page is not None:
+                from events.models import PointsRecord
+                points_map = dict(
+                    PointsRecord.objects.filter(team=team, student__in=page)
+                    .values('student_id')
+                    .annotate(total=Sum('points'))
+                    .values_list('student_id', 'total')
+                )
+                student_data = [{
+                    'id': member.id,
+                    'name': member.display_name,
+                    'student_id': member.student_id,
+                    'gender': member.gender,
+                    'category': member.category,
+                    'grade': member.grade,
+                    'section': member.section,
+                    'total_points': member.total_points,
+                    'team_points': points_map.get(member.id, 0),
+                    'chest_code': member.chest_code
+                } for member in page]
+                return paginator.get_paginated_response(student_data)
+
+        from events.models import PointsRecord
+        points_map = dict(
+            PointsRecord.objects.filter(team=team, student__in=members)
+            .values('student_id')
+            .annotate(total=Sum('points'))
+            .values_list('student_id', 'total')
+        )
+        
+        student_data = [{
+            'id': member.id,
+            'name': member.display_name,
+            'student_id': member.student_id,
+            'gender': member.gender,
+            'category': member.category,
+            'grade': member.grade,
+            'section': member.section,
+            'total_points': member.total_points,
+            'team_points': points_map.get(member.id, 0),
+            'chest_code': member.chest_code
+        } for member in members]
         
         return Response({
             'students': student_data,
+            'results': student_data,
+            'count': len(student_data),
             'total_students': len(student_data)
         })
         
@@ -1107,27 +1154,41 @@ def team_manager_students(request, team_id):
 @authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
 @permission_classes([IsTeamManagerOrAdmin])
 def team_manager_events(request, team_id):
-    """Get all events for a team manager (paginated)"""
+    """Get all events for a team manager (batch optimized)"""
+    denial = _check_team_manager_access(request, team_id)
+    if denial:
+        return denial
     try:
         from events.models import Team, Event, Program, ProgramAssignment
+        from collections import defaultdict
 
         team = Team.objects.get(id=team_id, school_id=request.user.school_id)
-        # Get all active events (published, ongoing, or completed)
-        events = Event.objects.filter(
+        events = list(Event.objects.filter(
             school_id=request.user.school_id,
             status__in=['published', 'ongoing', 'completed']
-        ).distinct().order_by('-start_date')
+        ).distinct().order_by('-start_date'))
 
-        # Build event data list
+        if not events:
+            return Response({'events': [], 'total_events': 0})
+
+        all_programs = list(Program.objects.filter(event__in=events))
+        programs_by_event = defaultdict(list)
+        for p in all_programs:
+            programs_by_event[p.event_id].append(p)
+
+        assignments = ProgramAssignment.objects.filter(
+            team=team, program__in=all_programs
+        ).values_list('program_id', 'student_id')
+        assignments_by_program = defaultdict(list)
+        for prog_id, s_id in assignments:
+            assignments_by_program[prog_id].append(s_id)
+
         event_data = []
         for event in events:
-            # Get programs for this event
-            programs = Program.objects.filter(event=event)
+            programs = programs_by_event.get(event.id, [])
             program_data = []
             for program in programs:
-                # Get assignments for this team in this program
-                team_assignments = ProgramAssignment.objects.filter(team=team, program=program)
-                assigned_students = [a.student_id for a in team_assignments]
+                assigned_students = assignments_by_program.get(program.id, [])
                 program_data.append({
                     'id': program.id,
                     'name': program.name,
@@ -1193,41 +1254,56 @@ def team_manager_available_programs(request):
 @authentication_classes([TeamManagerAuthentication, SchoolJWTAuthentication])
 @permission_classes([IsTeamManagerOrAdmin])
 def team_manager_event_programs(request, team_id, event_id):
-    """Get programs for a specific event and current assignments"""
+    """Get programs for a specific event and current assignments (batch optimized)"""
+    denial = _check_team_manager_access(request, team_id)
+    if denial:
+        return denial
     try:
-        team = Team.objects.get(id=team_id, school_id=request.user.school_id)
         from events.models import Event, Program, ProgramAssignment
-        
+        from collections import defaultdict
+
+        team = Team.objects.get(id=team_id, school_id=request.user.school_id)
         event = Event.objects.get(id=event_id, school_id=request.user.school_id)
-        programs = Program.objects.filter(event=event, is_active=True)
+        programs = list(Program.objects.filter(event=event, is_active=True))
+
+        total_teams = Team.objects.filter(school_id=request.user.school_id).count()
+
+        # Batch prefetch team assignments and overall assignment counts
+        all_team_assignments = ProgramAssignment.objects.filter(
+            team=team,
+            program__in=programs
+        ).select_related('student').order_by('sub_team_number', '-is_leader', 'student__first_name')
+        assignments_by_prog = defaultdict(list)
+        for a in all_team_assignments:
+            assignments_by_prog[a.program_id].append(a)
+
+        total_assigned_counts = dict(
+            ProgramAssignment.objects.filter(program__in=programs)
+            .values('program_id')
+            .annotate(c=Count('id'))
+            .values_list('program_id', 'c')
+        )
         
         program_data = []
         for program in programs:
-            # Get current assignments for this team in this program
-            team_assignments = ProgramAssignment.objects.filter(
-                team=team, 
-                program=program
-            ).select_related('student')
+            team_assignments = assignments_by_prog.get(program.id, [])
             
-            assigned_students = []
-            for assignment in team_assignments:
-                assigned_students.append({
-                    'id': assignment.student.id,
-                    'assignment_id': assignment.id,
-                    'name': assignment.student.display_name,
-                    'student_id': assignment.student.student_id,
-                    'gender': assignment.student.gender,
-                    'chest_number': assignment.chest_number,
-                    'sub_team_number': getattr(assignment, 'sub_team_number', 1) or 1,
-                    'is_leader': getattr(assignment, 'is_leader', False) or False,
-                    'category': getattr(assignment.student, 'category', ''),
-                    'grade': getattr(assignment.student, 'grade', ''),
-                    'assigned_at': assignment.assigned_at
-                })
+            assigned_students = [{
+                'id': assignment.student.id,
+                'assignment_id': assignment.id,
+                'name': assignment.student.display_name,
+                'student_id': assignment.student.student_id,
+                'gender': assignment.student.gender,
+                'chest_number': assignment.chest_number,
+                'sub_team_number': getattr(assignment, 'sub_team_number', 1) or 1,
+                'is_leader': getattr(assignment, 'is_leader', False) or False,
+                'category': getattr(assignment.student, 'category', ''),
+                'grade': getattr(assignment.student, 'grade', ''),
+                'assigned_at': assignment.assigned_at
+            } for assignment in team_assignments]
             
             # Calculate limits and available slots based on program type
             if program.is_team_based:
-                # For team-based programs, use team_size
                 per_team_limit = (
                     (program.team_size or 0) * (program.max_teams_per_school or 1)
                 )
@@ -1236,17 +1312,13 @@ def team_manager_event_programs(request, team_id, event_id):
                 participation_type = 'Team'
                 limit_description = f'Team size: {per_team_limit} members required'
             else:
-                # For individual programs, max_participants represents participants per team
                 per_team_limit = program.max_participants if program.max_participants else 1
                 assigned_count = len(assigned_students)
                 available_slots = per_team_limit - assigned_count if assigned_count < per_team_limit else 0
                 participation_type = 'Individual'
                 
-                # Calculate total capacity (teams × participants per team)
-                total_teams = Team.objects.filter(school_id=request.user.school_id).count()
                 total_capacity = total_teams * per_team_limit
-                total_assigned = ProgramAssignment.objects.filter(program=program).count()
-                
+                total_assigned = total_assigned_counts.get(program.id, 0)
                 limit_description = f'{per_team_limit} participants per team (Total: {total_assigned}/{total_capacity} - {per_team_limit} × {total_teams} teams)'
             
             program_data.append({
@@ -1259,9 +1331,9 @@ def team_manager_event_programs(request, team_id, event_id):
                 'is_active': program.is_active,
                 'is_finished': program.is_finished,
                 'start_time': program.start_time,
-                'max_participants': program.max_participants,  # Overall limit for individual programs
+                'max_participants': program.max_participants,
                 'max_participants_per_team': getattr(program, 'max_participants_per_team', None),
-                'team_size': program.team_size,  # Required team size for team-based programs
+                'team_size': program.team_size,
                 'max_teams_per_school': getattr(program, 'max_teams_per_school', 1) or 1,
                 'description': program.description,
                 'assigned_students': assigned_students,
@@ -1269,22 +1341,20 @@ def team_manager_event_programs(request, team_id, event_id):
                 'available_slots': available_slots,
                 'per_team_limit': per_team_limit,
                 'limit_description': limit_description,
-                'total_teams': Team.objects.filter(school_id=request.user.school_id).count()
+                'total_teams': total_teams
             })
         
         # Get team members for assignment
         team_members = team.members.all()
-        member_data = []
-        for member in team_members:
-            member_data.append({
-                'id': member.id,
-                'name': member.display_name,
-                'student_id': member.student_id,
-                'gender': member.gender,
-                'category': member.category,
-                'grade': member.grade,
-                'section': member.section
-            })
+        member_data = [{
+            'id': member.id,
+            'name': member.display_name,
+            'student_id': member.student_id,
+            'gender': member.gender,
+            'category': member.category,
+            'grade': member.grade,
+            'section': member.section
+        } for member in team_members]
         
         return Response({
             'event': {
@@ -1331,6 +1401,9 @@ def team_manager_event_programs(request, team_id, event_id):
 @permission_classes([IsTeamManagerOrAdmin])
 def team_manager_assign_student(request, team_id, event_id, program_id):
     """Assign participants through the shared transactional rule engine."""
+    denial = _check_team_manager_access(request, team_id)
+    if denial:
+        return denial
     from events.models import Program
     from events.services import assign_students
 
@@ -1367,6 +1440,9 @@ def team_manager_assign_student(request, team_id, event_id, program_id):
 @permission_classes([IsTeamManagerOrAdmin])
 def team_manager_remove_assignment(request, team_id, assignment_id):
     """Remove a student assignment from a program"""
+    denial = _check_team_manager_access(request, team_id)
+    if denial:
+        return denial
     try:
         team = Team.objects.get(id=team_id, school_id=request.user.school_id)
         from events.models import ProgramAssignment
@@ -1386,6 +1462,9 @@ def team_manager_remove_assignment(request, team_id, assignment_id):
 @permission_classes([IsTeamManagerOrAdmin])
 def team_manager_set_subteam_leader(request, team_id, event_id, program_id):
     """Set or toggle the sub-team group leader"""
+    denial = _check_team_manager_access(request, team_id)
+    if denial:
+        return denial
     from events.models import Event, Program, ProgramAssignment, User
     try:
         team = Team.objects.get(id=team_id, school_id=request.user.school_id)
@@ -1418,6 +1497,9 @@ def team_manager_set_subteam_leader(request, team_id, event_id, program_id):
 @permission_classes([IsTeamManagerOrAdmin])
 def team_manager_remove_student_from_program(request, team_id, event_id, program_id, student_id):
     """Remove a specific student from a specific program"""
+    denial = _check_team_manager_access(request, team_id)
+    if denial:
+        return denial
     from events.models import Event, Program, ProgramAssignment, User
     
     try:

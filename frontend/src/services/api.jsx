@@ -639,7 +639,7 @@ export const teamManagerAPI = {
   
   // New functions for team login dashboard
   // Get team's students
-  getTeamStudents: (teamId) => api.get(`team-manager/${teamId}/students/`),
+  getTeamStudents: (teamId, params) => api.get(`team-manager/${teamId}/students/`, { params }),
   
   // Get team's events
   getTeamEvents: (teamId) => api.get(`team-manager/${teamId}/events/`),
