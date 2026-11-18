@@ -30,6 +30,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
   // Selection States
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedTeamId, setSelectedTeamId] = useState('');
+  const [programSearch, setProgramSearch] = useState('');
   
   // Drawer States
   const [activeDrawerProgram, setActiveDrawerProgram] = useState(null);
@@ -271,13 +272,29 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
     return Array.from(memberMap.values());
   })();
 
-  // Filtered Programs for selected Category
+  // Filtered Programs for selected Category & Search Pad
   const filteredPrograms = programs.filter(p => {
-    if (!selectedCategory) return true;
-    if (isGeneralCategory(selectedCategory)) {
-      return isGeneralCategory(p.category);
+    // 1. Category filter
+    if (selectedCategory) {
+      if (isGeneralCategory(selectedCategory)) {
+        if (!isGeneralCategory(p.category)) return false;
+      } else if (p.category !== selectedCategory) {
+        return false;
+      }
     }
-    return p.category === selectedCategory;
+
+    // 2. Typing Search Pad
+    if (programSearch.trim()) {
+      const q = programSearch.trim().toLowerCase();
+      const pName = (p.name || '').toLowerCase();
+      const pType = (p.program_type_display || p.program_type || (p.is_team_based ? 'group' : 'individual')).toLowerCase();
+      const pGender = (p.gender || 'male').toLowerCase();
+      const pDesc = (p.description || '').toLowerCase();
+      const pVenue = (p.venue || p.stage?.name || '').toLowerCase();
+      return pName.includes(q) || pType.includes(q) || pGender.includes(q) || pDesc.includes(q) || pVenue.includes(q);
+    }
+
+    return true;
   });
 
   // Get assignments for a specific program and the selected team
@@ -412,13 +429,13 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
         /* SCREENSHOT 2 STATE: Active Table View */
         <div className="bg-white border border-slate-200/80 rounded-xl p-5 sm:p-6 shadow-2xs space-y-5">
           {/* Top Controls Filter Row */}
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-gray-50/70 p-3.5 rounded-2xl border border-gray-200/80">
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-gray-50/70 p-3 sm:p-3.5 rounded-2xl border border-gray-200/80">
+            <div className="flex flex-wrap items-center gap-2.5">
               {/* Category Select */}
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-2xs cursor-pointer"
+                className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
                 <option value="">Select Category</option>
                 {categoryOptions.map((cat) => (
@@ -432,7 +449,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
               <select
                 value={selectedTeamId}
                 onChange={(e) => setSelectedTeamId(e.target.value)}
-                className="px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-slate-900 shadow-2xs cursor-pointer"
+                className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
                 <option value="">Select Team</option>
                 {teams.map((t) => (
@@ -443,11 +460,50 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
               </select>
             </div>
 
+            {/* Typing Search Pad */}
+            <div className="relative flex-1 min-w-[200px] max-w-md">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search program name..."
+                value={programSearch}
+                onChange={(e) => setProgramSearch(e.target.value)}
+                className="w-full pl-9 pr-8 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs transition"
+              />
+              {programSearch && (
+                <button
+                  type="button"
+                  onClick={() => setProgramSearch('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 rounded-md"
+                  aria-label="Clear program search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
             {/* Status indicator */}
-            <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-700 bg-emerald-50/80 px-3 py-1.5 rounded-xl border border-emerald-200">
+            <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-700 bg-emerald-50/80 px-3 py-1.5 rounded-xl border border-emerald-200 shrink-0 self-start lg:self-auto">
               <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
               <span>{savingStatus}</span>
             </div>
+          </div>
+
+          {/* Program list info bar */}
+          <div className="flex items-center justify-between px-1 text-xs text-gray-500 font-medium">
+            <span>
+              {filteredPrograms.length} {filteredPrograms.length === 1 ? 'competition' : 'competitions'} available
+              {programSearch && <span className="text-indigo-600 font-semibold ml-1">(filtered by &quot;{programSearch}&quot;)</span>}
+            </span>
+            {programSearch && (
+              <button
+                type="button"
+                onClick={() => setProgramSearch('')}
+                className="text-indigo-600 hover:text-indigo-800 text-xs font-semibold cursor-pointer"
+              >
+                Clear search
+              </button>
+            )}
           </div>
 
           {/* Clean Competitions Table */}
@@ -525,7 +581,22 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                   ) : (
                     <tr>
                       <td colSpan="4" className="px-6 py-12 text-center text-gray-400 text-xs">
-                        No competitions found for this category.
+                        {programSearch ? (
+                          <div className="space-y-2 max-w-sm mx-auto">
+                            <p className="font-semibold text-gray-700">No programs matching &quot;{programSearch}&quot;</p>
+                            <p className="text-gray-400">Try a different keyword or clear the search to view all programs.</p>
+                            <button
+                              type="button"
+                              onClick={() => setProgramSearch('')}
+                              className="inline-flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-medium transition cursor-pointer mt-1"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                              <span>Clear search</span>
+                            </button>
+                          </div>
+                        ) : (
+                          'No competitions found for this category.'
+                        )}
                       </td>
                     </tr>
                   )}
