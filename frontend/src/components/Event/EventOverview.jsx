@@ -8,7 +8,14 @@ import {
   Copy,
   Check,
   X,
-  Download
+  Download,
+  BookOpen,
+  UserCheck,
+  Users,
+  Shield,
+  Award,
+  Layers,
+  Flag,
 } from 'lucide-react';
 import { eventReportsAPI, eventPointsAPI, eventStagesAPI, publicEventAPI } from '../../services/api';
 import EventlooLogo from '../common/EventlooLogo';
@@ -225,76 +232,12 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. MINIMAL METRIC CARDS (ALL-WHITE, MATCHING APP DASHBOARDS)               */}
-      {/* ========================================================================= */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        
-        {/* Total Programs */}
-        <div
-          onClick={() => setActiveTab('programs')}
-          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-slate-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
-        >
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total Programs</p>
-          <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{totalPrograms}</p>
-          <p className="mt-1 text-xs text-slate-500 font-normal">
-            {stagePrograms} Stage · {offStagePrograms} Off-Stage
-          </p>
-        </div>
-
-        {/* Registered Participants */}
-        <div
-          onClick={() => setActiveTab('participants')}
-          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-slate-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
-        >
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Participants</p>
-          <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{totalParticipants}</p>
-          <p className="mt-1 text-xs text-slate-500 font-normal">
-            {event?.max_participants ? `Cap: ${event.max_participants}` : 'Unlimited capacity'}
-          </p>
-        </div>
-
-        {/* Competing Teams */}
-        <div
-          onClick={() => setActiveTab('points')}
-          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-slate-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
-        >
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Teams</p>
-          <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{totalTeams}</p>
-          <p className="mt-1 text-xs text-slate-500 font-normal">
-            {event?.is_team_based ? 'Team-based scoring' : 'Individual events'}
-          </p>
-        </div>
-
-        {/* Completed & Scored */}
-        <div
-          onClick={() => setActiveTab('results')}
-          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-slate-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
-        >
-          <div className="flex items-baseline justify-between">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Completed & Scored</p>
-            <span className="text-xs font-semibold text-indigo-600">{completionPercent}%</span>
-          </div>
-          <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">
-            {completedPrograms}
-            <span className="text-sm font-normal text-slate-400"> / {totalPrograms}</span>
-          </p>
-          <div className="mt-2 w-full bg-slate-100 rounded-full h-1 overflow-hidden">
-            <div
-              className="bg-indigo-600 h-1 rounded-full transition-all duration-300"
-              style={{ width: `${Math.min(100, completionPercent)}%` }}
-            />
-          </div>
-        </div>
-
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 2.5 PUBLIC LIVE RESULTS PORTAL & QR BANNER (ALL-WHITE MINIMAL)            */}
+      {/* 2. PUBLIC LIVE RESULTS PORTAL & QR BANNER (TOP BANNER)                    */}
       {/* ========================================================================= */}
       <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0">
-            <QrCode className="w-5 h-5 text-indigo-600" />
+          <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+            <QrCode className="w-5 h-5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -305,7 +248,7 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
                 Live URL
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
               Share with students, parents, and attendees to track published program results, live team points, and schedules.
             </p>
           </div>
@@ -329,6 +272,95 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
             <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 3. METRIC CARDS (REAL UI ICONS, ALL-WHITE SURFACES)                       */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        
+        {/* Total Programs */}
+        <div
+          onClick={() => setActiveTab('programs')}
+          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-indigo-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Total Programs</p>
+            <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100/80 flex items-center justify-center text-indigo-600 group-hover:scale-105 transition-transform shrink-0">
+              <BookOpen className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{totalPrograms}</p>
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 font-normal">
+            <Layers className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="truncate">{stagePrograms} Stage · {offStagePrograms} Off-Stage</span>
+          </div>
+        </div>
+
+        {/* Registered Participants */}
+        <div
+          onClick={() => setActiveTab('participants')}
+          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-emerald-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Participants</p>
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100/80 flex items-center justify-center text-emerald-600 group-hover:scale-105 transition-transform shrink-0">
+              <UserCheck className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{totalParticipants}</p>
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 font-normal">
+            <Users className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="truncate">{event?.max_participants ? `Cap: ${event.max_participants}` : 'Unlimited capacity'}</span>
+          </div>
+        </div>
+
+        {/* Competing Teams */}
+        <div
+          onClick={() => setActiveTab('points')}
+          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-violet-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Teams</p>
+            <div className="w-8 h-8 rounded-lg bg-violet-50 border border-violet-100/80 flex items-center justify-center text-violet-600 group-hover:scale-105 transition-transform shrink-0">
+              <Shield className="w-4 h-4" />
+            </div>
+          </div>
+          <p className="mt-1.5 text-2xl font-bold tracking-tight text-slate-900">{totalTeams}</p>
+          <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500 font-normal">
+            <Flag className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+            <span className="truncate">{event?.is_team_based ? 'Team-based scoring' : 'Individual events'}</span>
+          </div>
+        </div>
+
+        {/* Completed & Scored */}
+        <div
+          onClick={() => setActiveTab('results')}
+          className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs hover:border-amber-300 transition duration-200 hover:-translate-y-0.5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Completed & Scored</p>
+            <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-100/80 flex items-center justify-center text-amber-600 group-hover:scale-105 transition-transform shrink-0">
+              <Award className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="flex items-baseline justify-between mt-1.5">
+            <p className="text-2xl font-bold tracking-tight text-slate-900">
+              {completedPrograms}
+              <span className="text-sm font-normal text-slate-400"> / {totalPrograms}</span>
+            </p>
+            <span className="text-xs font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/80">
+              {completionPercent}%
+            </span>
+          </div>
+          <div className="mt-2 w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+            <div
+              className="bg-amber-500 h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${Math.min(100, completionPercent)}%` }}
+            />
+          </div>
+        </div>
+
       </div>
 
       {/* ========================================================================= */}
