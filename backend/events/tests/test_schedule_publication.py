@@ -119,3 +119,16 @@ class SchedulePublicationTests(TestCase):
         response = self.client.get(f'/api/events/{self.event.id}/schedule-export/?export_format=csv')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+        # Stage-wise PDF export
+        pdf_stage = self.client.get(f'/api/events/{self.event.id}/schedule-export/?export_format=pdf&schedule_layout=stage')
+        self.assertEqual(pdf_stage.status_code, status.HTTP_200_OK)
+        self.assertEqual(pdf_stage['Content-Type'], 'application/pdf')
+        self.assertTrue(pdf_stage.content.startswith(b'%PDF'))
+
+        # Time-wise (chronological) PDF export
+        pdf_time = self.client.get(f'/api/events/{self.event.id}/schedule-export/?export_format=pdf&schedule_layout=time')
+        self.assertEqual(pdf_time.status_code, status.HTTP_200_OK)
+        self.assertEqual(pdf_time['Content-Type'], 'application/pdf')
+        self.assertTrue(pdf_time.content.startswith(b'%PDF'))
+        self.assertIn('-timewise.pdf', pdf_time['Content-Disposition'])
+

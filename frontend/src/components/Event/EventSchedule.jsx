@@ -14,7 +14,10 @@ import {
   Maximize2,
   CheckCircle,
   Globe,
-  Lock
+  Lock,
+  Clock,
+  Layers,
+  ChevronDown
 } from 'lucide-react';
 import { eventProgramsAPI, eventScheduleAPI, eventStagesAPI } from '../../services/api';
 
@@ -99,6 +102,8 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [loadingPdf, setLoadingPdf] = useState(false);
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [scheduleLayout, setScheduleLayout] = useState('stage'); // 'stage' | 'time'
+  const [showExportOptions, setShowExportOptions] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -153,11 +158,11 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
     };
   }, [pdfUrl]);
 
-  const loadPdfPreview = async () => {
+  const loadPdfPreview = async (layout = scheduleLayout) => {
     setLoadingPdf(true);
     setError('');
     try {
-      const response = await eventScheduleAPI.export(eventId, 'pdf');
+      const response = await eventScheduleAPI.export(eventId, 'pdf', layout);
       const blob = new Blob([response.data], { type: 'application/pdf' });
       setPdfUrl((prevUrl) => {
         if (prevUrl) URL.revokeObjectURL(prevUrl);
@@ -181,10 +186,15 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
     }
   };
 
+  const handleLayoutChange = (newLayout) => {
+    setScheduleLayout(newLayout);
+    loadPdfPreview(newLayout);
+  };
+
   const openPreviewModal = async () => {
     setPreviewModalOpen(true);
     if (!pdfUrl) {
-      await loadPdfPreview();
+      await loadPdfPreview(scheduleLayout);
     }
   };
 
@@ -333,16 +343,18 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
     }
   };
 
-  const download = async (format) => {
+  const download = async (format, layout = scheduleLayout) => {
     try {
-      const response = await eventScheduleAPI.export(eventId, format);
+      setShowExportOptions(false);
+      const response = await eventScheduleAPI.export(eventId, format, layout);
       const blob = new Blob([response.data], {
         type: format === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `${event?.title || 'event'}-schedule.${format}`;
+      const layoutSuffix = format === 'pdf' ? (layout === 'time' ? '-timewise' : '-stagewise') : '';
+      anchor.download = `${event?.title || 'event'}-schedule${layoutSuffix}.${format}`;
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
@@ -402,8 +414,41 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
           )}
 
           {activeTab === 'preview' && (
+            <div className="inline-flex items-center rounded-xl border border-slate-200 bg-slate-100 p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => handleLayoutChange('stage')}
+                disabled={loadingPdf}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                  scheduleLayout === 'stage'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Grouped by Stage and Venue"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span>Stage-wise</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleLayoutChange('time')}
+                disabled={loadingPdf}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all cursor-pointer ${
+                  scheduleLayout === 'time'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Chronological Time order with Stage column"
+              >
+                <Clock className="h-3.5 w-3.5" />
+                <span>Time-wise</span>
+              </button>
+            </div>
+          )}
+
+          {activeTab === 'preview' && (
             <button
-              onClick={loadPdfPreview}
+              onClick={() => loadPdfPreview(scheduleLayout)}
               disabled={loadingPdf}
               className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 transition-colors shadow-2xs cursor-pointer"
             >
@@ -414,7 +459,7 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
           <button
             onClick={() => {
               setActiveTab('preview');
-              if (!pdfUrl) loadPdfPreview();
+              if (!pdfUrl) loadPdfPreview(scheduleLayout);
             }}
             className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-colors shadow-2xs cursor-pointer ${
               activeTab === 'preview'
@@ -438,12 +483,68 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
           >
             <FileSpreadsheet className="h-3.5 w-3.5" /> <span>CSV</span>
           </button>
-          <button
-            onClick={() => download('pdf')}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 transition-colors cursor-pointer"
-          >
-            <Download className="h-3.5 w-3.5" /> <span>Export PDF</span>
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowExportOptions(!showExportOptions)}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 transition-colors cursor-pointer"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Export PDF</span>
+              <ChevronDown className={`h-3 w-3 transition-transform ${showExportOptions ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showExportOptions && (
+              <>
+                <div
+                  className="fixed inset-0 z-20"
+                  onClick={() => setShowExportOptions(false)}
+                />
+                <div className="absolute right-0 mt-2 w-72 rounded-xl bg-white p-2 shadow-xl ring-1 ring-slate-900/10 z-30 animate-in fade-in slide-in-from-top-1">
+                  <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    Select PDF Layout
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => download('pdf', 'stage')}
+                    className="w-full flex items-start gap-3 rounded-lg p-2.5 text-left hover:bg-indigo-50/70 transition-colors group cursor-pointer"
+                  >
+                    <div className="mt-0.5 rounded-lg bg-indigo-100 p-1.5 text-indigo-700 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                      <Layers className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-800 group-hover:text-indigo-900 flex items-center gap-1.5">
+                        <span>Stage-wise Schedule</span>
+                        <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded">Default</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                        Programs grouped under each stage/venue with timings.
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => download('pdf', 'time')}
+                    className="w-full flex items-start gap-3 rounded-lg p-2.5 text-left hover:bg-emerald-50/70 transition-colors group cursor-pointer mt-1"
+                  >
+                    <div className="mt-0.5 rounded-lg bg-emerald-100 p-1.5 text-emerald-700 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                      <Clock className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-800 group-hover:text-emerald-900">
+                        Time-wise Schedule
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-tight mt-0.5">
+                        Date first, then chronologically by time with Stage column.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -742,6 +843,35 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
                 <span className="text-xs text-slate-500 font-medium">({event?.title || 'Event Schedule'})</span>
               </div>
               <div className="flex items-center space-x-2">
+                <div className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-200/60 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleLayoutChange('stage')}
+                    disabled={loadingPdf}
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
+                      scheduleLayout === 'stage'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Layers className="h-3 w-3" />
+                    <span>Stage-wise</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleLayoutChange('time')}
+                    disabled={loadingPdf}
+                    className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold transition-all cursor-pointer ${
+                      scheduleLayout === 'time'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Clock className="h-3 w-3" />
+                    <span>Time-wise</span>
+                  </button>
+                </div>
+
                 {pdfUrl && (
                   <a
                     href={pdfUrl}
@@ -754,7 +884,7 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
                   </a>
                 )}
                 <button
-                  onClick={loadPdfPreview}
+                  onClick={() => loadPdfPreview(scheduleLayout)}
                   disabled={loadingPdf}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-indigo-600 hover:bg-indigo-50 border border-indigo-200 transition-colors"
                 >
@@ -762,7 +892,7 @@ const EventSchedule = ({ event, eventId, onRefresh }) => {
                   <span>Refresh</span>
                 </button>
                 <button
-                  onClick={() => download('pdf')}
+                  onClick={() => download('pdf', scheduleLayout)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors shadow-2xs"
                 >
                   <Download className="h-3.5 w-3.5" />

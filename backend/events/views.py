@@ -201,6 +201,8 @@ class EventViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         export_format = request.query_params.get('export_format', 'pdf').lower()
+        schedule_layout = (request.query_params.get('schedule_layout') or request.query_params.get('layout') or 'stage').lower().strip()
+        is_timewise = schedule_layout in ('time', 'time_wise', 'timewise', 'chronological')
         programs = list(
             event.programs.select_related('stage').prefetch_related('assignments')
             .order_by('start_time', 'stage__number', 'name')
@@ -264,10 +266,11 @@ class EventViewSet(viewsets.ModelViewSet):
         elif start_fmt:
             date_str = f'{start_fmt}<br/>'
 
+        subtitle_tag = 'CHRONOLOGICAL (TIME-WISE)' if is_timewise else 'STAGE-WISE'
         header = Table([[
             Paragraph(
                 f'<font size="10"><b>{school_name}</b></font><br/>'
-                f'<font size="22"><b>PROGRAM SCHEDULE</b></font>', title_style,
+                f'<font size="20"><b>PROGRAM SCHEDULE</b></font> <font size="10" color="#4F46E5">· {subtitle_tag}</font>', title_style,
             ),
             Paragraph(
                 f'<b>{escape(event.title)}</b><br/>'
@@ -285,7 +288,71 @@ class EventViewSet(viewsets.ModelViewSet):
 
         if not scheduled:
             story.append(Paragraph('No programs have been scheduled yet.', styles['Heading3']))
+        elif is_timewise:
+            # Layout 2: Time-wise / Chronological (Date first, then all programs ordered by time with Stage column)
+            grouped_by_date = defaultdict(list)
+            for program in scheduled:
+                local_start = timezone.localtime(program.start_time)
+                grouped_by_date[local_start.date()].append(program)
+
+            body_style = ParagraphStyle('ScheduleBody', parent=styles['Normal'], fontSize=8.5, leading=10)
+            for schedule_date, date_programs in sorted(grouped_by_date.items()):
+                date_table = Table([[schedule_date.strftime('%d %B %Y · %A').upper()]], colWidths=[260 * mm])
+                date_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#312E81')),
+                    ('TEXTCOLOR', (0, 0), (-1, -1), colors.white),
+                    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 10),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                    ('TOPPADDING', (0, 0), (-1, -1), 7),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 7),
+                ]))
+                story.extend([date_table, Spacer(1, 3 * mm)])
+
+                rows = [[
+                    Paragraph('<b>TIME</b>', body_style),
+                    Paragraph('<b>PROGRAM</b>', body_style),
+                    Paragraph('<b>STAGE / VENUE</b>', body_style),
+                    Paragraph('<b>TYPE / CATEGORY</b>', body_style),
+                    Paragraph('<b>ENTRIES</b>', body_style),
+                    Paragraph('<b>DURATION</b>', body_style),
+                ]]
+                sorted_programs = sorted(
+                    date_programs,
+                    key=lambda item: (
+                        item.start_time,
+                        getattr(item.stage, 'number', 999) if getattr(item, 'stage', None) else 999,
+                        item.name
+                    )
+                )
+                for program in sorted_programs:
+                    start = timezone.localtime(program.start_time)
+                    end = timezone.localtime(program.end_time) if program.end_time else None
+                    category_label = escape(program.category.upper()) if program.category else 'GENERAL'
+                    stage_name = escape(program.stage.display_name if program.stage else (program.venue or 'Unassigned stage'))
+                    rows.append([
+                        f'{start.strftime("%I:%M %p")} – {end.strftime("%I:%M %p") if end else "—"}',
+                        Paragraph(f'<b>{escape(program.name)}</b>', body_style),
+                        Paragraph(f'<b>{stage_name}</b>', body_style),
+                        f'{"Group" if program.is_team_based else "Individual"} · {category_label}',
+                        f'{program.schedule_entry_count} {"groups" if program.is_team_based else "participants"}',
+                        f'{program.duration_minutes_per_entry}m each · {program.scheduled_duration_minutes}m total',
+                    ])
+                table = Table(rows, colWidths=[38 * mm, 68 * mm, 45 * mm, 42 * mm, 32 * mm, 35 * mm], repeatRows=1)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#EEF2FF')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#312E81')),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTNAME', (0, 1), (0, -1), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, -1), 8.5),
+                    ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#CBD5E1')),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ]))
+                story.extend([table, Spacer(1, 4 * mm)])
         else:
+            # Layout 1: Stage-wise (Grouped by Stage and venue)
             grouped = defaultdict(lambda: defaultdict(list))
             for program in scheduled:
                 local_start = timezone.localtime(program.start_time)
@@ -341,7 +408,8 @@ class EventViewSet(viewsets.ModelViewSet):
         document.build(story, onFirstPage=add_eventloo_footer, onLaterPages=add_eventloo_footer)
         buffer.seek(0)
         response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="{filename}-schedule.pdf"'
+        filename_suffix = '-timewise' if is_timewise else ''
+        response['Content-Disposition'] = f'attachment; filename="{filename}-schedule{filename_suffix}.pdf"'
         return response
     
     def list(self, request, *args, **kwargs):

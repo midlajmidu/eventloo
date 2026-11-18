@@ -764,8 +764,14 @@ export const eventScheduleAPI = {
   update: (eventId, programId, data) => api.patch(
     `events/${eventId}/programs/${programId}/schedule/`, data
   ),
-  export: (eventId, format) => api.get(
-    `events/${eventId}/schedule-export/`, { params: { export_format: format }, responseType: 'blob' }
+  export: (eventId, format, layout = 'stage') => api.get(
+    `events/${eventId}/schedule-export/`, {
+      params: {
+        export_format: format,
+        ...(layout ? { schedule_layout: layout, layout } : {})
+      },
+      responseType: 'blob'
+    }
   ),
   togglePublish: (eventId, isPublished) => api.post(
     `events/${eventId}/toggle_schedule_publish/`, isPublished !== undefined ? { is_published: isPublished } : {}
