@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, AlertCircle, Users, User, X, KeyRound, CheckCircle2, ArrowLeft, RefreshCw } from 'lucide-react';
-import { authAPI } from '../services/api';
+import { authAPI, teamManagerAPI } from '../services/api';
 import EventlooLogo from './common/EventlooLogo';
 
 const Login = () => {
@@ -128,27 +128,50 @@ const Login = () => {
     }
   }, [location.search]);
 
-  // Check if user is already authenticated (only on mount)
+  // Check if user is already authenticated without causing redirect loops on stale sessions
   useEffect(() => {
     if (hasNavigated.current || location.pathname !== '/login') {
       return;
     }
 
     const userRole = localStorage.getItem('user_role');
-    if (userRole) {
-      hasNavigated.current = true;
-      
-      if (userRole === 'admin') {
-        navigate('/admin', { replace: true });
-      } else if (userRole === 'team_manager') {
-        navigate('/team-manager', { replace: true });
-      } else if (userRole === 'event_manager') {
-        navigate('/user/dashboard', { replace: true });
-      } else {
-        localStorage.clear();
-        hasNavigated.current = false;
+    if (!userRole) return;
+
+    let active = true;
+    const verifySessionBeforeRedirect = async () => {
+      try {
+        if (userRole === 'team_manager') {
+          const team = JSON.parse(localStorage.getItem('team_data') || 'null');
+          if (!team?.id) throw new Error('Missing team data');
+          await teamManagerAPI.getTeamProfile(team.id);
+          if (active) {
+            hasNavigated.current = true;
+            navigate('/team-manager', { replace: true });
+          }
+        } else {
+          const res = await authAPI.getProfile();
+          if (active && res.data?.role) {
+            hasNavigated.current = true;
+            const target = res.data.role === 'admin' ? '/admin' : res.data.role === 'event_manager' ? '/user/dashboard' : '/super-admin';
+            navigate(target, { replace: true });
+          }
+        }
+      } catch (err) {
+        if (active) {
+          // Stale session or expired cookie: clear stale state so the login form renders cleanly without blinking
+          localStorage.removeItem('user_role');
+          localStorage.removeItem('user');
+          localStorage.removeItem('team_data');
+          localStorage.removeItem('access_type');
+          hasNavigated.current = false;
+        }
       }
-    }
+    };
+
+    verifySessionBeforeRedirect();
+    return () => {
+      active = false;
+    };
   }, [navigate, location.pathname]);
 
   const handleChange = (e) => {

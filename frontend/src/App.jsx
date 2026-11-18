@@ -145,6 +145,7 @@ function App() {
             }
           >
             <Route index element={<TeamManagerDashboard />} />
+            <Route path="dashboard" element={<TeamManagerDashboard />} />
             <Route path="students" element={<TeamStudents />} />
             <Route path="events" element={<TeamManagerEvents />} />
             <Route path="events/:eventId" element={<Navigate to="portal" replace />} />

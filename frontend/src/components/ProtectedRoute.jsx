@@ -6,7 +6,7 @@ const destinationFor = (role) => ({
   admin: '/admin',
   event_manager: '/user/dashboard',
   super_admin: '/super-admin',
-  team_manager: '/team-manager/dashboard',
+  team_manager: '/team-manager',
 }[role] || '/login');
 
 const ProtectedRoute = ({ children, requiredRole = null, allowedRoles = null }) => {
@@ -47,6 +47,10 @@ const ProtectedRoute = ({ children, requiredRole = null, allowedRoles = null }) 
         const isAuthError = status === 401 || status === 403;
         
         if (isAuthError) {
+          localStorage.removeItem('user_role');
+          localStorage.removeItem('user');
+          localStorage.removeItem('team_data');
+          localStorage.removeItem('access_type');
           setState({ loading: false, role: null, valid: false });
         } else {
           // Temporary network issue, 5xx server response, or offline:

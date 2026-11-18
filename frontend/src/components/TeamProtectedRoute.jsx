@@ -20,6 +20,9 @@ const TeamProtectedRoute = ({ children }) => {
         const team = JSON.parse(localStorage.getItem('team_data') || 'null');
 
         if (isAuthError || !team?.id) {
+          localStorage.removeItem('team_data');
+          localStorage.removeItem('user_role');
+          localStorage.removeItem('access_type');
           setState('invalid');
         } else {
           // Network error, temporary 5xx, or offline: preserve existing team session
