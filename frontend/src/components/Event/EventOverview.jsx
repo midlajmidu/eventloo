@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   RefreshCw,
   ArrowRight,
@@ -16,49 +16,24 @@ import {
   Award,
   Layers,
   Flag,
+  AlignLeft,
 } from 'lucide-react';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { eventReportsAPI, eventPointsAPI, eventStagesAPI, publicEventAPI } from '../../services/api';
 import EventlooLogo from '../common/EventlooLogo';
 import { downloadEventQrPoster } from '../../utils/qrPosterGenerator';
 
-const CATEGORY_COLORS = [
-  {
-    bar: 'bg-gradient-to-r from-indigo-500 to-indigo-600',
-    dot: 'bg-indigo-500',
-    badge: 'bg-indigo-50 text-indigo-700 border-indigo-200/80',
-    text: 'text-indigo-600',
-  },
-  {
-    bar: 'bg-gradient-to-r from-emerald-500 to-teal-500',
-    dot: 'bg-emerald-500',
-    badge: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
-    text: 'text-emerald-600',
-  },
-  {
-    bar: 'bg-gradient-to-r from-amber-500 to-orange-500',
-    dot: 'bg-amber-500',
-    badge: 'bg-amber-50 text-amber-700 border-amber-200/80',
-    text: 'text-amber-600',
-  },
-  {
-    bar: 'bg-gradient-to-r from-purple-500 to-violet-600',
-    dot: 'bg-purple-500',
-    badge: 'bg-purple-50 text-purple-700 border-purple-200/80',
-    text: 'text-purple-600',
-  },
-  {
-    bar: 'bg-gradient-to-r from-rose-500 to-pink-500',
-    dot: 'bg-rose-500',
-    badge: 'bg-rose-50 text-rose-700 border-rose-200/80',
-    text: 'text-rose-600',
-  },
-  {
-    bar: 'bg-gradient-to-r from-sky-500 to-cyan-500',
-    dot: 'bg-sky-500',
-    badge: 'bg-sky-50 text-sky-700 border-sky-200/80',
-    text: 'text-sky-600',
-  },
-];
+const CATEGORY_COLORS = ['#4f46e5', '#0891b2', '#059669', '#d97706', '#e11d48', '#7c3aed'];
 
 const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTab }) => {
   const [analytics, setAnalytics] = useState(null);
@@ -157,11 +132,27 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
 
   const completionPercent = totalPrograms > 0 ? Math.round((completedPrograms / totalPrograms) * 100) : 0;
 
-  // Maximum programs count among categories for relative bar graph widths
-  const maxProgCount = Math.max(1, ...categories.map(c => {
-    const code = c.code || c.id;
-    return programs.filter(p => p.category === code).length;
-  }));
+  const [categoryMetric, setCategoryMetric] = useState('programs');
+
+  const categoryChartData = useMemo(() => {
+    return (categories || []).map((cat, idx) => {
+      const catCode = cat.code || cat.id;
+      const catPrograms = programs.filter(p => p.category === catCode || p.category_id === cat.id);
+      const progCount = catPrograms.length;
+      const analyticsCat = analytics?.category_stats?.[catCode];
+      const partCount = analyticsCat?.participants ?? catPrograms.reduce((acc, p) => acc + (p.participants_count || 0), 0);
+      return {
+        id: cat.id,
+        code: catCode,
+        name: cat.name || catCode,
+        programs: progCount,
+        participants: partCount,
+        color: CATEGORY_COLORS[idx % CATEGORY_COLORS.length],
+      };
+    });
+  }, [categories, programs, analytics]);
+
+  const categoryChartHeight = Math.max(130, Math.min(260, categoryChartData.length * 36 + 24));
 
   // Format dates
   const formatDate = (isoString) => {
@@ -372,89 +363,100 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
         <div className="lg:col-span-2 space-y-5">
           
           {/* Categories Breakdown */}
-          <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-2xs">
-            <div className="flex items-center justify-between mb-4 pb-2.5 border-b border-slate-100">
-              <div className="flex items-center gap-2">
+          <article className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+            <div className="flex flex-col gap-2.5 border-b border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+              <div>
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
                   Categories Breakdown
                 </h3>
-                <span className="text-[11px] font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                  {categories.length} Categories
-                </span>
+                <p className="text-[11px] text-slate-400 mt-0.5 font-normal">
+                  {categoryMetric === 'programs' ? 'Total event programs per category' : 'Registered participant entries per category'}
+                </p>
               </div>
-              <button
-                onClick={() => setActiveTab('programs')}
-                className="text-xs font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-0.5 cursor-pointer"
-              >
-                <span>View all</span>
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setCategoryMetric('programs')}
+                    className={`rounded-md px-2.5 py-1 text-[11px] transition-all cursor-pointer ${
+                      categoryMetric === 'programs'
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Programs
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryMetric('participants')}
+                    className={`rounded-md px-2.5 py-1 text-[11px] transition-all cursor-pointer ${
+                      categoryMetric === 'participants'
+                        ? 'bg-white text-slate-900 shadow-2xs font-bold'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    Participants
+                  </button>
+                </div>
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
+                  <AlignLeft className="h-3.5 w-3.5" strokeWidth={1.8} />
+                </div>
+              </div>
             </div>
 
-            {categories && categories.length > 0 ? (
-              <div className="space-y-3.5">
-                {categories.map((cat, idx) => {
-                  const catCode = cat.code || cat.id;
-                  const catPrograms = programs.filter(p => p.category === catCode);
-                  const progCount = catPrograms.length;
-                  const analyticsCat = analytics?.category_stats?.[catCode];
-                  const partCount = analyticsCat?.participants ?? catPrograms.reduce((acc, p) => acc + (p.participants_count || 0), 0);
-                  const color = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
-                  const progPct = totalPrograms > 0 ? Math.round((progCount / totalPrograms) * 100) : 0;
-                  const barWidthPct = maxProgCount > 0 ? Math.round((progCount / maxProgCount) * 100) : 0;
-
-                  return (
-                    <div
-                      key={catCode}
-                      className="p-3.5 rounded-xl border border-slate-100 hover:border-slate-200/90 hover:bg-slate-50/40 transition-all space-y-2.5"
+            {categoryChartData.length ? (
+              <div className="px-2 py-3 sm:px-4">
+                <div style={{ height: categoryChartHeight }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={categoryChartData}
+                      layout="vertical"
+                      margin={{ top: 6, right: 34, bottom: 6, left: 10 }}
+                      barCategoryGap="20%"
                     >
-                      {/* Category Header Info */}
-                      <div className="flex items-center justify-between text-xs gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className={`w-2.5 h-2.5 rounded-full ${color.dot} shrink-0`} />
-                          <span className="font-bold text-slate-900 truncate">
-                            {cat.name}
-                          </span>
-                          <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold uppercase tracking-wider ${color.badge} shrink-0`}>
-                            {catCode}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2.5 shrink-0">
-                          <span className="text-[11px] text-slate-400 hidden sm:inline">
-                            {partCount} registered entries
-                          </span>
-                          <span className="text-xs font-bold text-slate-900 bg-white px-2 py-0.5 rounded-md border border-slate-200/70 shadow-2xs">
-                            {progCount} <span className="text-[10px] font-medium text-slate-400">progs ({progPct}%)</span>
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* The Colored Bar Graph Track */}
-                      <div className="w-full bg-slate-100/90 rounded-full h-2.5 overflow-hidden p-0.5">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${color.bar}`}
-                          style={{ width: `${Math.max(progCount > 0 ? 5 : 0, barWidthPct)}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* Footer summary legend */}
-                <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400 border-t border-slate-100">
-                  <span>Total festival load</span>
-                  <span className="font-semibold text-slate-600">
-                    {totalPrograms} total programs · {totalParticipants} participants
-                  </span>
+                      <CartesianGrid horizontal={false} stroke="#e2e8f0" strokeDasharray="3 3" />
+                      <XAxis
+                        type="number"
+                        allowDecimals={false}
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: '#94a3b8', fontSize: 10 }}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        width={95}
+                        axisLine={false}
+                        tickLine={false}
+                        tick={{ fill: '#475569', fontSize: 11, fontWeight: 500 }}
+                      />
+                      <Tooltip
+                        cursor={{ fill: '#f8fafc' }}
+                        formatter={(value) => [value, categoryMetric === 'programs' ? 'Programs' : 'Participants']}
+                        contentStyle={{ borderRadius: 12, borderColor: '#e2e8f0', boxShadow: '0 8px 24px rgba(15,23,42,.06)', fontSize: 12 }}
+                      />
+                      <Bar dataKey={categoryMetric} radius={[0, 6, 6, 0]} maxBarSize={24}>
+                        {categoryChartData.map((category) => (
+                          <Cell key={category.id || category.code} fill={category.color} />
+                        ))}
+                        <LabelList dataKey={categoryMetric} position="right" fill="#475569" fontSize={11} fontWeight={700} />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
             ) : (
-              <div className="text-center py-6 text-xs text-slate-400">
-                No student categories configured.
+              <div className="flex min-h-[140px] flex-col items-center justify-center px-6 py-6 text-center">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-slate-500">
+                  <AlignLeft className="h-4.5 w-4.5" />
+                </div>
+                <p className="mt-3 text-xs font-semibold text-slate-800">No categories available</p>
+                <p className="mt-1 max-w-xs text-[11px] leading-4 text-slate-400">
+                  Category breakdown will appear here once categories are added.
+                </p>
               </div>
             )}
-          </div>
+          </article>
 
         </div>
 
