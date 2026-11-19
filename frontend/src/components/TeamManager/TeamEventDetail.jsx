@@ -636,13 +636,18 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
       const assignedList = program.assigned_students || [];
       const maxAllowed = program.per_team_limit || (program.is_team_based ? 4 : 1);
       const isFull = program.available_slots === 0 || assignedList.length >= maxAllowed;
+      const isPartial = assignedList.length > 0 && assignedList.length < maxAllowed;
+      const isUnassigned = assignedList.length === 0;
 
-      if (statusFilter === 'vacant' && isFull) return false;
+      if ((statusFilter === 'vacant' || statusFilter === 'unassigned') && !isUnassigned) return false;
+      if (statusFilter === 'partial' && !isPartial) return false;
       if (statusFilter === 'filled' && !isFull) return false;
 
       // 4. Type filter
       if (typeFilter === 'team' && !program.is_team_based) return false;
       if (typeFilter === 'individual' && program.is_team_based) return false;
+      if (typeFilter === 'stage' && (program.program_type !== 'stage' && !program.is_stage)) return false;
+      if (typeFilter === 'off_stage' && (program.program_type !== 'off_stage' && program.is_stage)) return false;
 
       return true;
     });
@@ -791,11 +796,53 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
   };
 
   return (
-    <div className={embedded ? 'p-3 sm:p-5' : 'min-h-screen bg-[#f7f8fb] px-4 py-6 sm:px-6 lg:px-8'}>
-      <div className={embedded ? 'w-full' : 'mx-auto max-w-7xl'}>
+    <div className={embedded ? 'p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]' : 'min-h-screen bg-[#f7f8fb] px-4 py-6 sm:px-6 lg:px-8'}>
+      <div className={embedded ? 'w-full space-y-5' : 'mx-auto max-w-7xl'}>
         {/* ========================================================================= */}
         {/* 1. BACK NAVIGATION & HEADER (Only shown in non-embedded mode) */}
         {/* ========================================================================= */}
+        {embedded && (
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                  {selectedTeam?.name || 'Your Team'}
+                </span>
+                <span className="text-slate-300">·</span>
+                <span className="text-[10px] font-semibold text-slate-500">
+                  Assignments & Quotas
+                </span>
+              </div>
+              <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight mt-0.5">
+                Programs & Student Assignments
+              </h1>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Assign students to competitions, manage sub-teams and elect team leaders for {eventData?.title || 'this event'}.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border ${
+                registrationLocked
+                  ? 'bg-rose-50 text-rose-700 border-rose-200'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              }`}>
+                {registrationLocked ? (
+                  <>
+                    <Lock className="w-3.5 h-3.5 text-rose-600" />
+                    <span>Registration Locked</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Assignments Open</span>
+                  </>
+                )}
+              </span>
+            </div>
+          </div>
+        )}
+
         {!embedded && (
           <>
             <div className="mb-4">
@@ -1009,10 +1056,11 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-2 sm:px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                className="h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-2 sm:px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
               >
                 <option value="all">All Slots</option>
-                <option value="vacant">Needs Assignment</option>
+                <option value="unassigned">Needs Assignment</option>
+                <option value="partial">Partially Filled</option>
                 <option value="filled">Fully Assigned</option>
               </select>
 
@@ -1020,11 +1068,13 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
               <select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-2 sm:px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+                className="h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-2 sm:px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
               >
                 <option value="all">All Types</option>
-                <option value="individual">Individual</option>
+                <option value="individual">Individual Solo</option>
                 <option value="team">Team Programs</option>
+                <option value="stage">Stage Events</option>
+                <option value="off_stage">Off-Stage Events</option>
               </select>
 
               {/* Clear button */}
@@ -1113,6 +1163,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                       const assignedList = program.assigned_students || [];
                       const maxAllowed = program.per_team_limit || (program.is_team_based ? 4 : 1);
                       const isFull = program.available_slots === 0 || assignedList.length >= maxAllowed;
+                      const isPartial = assignedList.length > 0 && assignedList.length < maxAllowed;
 
                       return (
                         <tr key={program.id} className="transition hover:bg-indigo-50/30">
@@ -1155,13 +1206,15 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                           {/* Slots */}
                           <td className="whitespace-nowrap px-5 py-3.5">
                             <span
-                              className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                              className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
                                 isFull
-                                  ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
-                                  : 'border-indigo-100 bg-indigo-50 text-indigo-700'
+                                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                  : isPartial
+                                  ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                  : 'border-slate-200 bg-slate-50 text-slate-600'
                               }`}
                             >
-                              {assignedList.length} / {maxAllowed} slots
+                              {assignedList.length} / {maxAllowed} {isFull ? 'Full' : isPartial ? 'Assigned' : 'Slots'}
                             </span>
                           </td>
 
@@ -1170,15 +1223,25 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                             <button
                               type="button"
                               onClick={() => openAssignDrawer(program)}
-                              disabled={isFull || registrationLocked}
-                              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                                isFull || registrationLocked
+                              disabled={registrationLocked}
+                              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                                registrationLocked
                                   ? 'border border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed'
-                                  : 'bg-indigo-600 text-white shadow-sm hover:bg-indigo-700'
+                                  : isFull
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
+                                  : isPartial
+                                  ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-2xs'
+                                  : 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs'
                               }`}
                             >
                               <UserPlus className="h-3.5 w-3.5" />
-                              <span>{isFull ? 'Full' : program.is_team_based ? 'Assign Team' : 'Assign'}</span>
+                              <span>
+                                {isFull || isPartial
+                                  ? `Manage (${assignedList.length}/${maxAllowed})`
+                                  : program.is_team_based
+                                  ? 'Assign Team'
+                                  : 'Assign Members'}
+                              </span>
                             </button>
                           </td>
                         </tr>
@@ -1194,6 +1257,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                   const assignedList = program.assigned_students || [];
                   const maxAllowed = program.per_team_limit || (program.is_team_based ? 4 : 1);
                   const isFull = program.available_slots === 0 || assignedList.length >= maxAllowed;
+                  const isPartial = assignedList.length > 0 && assignedList.length < maxAllowed;
                   const isExpanded = expandedProgramId === program.id;
 
                   return (
@@ -1225,11 +1289,13 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                           <span
                             className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                               isFull
-                                ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
-                                : 'border-indigo-100 bg-indigo-50 text-indigo-700'
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : isPartial
+                                ? 'border-amber-200 bg-amber-50 text-amber-700'
+                                : 'border-slate-200 bg-slate-50 text-slate-600'
                             }`}
                           >
-                            {assignedList.length}/{maxAllowed}
+                            {assignedList.length}/{maxAllowed} {isFull ? 'Full' : isPartial ? 'Assigned' : 'Slots'}
                           </span>
                           <button
                             type="button"
@@ -1275,22 +1341,26 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                                 e.stopPropagation();
                                 openAssignDrawer(program);
                               }}
-                              disabled={isFull || registrationLocked}
-                              className={`w-full inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors min-h-[40px] shadow-2xs ${
-                                isFull || registrationLocked
+                              disabled={registrationLocked}
+                              className={`w-full inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-semibold transition-colors min-h-[40px] shadow-2xs cursor-pointer ${
+                                registrationLocked
                                   ? 'border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed'
-                                  : 'bg-indigo-600 text-white hover:bg-indigo-700 active:bg-indigo-800'
+                                  : isFull
+                                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                                  : isPartial
+                                  ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                                  : 'bg-indigo-600 hover:bg-indigo-700 text-white active:bg-indigo-800'
                               }`}
                             >
                               <UserPlus className="h-4 w-4" />
                               <span>
                                 {registrationLocked
                                   ? 'Registration Closed'
-                                  : isFull
-                                    ? 'All Slots Filled'
-                                    : program.is_team_based
-                                      ? 'Assign Team'
-                                      : 'Assign Student'}
+                                  : isFull || isPartial
+                                  ? `Manage (${assignedList.length}/${maxAllowed})`
+                                  : program.is_team_based
+                                  ? 'Assign Team'
+                                  : 'Assign Members'}
                               </span>
                             </button>
                           </div>

@@ -182,41 +182,42 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
   const uniqueCategories = Array.from(new Set(callListData.map(i => i.category || i.category_code))).filter(Boolean);
 
   return (
-    <div className="space-y-6">
+    <div className="p-4 sm:p-6 space-y-5 bg-[#f7f8fb] min-h-[620px]">
       {/* Top Banner Card */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-2xs">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
           <div className="flex items-start sm:items-center space-x-3.5">
-            <div className="p-3 bg-indigo-50 text-indigo-600 rounded-2xl border border-indigo-100 shadow-2xs shrink-0">
-              <FileText className="h-6 w-6 text-indigo-600" />
+            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100 shadow-2xs shrink-0">
+              <FileText className="h-5 w-5 text-indigo-600" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
-                  Team Documents
-                </span>
-                <span className="text-[11px] font-bold text-slate-500">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
                   {teamName}
                 </span>
+                <span className="text-slate-300">·</span>
+                <span className="text-[10px] font-semibold text-slate-500">
+                  Official Roster
+                </span>
               </div>
-              <h1 className="text-xl font-extrabold text-slate-900 mt-1">
-                Official Call List
+              <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight mt-0.5">
+                Calling Sheet & Verified Roster
               </h1>
               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                View verified chest numbers, competition call lists, and downloadable PDF documents for <strong>{event?.title}</strong>.
+                View verified chest numbers, stage call lists, and printable PDF documents for <strong>{event?.title}</strong>.
               </p>
             </div>
           </div>
 
           {/* Quick Action Buttons */}
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={handleDownloadPdf}
               disabled={downloadingPdf || loadingPdf}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-indigo-700 transition-all shadow-2xs hover:shadow-xs cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-indigo-700 transition-all shadow-2xs cursor-pointer disabled:opacity-50"
               title="Download official PDF to your device"
             >
-              <Download className={`h-4 w-4 ${downloadingPdf ? 'animate-bounce' : ''}`} />
+              <Download className={`h-3.5 w-3.5 ${downloadingPdf ? 'animate-bounce' : ''}`} />
               <span>{downloadingPdf ? 'Downloading PDF...' : 'Download Call List (PDF)'}</span>
             </button>
 
@@ -226,7 +227,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
                   href={pdfBlobUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs"
                   title="Open in new window"
                 >
                   <ExternalLink className="h-3.5 w-3.5 text-slate-500" />
@@ -236,7 +237,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
                 <button
                   onClick={handlePrint}
                   type="button"
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer"
                   title="Print document"
                 >
                   <Printer className="h-3.5 w-3.5 text-slate-500" />
@@ -252,7 +253,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
               }}
               disabled={loadingPdf}
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
               title="Reload live PDF"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loadingPdf ? 'animate-spin text-indigo-600' : ''}`} />
@@ -261,28 +262,28 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
         </div>
 
         {/* Quick Summary Metrics */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 pt-4 border-t border-slate-100">
-          <div className="bg-slate-50/80 rounded-xl p-3 border border-slate-200/70">
-            <span className="text-[11px] font-semibold text-slate-500 block">Total Call Entries</span>
-            <span className="text-lg font-extrabold text-slate-900 mt-0.5 block">{totalEntries}</span>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-100">
+          <div className="bg-slate-50/80 rounded-xl p-2.5 sm:p-3 border border-slate-200/70">
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Total Call Entries</span>
+            <span className="text-base sm:text-lg font-bold text-slate-900 mt-0.5 block">{totalEntries}</span>
           </div>
-          <div className="bg-indigo-50/50 rounded-xl p-3 border border-indigo-100/70">
-            <span className="text-[11px] font-semibold text-indigo-600 block">Solo Entries</span>
-            <span className="text-lg font-extrabold text-indigo-900 mt-0.5 block">{soloCount}</span>
+          <div className="bg-indigo-50/50 rounded-xl p-2.5 sm:p-3 border border-indigo-100/70">
+            <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider block">Solo Entries</span>
+            <span className="text-base sm:text-lg font-bold text-indigo-900 mt-0.5 block">{soloCount}</span>
           </div>
-          <div className="bg-emerald-50/50 rounded-xl p-3 border border-emerald-100/70">
-            <span className="text-[11px] font-semibold text-emerald-600 block">Group Entries</span>
-            <span className="text-lg font-extrabold text-emerald-900 mt-0.5 block">{groupCount}</span>
+          <div className="bg-emerald-50/50 rounded-xl p-2.5 sm:p-3 border border-emerald-100/70">
+            <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider block">Group Entries</span>
+            <span className="text-base sm:text-lg font-bold text-emerald-900 mt-0.5 block">{groupCount}</span>
           </div>
-          <div className="bg-amber-50/50 rounded-xl p-3 border border-amber-100/70">
-            <span className="text-[11px] font-semibold text-amber-700 block">Categories</span>
-            <span className="text-lg font-extrabold text-amber-900 mt-0.5 block">{uniqueCategories.length}</span>
+          <div className="bg-amber-50/50 rounded-xl p-2.5 sm:p-3 border border-amber-100/70">
+            <span className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider block">Categories</span>
+            <span className="text-base sm:text-lg font-bold text-amber-900 mt-0.5 block">{uniqueCategories.length}</span>
           </div>
         </div>
       </div>
 
       {/* Control Bar: Mode, Category & View Switcher */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-xl border border-slate-200/80 p-3 sm:p-3.5 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-3">
         {/* Left: Format Switcher & Call List Grouping */}
         <div className="flex flex-wrap items-center gap-2">
           {/* Grouping Mode Pill */}
@@ -378,7 +379,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
       {/* Main Content Area */}
       {viewMode === 'pdf' ? (
         /* PDF Preview Card */
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+        <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
           {loadingPdf ? (
             <div className="flex flex-col items-center justify-center min-h-[550px] p-8 text-center space-y-3">
               <div className="h-10 w-10 animate-spin rounded-full border-3 border-slate-200 border-t-indigo-600" />
@@ -422,7 +423,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
         </div>
       ) : (
         /* Interactive Table View */
-        <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs">
+        <div className="bg-white rounded-xl border border-slate-200/80 overflow-hidden shadow-2xs">
           <div className="px-5 py-3.5 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <UserCheck className="h-4 w-4 text-indigo-600" />
