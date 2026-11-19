@@ -871,6 +871,16 @@ class ProgramSerializer(serializers.ModelSerializer):
     
     def get_assignments_per_team(self, obj):
         """Get assignments grouped by team"""
+        if hasattr(obj, '_prefetched_objects_cache') and 'assignments' in obj._prefetched_objects_cache:
+            team_counts = {}
+            for assignment in obj.assignments.all():
+                tname = assignment.team.name if assignment.team else 'No Team'
+                team_counts[tname] = team_counts.get(tname, 0) + 1
+            return [
+                {'team_name': tname, 'count': count}
+                for tname, count in sorted(team_counts.items())
+            ]
+
         from django.db.models import Count
         team_assignments = obj.assignments.values('team__name').annotate(
             count=Count('id')

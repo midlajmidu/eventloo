@@ -971,14 +971,24 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 lg:grid-cols-[1fr_200px_170px_150px_auto]">
               {/* Search input */}
               <div className="relative col-span-2 lg:col-span-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none" />
                 <input
-                  type="search"
+                  type="text"
                   placeholder="Search programs by name, code or description..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="h-9 sm:h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-xs sm:text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+                  className="h-9 sm:h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-8 text-xs sm:text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
                 />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
               </div>
 
               {/* Category Dropdown (Desktop/Tablet only since pills are right above on mobile) */}
@@ -1572,9 +1582,9 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                 <div className="border-b border-slate-100 bg-white px-3.5 sm:px-5 py-2 sm:py-3 space-y-2 shrink-0 shadow-2xs">
                   {/* Search input */}
                   <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                    <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400 pointer-events-none" />
                     <input
-                      type="search"
+                      type="text"
                       placeholder={`Search ${progCatDisplay} students...`}
                       value={modalStudentSearch}
                       onChange={(e) => setModalStudentSearch(e.target.value)}

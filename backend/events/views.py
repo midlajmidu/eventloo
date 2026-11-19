@@ -69,7 +69,7 @@ class ProgramFilter(django_filters.FilterSet):
     
     class Meta:
         model = Program
-        fields = ['category', 'is_team_based', 'is_finished', 'is_active']
+        fields = ['category', 'is_team_based', 'is_finished', 'is_active', 'program_type']
     
     def filter_status(self, queryset, name, value):
         """Filter programs by status"""

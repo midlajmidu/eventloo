@@ -982,9 +982,19 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                         setDrawerSearch(e.target.value);
                         setAvailablePage(1);
                       }}
-                      className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium"
+                      className="w-full pl-8 pr-8 py-1.5 text-xs border border-gray-200 rounded-xl bg-gray-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 font-medium"
                     />
                     <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    {drawerSearch && (
+                      <button
+                        type="button"
+                        onClick={() => { setDrawerSearch(''); setAvailablePage(1); }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        aria-label="Clear member search"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
 
                   {/* Bulk Assignment Bar */}

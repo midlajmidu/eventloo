@@ -401,9 +401,7 @@ const StudentsPage = () => {
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-9 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
               />
-              {isSearching ? (
-                <RefreshCw className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-indigo-500" />
-              ) : searchInput ? (
+              {searchInput ? (
                 <button
                   type="button"
                   onClick={() => { setSearchInput(''); setDebouncedSearch(''); setCurrentPage(1); }}
@@ -443,17 +441,10 @@ const StudentsPage = () => {
 
         <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-slate-900">Student directory</p>
-              {isSearching && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                  <RefreshCw className="h-3 w-3 animate-spin" /> Searching...
-                </span>
-              )}
-            </div>
+            <p className="text-sm font-semibold text-slate-900">Student directory</p>
             <p className="text-xs text-slate-400">{totalCount} students</p>
           </div>
-          <div className={`overflow-x-auto transition-opacity duration-150 ${isSearching ? 'opacity-60' : 'opacity-100'}`}>
+          <div className="overflow-x-auto">
             <table className="min-w-full">
               <thead className="bg-slate-50/80">
                 <tr>

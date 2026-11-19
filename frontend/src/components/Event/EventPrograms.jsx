@@ -52,7 +52,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
   const [programs, setPrograms] = useState([]);
   const [stages, setStages] = useState([]);
   const [programTypes, setProgramTypes] = useState(event?.program_types || []);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProgram, setEditingProgram] = useState(null);
   const [showProgramBulkUpload, setShowProgramBulkUpload] = useState(false);
@@ -192,7 +192,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
   }, [openMenuId]);
 
   useEffect(() => {
-    fetchPrograms();
+    fetchPrograms(initialLoading);
   }, [eventId, categoryFilter, statusFilter, sortBy, currentPage, pageSize, searchTerm, programTypeFilter]);
 
   useEffect(() => {
@@ -203,9 +203,11 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
       .catch(() => setStages([]));
   }, [eventId, event?.id]);
 
-  const fetchPrograms = async () => {
+  const fetchPrograms = async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) {
+        setInitialLoading(true);
+      }
       const actualEventId = eventId || event?.id;
       
       // Build query parameters
@@ -252,7 +254,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
       setTotalCount(0);
       setTotalPages(0);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   };
 
@@ -573,7 +575,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
     return categoryCounts;
   };
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
@@ -619,14 +621,24 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
             <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0 w-full">
               {/* Search */}
               <div className="relative flex-1 min-w-[180px] max-w-xs">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search programs..."
                   value={searchInput}
                   onChange={(e) => handleSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full pl-8 pr-8 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
+                {searchInput && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearchInput(''); setSearchTerm(''); setCurrentPage(1); }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    aria-label="Clear search"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Category Filter */}

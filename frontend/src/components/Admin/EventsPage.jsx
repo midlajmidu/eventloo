@@ -20,7 +20,7 @@ const EventsPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -37,34 +37,25 @@ const EventsPage = () => {
   }, [location.search]);
 
   useEffect(() => {
-    fetchEvents();
-  }, [searchTerm, filterStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+    fetchEvents(initialLoading);
+  }, [filterStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchEvents = async () => {
+  const fetchEvents = async (isInitial = false) => {
     try {
-      setLoading(true);
+      if (isInitial) setInitialLoading(true);
       const params = {};
       if (filterStatus !== 'all') params.status = filterStatus;
-      if (searchTerm) params.search = searchTerm;
       
       const response = await eventsAPI.getEvents(params);
-      console.log('Fetch events response:', response);
-      
-      // Extract data from axios response
       const data = response.data;
-      console.log('Events data:', data);
-      
-      // Ensure events is always an array
       const eventsArray = Array.isArray(data) ? data : (data.results || []);
-      console.log('Events array:', eventsArray);
-      
       setEvents(eventsArray);
     } catch (err) {
       setError('Failed to fetch events');
       setEvents([]); // Set to empty array on error
       console.error('Error fetching events:', err);
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   };
 
@@ -166,7 +157,7 @@ const EventsPage = () => {
     { value: 'cancelled', label: 'Cancelled' }
   ];
 
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="flex min-h-[65vh] items-center justify-center bg-[#f7f8fb]">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" />
@@ -191,8 +182,24 @@ const EventsPage = () => {
       <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
         <div className="flex flex-col gap-2 sm:flex-row">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input type="search" placeholder="Search events" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-sm outline-none focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search events"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-9 text-sm outline-none focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
           <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 sm:w-44">
             {statusOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}

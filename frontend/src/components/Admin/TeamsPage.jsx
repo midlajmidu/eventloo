@@ -32,6 +32,7 @@ const TeamsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [regeneratingCredentials, setRegeneratingCredentials] = useState({});
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -97,8 +98,16 @@ const TeamsPage = () => {
   const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
     fetchData();
-  }, [currentPage, pageSize, searchTerm]);
+  }, [currentPage, pageSize, debouncedSearch]);
 
   useEffect(() => {
     fetchEvents();
@@ -149,7 +158,7 @@ const TeamsPage = () => {
       const teamsResponse = await teamsAPI.getTeams({
         page: currentPage,
         page_size: pageSize,
-        search: searchTerm
+        search: debouncedSearch
       });
       
       let teamsData = [];
@@ -519,7 +528,28 @@ const TeamsPage = () => {
           </button>
         </header>
 
-        <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm"><div className="relative max-w-xl"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input type="search" placeholder="Search teams" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-sm outline-none focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100" /></div></section>
+        <section className="mt-6 rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm">
+          <div className="relative max-w-xl">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search teams"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-9 text-sm outline-none focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                aria-label="Clear search"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </section>
 
         <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3"><p className="text-sm font-semibold text-slate-900">Team directory</p><p className="text-xs text-slate-400">{totalCount} teams</p></div>
