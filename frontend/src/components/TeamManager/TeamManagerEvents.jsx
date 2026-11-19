@@ -11,7 +11,11 @@ import {
   Eye,
   AlertCircle,
   ChevronRight,
-  Tag
+  Tag,
+  Award,
+  Trophy,
+  Sparkles,
+  ArrowRight
 } from 'lucide-react';
 
 const TeamManagerEvents = () => {
@@ -26,6 +30,7 @@ const TeamManagerEvents = () => {
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterCategory, setFilterCategory] = useState('all');
   const [selectedTeam, setSelectedTeam] = useState(null);
+  const [teamName, setTeamName] = useState('My Team');
 
   useEffect(() => {
     fetchData();
@@ -44,6 +49,7 @@ const TeamManagerEvents = () => {
         return;
       }
       setSelectedTeam(teamId);
+      setTeamName(teamData.name || teamData.team_name || 'My Team');
 
       const [eventsResponse, studentsResponse, categoriesResponse] = await Promise.all([
         teamManagerAPI.getTeamEvents(teamId).catch((err) => {
@@ -212,37 +218,113 @@ const TeamManagerEvents = () => {
     );
   }
 
+  const activeEventsCount = events.filter((e) =>
+    ['published', 'active', 'ongoing'].includes(e.status?.toLowerCase())
+  ).length;
+
+  const totalProgramsCount = Object.values(eventPrograms).reduce(
+    (sum, list) => sum + (Array.isArray(list) ? list.length : 0),
+    0
+  );
+
+  const totalAssignedProgramsCount = Object.values(eventPrograms).reduce(
+    (sum, list) => sum + (Array.isArray(list) ? list.filter((p) => p.assigned_count > 0).length : 0),
+    0
+  );
+
   return (
     <main className="min-h-screen bg-[#f7f8fb] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-7xl space-y-4 sm:space-y-5">
         {/* ========================================================================= */}
-        {/* 1. HEADER (Matches Admin Portal) */}
+        {/* 1. TOP HEADER CARD BOX (Matching Event Portal Model) */}
         {/* ========================================================================= */}
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
-              Workspace
-            </p>
-            <h1 className="mt-0.5 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                {teamName}
+              </span>
+              <span className="text-slate-300">·</span>
+              <span className="text-[10px] font-semibold text-slate-500">
+                Festival Directory
+              </span>
+            </div>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight mt-0.5">
               Events & Festivals
             </h1>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Active festivals and competitions for your team.
+            <p className="text-xs text-gray-500 mt-0.5">
+              Explore participating competitions, view schedules and enter dedicated event portals to manage student allocations.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs">
-              <Users className="h-3.5 w-3.5 text-slate-400" />
-              <span>{teamMembers.length} Team Members</span>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+              <Calendar className="h-3.5 w-3.5 text-indigo-600" />
+              <span>{events.length} Festivals</span>
             </div>
+            <button
+              onClick={() => navigate('/team-manager/students')}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 transition-colors cursor-pointer"
+            >
+              <Users className="h-3.5 w-3.5" />
+              <span>Team Roster ({teamMembers.length})</span>
+            </button>
           </div>
-        </header>
+        </div>
 
         {/* ========================================================================= */}
-        {/* 2. SEARCH & FILTER BAR */}
+        {/* 2. STATS METRIC CARDS */}
         {/* ========================================================================= */}
-        <section className="mt-4 sm:mt-5 rounded-xl border border-slate-200/80 bg-white p-3 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Festivals</span>
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                <Calendar className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{events.length}</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 font-normal">Active competitions</div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Published Status</span>
+              <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+                <Sparkles className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{activeEventsCount}</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 font-normal">Ready for participation</div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Program Items</span>
+              <div className="p-2 bg-amber-50 text-amber-600 rounded-xl">
+                <Award className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{totalProgramsCount}</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 font-normal">{totalAssignedProgramsCount} programs assigned</div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Candidates</span>
+              <div className="p-2 bg-purple-50 text-purple-600 rounded-xl">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2 text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{teamMembers.length}</div>
+            <div className="text-[11px] text-slate-400 mt-0.5 font-normal">Enrolled students</div>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* 3. SEARCH & FILTER BAR */}
+        {/* ========================================================================= */}
+        <section className="rounded-xl border border-slate-200/80 bg-white p-3 sm:p-3.5 shadow-2xs">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-[1fr_180px_180px_auto]">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -285,7 +367,7 @@ const TeamManagerEvents = () => {
                 setFilterStatus('all');
                 setFilterCategory('all');
               }}
-              className="h-10 rounded-xl px-4 text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700 sm:col-span-2 md:col-span-1"
+              className="h-10 rounded-xl px-4 text-sm font-semibold text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700 sm:col-span-2 md:col-span-1 cursor-pointer"
             >
               Clear
             </button>
@@ -293,10 +375,10 @@ const TeamManagerEvents = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* 3. TABLE FORMAT DIRECTORY (Matches Admin EventsPage exactly) */}
+        {/* 4. TABLE FORMAT DIRECTORY (Matches Admin EventsPage exactly) */}
         {/* ========================================================================= */}
-        <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
-          <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+        <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-5 py-3">
             <div className="flex items-center gap-2">
               <p className="text-sm font-semibold text-slate-900">Event directory</p>
               {filterCategory !== 'all' && (
@@ -305,7 +387,7 @@ const TeamManagerEvents = () => {
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-400">{filteredEvents.length} events</p>
+            <p className="text-xs text-slate-400 font-medium">{filteredEvents.length} events</p>
           </div>
 
           {filteredEvents.length === 0 ? (
@@ -466,19 +548,19 @@ const TeamManagerEvents = () => {
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 onClick={() => handleEventClick(event.id)}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-100 bg-indigo-50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:border-indigo-200 hover:bg-indigo-100"
-                                title="View event details"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 hover:border-slate-300 transition cursor-pointer"
+                                title="Open event portal"
                               >
-                                <Eye className="h-3.5 w-3.5" />
-                                <span>View</span>
+                                <Eye className="h-3.5 w-3.5 text-slate-400" />
+                                <span>Overview</span>
                               </button>
                               <button
-                                onClick={() => handleEventClick(event.id)}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/50 px-2.5 py-1.5 text-xs font-semibold text-indigo-700 transition hover:border-indigo-300 hover:bg-indigo-100"
+                                onClick={() => navigate(`/team-manager/events/${event.id}/portal?tab=assignments`)}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 transition cursor-pointer"
                                 title="Assign team students to programs in this event"
                               >
                                 <Target className="h-3.5 w-3.5" />
-                                <span>Assign Programs</span>
+                                <span>Enter Portal →</span>
                               </button>
                             </div>
                           </td>
@@ -597,17 +679,17 @@ const TeamManagerEvents = () => {
                       <div className="grid grid-cols-2 gap-2 pt-2">
                         <button
                           onClick={() => handleEventClick(event.id)}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors min-h-[40px]"
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
                         >
                           <Eye className="h-3.5 w-3.5 text-slate-400" />
-                          <span>Details</span>
+                          <span>Overview</span>
                         </button>
                         <button
-                          onClick={() => handleEventClick(event.id)}
-                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2.5 text-xs font-semibold text-white shadow-xs hover:bg-indigo-700 transition-colors min-h-[40px]"
+                          onClick={() => navigate(`/team-manager/events/${event.id}/portal?tab=assignments`)}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 transition cursor-pointer"
                         >
                           <Target className="h-3.5 w-3.5" />
-                          <span>Assign Programs</span>
+                          <span>Enter Portal →</span>
                         </button>
                       </div>
                     </article>

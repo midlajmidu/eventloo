@@ -233,43 +233,118 @@ const TeamStudents = () => {
 
   return (
     <main className="min-h-screen bg-[#f7f8fb] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-7xl space-y-4 sm:space-y-5">
         {/* ========================================================================= */}
-        {/* 1. HEADER (Matches Admin StudentsPage) */}
+        {/* 1. TOP HEADER CARD BOX (Matching Event Portal Model) */}
         {/* ========================================================================= */}
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
-              Directory
-            </p>
-            <h1 className="mt-0.5 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              Team Students
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                {teamName}
+              </span>
+              <span className="text-slate-300">·</span>
+              <span className="text-[10px] font-semibold text-slate-500">
+                Student Directory
+              </span>
+            </div>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight mt-0.5">
+              Team Students & Rosters
             </h1>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Enrolled students and categories for{' '}
-              <span className="font-semibold text-slate-700">{teamName}</span>.
+            <p className="text-xs text-gray-500 mt-0.5">
+              Enrolled students, category assignments, and event participation profiles for {teamName}.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <div className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs">
-              <Users className="h-3.5 w-3.5 text-slate-400" />
-              <span>{students.length} Members</span>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs">
+              <Users className="h-3.5 w-3.5 text-indigo-600" />
+              <span>{students.length} Total Members</span>
             </div>
             <button
               onClick={() => navigate('/team-manager/events')}
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-2xs hover:bg-indigo-700 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 transition-colors cursor-pointer"
             >
               <Target className="h-3.5 w-3.5" />
               <span>Assign in Events</span>
             </button>
           </div>
-        </header>
+        </div>
 
         {/* ========================================================================= */}
-        {/* 2. SEARCH & FILTER BAR (Clean minimal design matching Admin) */}
+        {/* STATS METRIC CARDS */}
         {/* ========================================================================= */}
-        <section className="mt-4 sm:mt-5 rounded-xl border border-slate-200/80 bg-white p-3 shadow-[0_1px_2px_rgba(0,0,0,0.02)]">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Students</span>
+              <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                <Users className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+              {students.length}
+            </div>
+            <div className="mt-1 text-[11px] text-slate-500">
+              Registered in {teamName}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Categories</span>
+              <div className="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600">
+                <GraduationCap className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+              {new Set(students.map((s) => s.category).filter(Boolean)).size}
+            </div>
+            <div className="mt-1 text-[11px] text-slate-500">
+              Active divisions represented
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Grades / Classes</span>
+              <div className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center text-amber-600">
+                <Calendar className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <div className="mt-2 text-2xl font-bold text-slate-900 tracking-tight">
+              {availableGrades.length}
+            </div>
+            <div className="mt-1 text-[11px] text-slate-500">
+              Grades enrolled across team
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Gender Balance</span>
+              <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-600">
+                <Award className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <div className="mt-2 text-sm font-bold text-slate-900 tracking-tight flex items-center gap-2">
+              <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                {students.filter((s) => (s.gender || '').toLowerCase() === 'female').length} F
+              </span>
+              <span className="text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-lg border border-indigo-100">
+                {students.filter((s) => (s.gender || '').toLowerCase() === 'male').length} M
+              </span>
+            </div>
+            <div className="mt-1 text-[11px] text-slate-500">
+              Student demographic mix
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* 2. SEARCH & FILTER BAR */}
+        {/* ========================================================================= */}
+        <section className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-[minmax(220px,2fr)_repeat(4,minmax(115px,1fr))_auto]">
             {/* Search Input */}
             <div className="col-span-2 sm:col-span-2 md:col-span-1 xl:col-auto relative">
@@ -283,7 +358,7 @@ const TeamStudents = () => {
                   setSearchTerm(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
+                className="h-9 sm:h-10 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-9 pr-3 text-xs sm:text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-indigo-300 focus:bg-white focus:ring-2 focus:ring-indigo-100"
               />
             </div>
 
@@ -295,7 +370,7 @@ const TeamStudents = () => {
                 setSelectedCategory(e.target.value);
                 setCurrentPage(1);
               }}
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+              className="h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 sm:px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
             >
               <option value="all">All categories</option>
               {categories
@@ -320,7 +395,7 @@ const TeamStudents = () => {
                 setSelectedGrade(e.target.value);
                 setCurrentPage(1);
               }}
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+              className="h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 sm:px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
             >
               <option value="all">All grades</option>
               {availableGrades.map((grade) => (
@@ -338,7 +413,7 @@ const TeamStudents = () => {
                 setSelectedSection(e.target.value);
                 setCurrentPage(1);
               }}
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+              className="h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 sm:px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
             >
               <option value="all">All sections</option>
               {availableSections.map((sec) => (
@@ -356,7 +431,7 @@ const TeamStudents = () => {
                 setSelectedGender(e.target.value);
                 setCurrentPage(1);
               }}
-              className="h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100"
+              className="h-9 sm:h-10 rounded-xl border border-slate-200 bg-slate-50/70 px-2.5 sm:px-3 text-xs sm:text-sm text-slate-700 outline-none focus:border-indigo-300 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
             >
               <option value="all">All genders</option>
               <option value="male">Male</option>
@@ -367,7 +442,7 @@ const TeamStudents = () => {
             {/* Clear Filters */}
             <button
               onClick={handleClearFilters}
-              className="col-span-2 sm:col-span-1 md:col-span-1 xl:col-auto h-10 rounded-xl px-3 text-xs sm:text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700"
+              className="col-span-2 sm:col-span-1 md:col-span-1 xl:col-auto h-9 sm:h-10 rounded-xl px-3 text-xs sm:text-sm font-medium text-slate-500 transition hover:bg-slate-100 hover:text-indigo-700 cursor-pointer"
             >
               Clear
             </button>
@@ -375,9 +450,9 @@ const TeamStudents = () => {
         </section>
 
         {/* ========================================================================= */}
-        {/* 3. TABLE VIEW & MOBILE CARDS (Dual-View matching responsive design) */}
+        {/* 3. TABLE VIEW & MOBILE CARDS */}
         {/* ========================================================================= */}
-        <section className="mt-4 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+        <section className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
           {/* Table Header Row */}
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5 sm:py-3.5">
             <div className="flex items-center gap-2">

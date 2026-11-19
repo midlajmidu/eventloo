@@ -202,52 +202,57 @@ const TeamManagerPoints = () => {
 
   return (
     <main className="min-h-screen bg-[#f7f8fb] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-7xl space-y-4 sm:space-y-5">
         {/* ========================================================================= */}
-        {/* 1. HEADER */}
+        {/* 1. TOP HEADER CARD BOX (Matching Event Portal Model) */}
         {/* ========================================================================= */}
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
-              Performance & Standings
-            </p>
-            <h1 className="mt-0.5 text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                {activeTeamName}
+              </span>
+              <span className="text-slate-300">·</span>
+              <span className="text-[10px] font-semibold text-slate-500">
+                Championship Standings
+              </span>
+            </div>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight mt-0.5">
               Points & Leaderboard
             </h1>
-            <p className="mt-0.5 text-xs text-slate-500">
-              Championship ranking and points tables for{' '}
-              <span className="font-semibold text-slate-700">{activeTeamName}</span>.
+            <p className="text-xs text-gray-500 mt-0.5">
+              Event rankings, verified competition points, and global championship standings for {activeTeamName}.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs">
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <div className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3.5 py-2 text-xs font-bold text-indigo-900 shadow-2xs">
               <Trophy className="h-3.5 w-3.5 text-indigo-600" />
               <span>{scoreFormat(totalGlobalPoints)} Championship Pts</span>
             </div>
           </div>
-        </header>
+        </div>
 
         {/* ========================================================================= */}
         {/* 2. MODE SELECTOR (Global Points vs Event-Wise Points) */}
         {/* ========================================================================= */}
-        <section className="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200/80 pb-4">
-          <div className="grid grid-cols-2 sm:inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-2xs w-full sm:w-auto">
+        <section className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white p-2 sm:p-2.5 rounded-xl border border-slate-200/80 shadow-2xs">
+          <div className="grid grid-cols-2 sm:inline-flex rounded-xl border border-slate-200 bg-slate-100 p-0.5 shadow-2xs w-full sm:w-auto">
             <button
               type="button"
               onClick={() => setViewMode('event_wise')}
-              className={`inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-3 sm:px-4 py-2 text-xs font-semibold transition-all ${
+              className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 sm:px-4 py-2 text-xs font-semibold transition-all cursor-pointer ${
                 viewMode === 'event_wise'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  ? 'bg-white text-indigo-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Calendar className="h-4 w-4 shrink-0" />
+              <Calendar className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">Event Rankings</span>
               {eventsList.length > 0 && (
                 <span
                   className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
-                    viewMode === 'event_wise' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                    viewMode === 'event_wise' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200/80 text-slate-600'
                   }`}
                 >
                   {eventsList.length}
@@ -257,20 +262,20 @@ const TeamManagerPoints = () => {
             <button
               type="button"
               onClick={() => setViewMode('global')}
-              className={`inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl px-3 sm:px-4 py-2 text-xs font-semibold transition-all ${
+              className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 sm:px-4 py-2 text-xs font-semibold transition-all cursor-pointer ${
                 viewMode === 'global'
-                  ? 'bg-indigo-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  ? 'bg-white text-indigo-700 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              <Globe className="h-4 w-4 shrink-0" />
-              <span className="truncate">Global System</span>
+              <Globe className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Global Championship</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-2 text-xs text-slate-500">
+          <div className="flex items-center gap-2 text-xs text-slate-500 px-2 sm:px-0">
             <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
-            <span>Official Published Scores</span>
+            <span className="text-[11px] font-medium text-slate-600">Official Published Scores</span>
           </div>
         </section>
 
@@ -336,7 +341,7 @@ const TeamManagerPoints = () => {
             </div>
 
             {/* Global Standings Table Card */}
-            <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+            <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
               <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
                   <button
@@ -735,7 +740,7 @@ const TeamManagerPoints = () => {
               /* ========================================================================= */
               /* ALL EVENTS COMPARISON MATRIX */
               /* ========================================================================= */
-              <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+              <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
                 <div className="border-b border-slate-100 p-4 sm:p-5">
                   <h3 className="text-base font-semibold text-slate-900">
                     All Events Points Overview
@@ -902,7 +907,7 @@ const TeamManagerPoints = () => {
               currentSelectedEvent && (
                 <div className="space-y-6">
                   {/* Event Spotlight Header Card */}
-                  <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-xs">
+                  <div className="rounded-xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-2xs">
                     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <div className="inline-flex items-center gap-2 rounded-lg bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-700">
@@ -939,7 +944,7 @@ const TeamManagerPoints = () => {
                   </div>
 
                   {/* Sub-Tabs: Teams vs Students in this event */}
-                  <div className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-xs">
+                  <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
                     <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
                       <div className="grid grid-cols-2 sm:flex items-center gap-2 w-full sm:w-auto">
                         <button

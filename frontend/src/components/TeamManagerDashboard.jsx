@@ -29,15 +29,15 @@ import {
 import { teamManagerAPI, dashboardAPI } from '../services/api';
 
 const MetricCard = ({ label, value, detail, icon: Icon, accent }) => (
-  <div className="group rounded-xl border border-slate-200/80 bg-white p-3.5 sm:p-4 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_8px_16px_rgba(15,23,42,0.05)]">
+  <div className="group rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-all duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-xs">
     <div className="flex items-start justify-between gap-2.5">
       <div className="min-w-0">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 truncate">{label}</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 truncate">{label}</p>
         <p className="mt-1 sm:mt-1.5 text-xl sm:text-2xl font-bold tracking-tight text-slate-900 truncate">{value}</p>
         {detail && <p className="mt-0.5 sm:mt-1 text-xs text-slate-400 font-normal truncate">{detail}</p>}
       </div>
-      <div className={`flex h-8 w-8 sm:h-9 sm:w-9 items-center justify-center rounded-lg shrink-0 ${accent}`}>
-        <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" strokeWidth={1.9} />
+      <div className={`flex h-9 w-9 items-center justify-center rounded-xl shrink-0 ${accent}`}>
+        <Icon className="h-4.5 w-4.5" strokeWidth={1.9} />
       </div>
     </div>
   </div>
@@ -331,44 +331,45 @@ const TeamManagerDashboard = () => {
     <div className="min-h-screen bg-[#f7f8fb] px-4 py-5 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-4 sm:space-y-5">
         {/* ========================================================================= */}
-        {/* 1. HERO HEADER */}
+        {/* 1. TOP HEADER CARD BOX (Matching Event Portal Model) */}
         {/* ========================================================================= */}
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="bg-white rounded-xl border border-slate-200/80 p-4 sm:p-5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600">
-              Workspace
-            </p>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
                 {teamDisplayName}
-              </h1>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              </span>
+              <span className="text-slate-300">·</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 Active Session
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-1 font-normal">
-              Manage your team candidates, track festival points, and view event schedules.
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900 tracking-tight mt-0.5">
+              Team Overview & Performance
+            </h1>
+            <p className="text-xs text-gray-500 mt-0.5">
+              Manage your candidate roster, track competition points, view festivals, and monitor event assignments.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
               onClick={() => navigate('/team-manager/students')}
-              className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-lg border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200/80 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
             >
               <Users className="h-3.5 w-3.5 text-slate-400" />
-              <span>My Students</span>
+              <span>My Students ({totalMembers})</span>
             </button>
             <button
               onClick={() => navigate('/team-manager/events')}
-              className="inline-flex flex-1 sm:flex-none items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white shadow-2xs hover:bg-indigo-700 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-indigo-700 transition-colors cursor-pointer"
             >
               <CalendarDays className="h-3.5 w-3.5" />
-              <span>Events</span>
+              <span>Events & Festivals</span>
             </button>
           </div>
-        </header>
+        </div>
 
         {/* ========================================================================= */}
         {/* 2. METRIC CARDS GRID (Event Manager / Admin Dashboard Style) */}
@@ -409,8 +410,8 @@ const TeamManagerDashboard = () => {
         {/* ========================================================================= */}
         <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {/* Chart 1: Team Strength Spider/Radar Graph */}
-          <article className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5">
+          <article className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-3 sm:px-5">
               <div>
                 <h2 className="text-xs font-semibold text-slate-800">
                   Team Profile & Strength
@@ -419,7 +420,7 @@ const TeamManagerDashboard = () => {
                   Balance across student categories and program types
                 </p>
               </div>
-              <span className="text-[11px] font-medium text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md shrink-0">
+              <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full shrink-0">
                 {radarData.length} Dimensions
               </span>
             </div>
@@ -464,8 +465,8 @@ const TeamManagerDashboard = () => {
           </article>
 
           {/* Chart 2: Event Points Performance */}
-          <article className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 sm:px-5">
+          <article className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-3 sm:px-5">
               <div>
                 <h2 className="text-xs font-semibold text-slate-800">
                   Event Points Performance
@@ -476,7 +477,7 @@ const TeamManagerDashboard = () => {
               </div>
               <button
                 onClick={() => handleOpenBreakdown(activeTeam)}
-                className="flex items-center gap-1 rounded-md bg-indigo-50 px-2.5 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 transition-colors shrink-0"
+                className="flex items-center gap-1 rounded-lg bg-indigo-50 border border-indigo-100 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors shrink-0 cursor-pointer"
               >
                 <span>Breakdown</span>
                 <ArrowRight className="h-3 w-3" />
@@ -537,8 +538,8 @@ const TeamManagerDashboard = () => {
         {/* ========================================================================= */}
         <section>
           {/* Active Competitions & Points */}
-          <article className="rounded-2xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-[0_1px_2px_rgba(15,23,42,0.03)]">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <article className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-4 py-3 sm:px-5">
               <div>
                 <h2 className="text-xs font-semibold text-slate-800">
                   Participating Events
@@ -549,22 +550,22 @@ const TeamManagerDashboard = () => {
               </div>
               <button
                 onClick={() => navigate('/team-manager/events')}
-                className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-0.5"
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 cursor-pointer"
               >
                 <span>View All Events</span>
-                <ChevronRight className="h-3 w-3" />
+                <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
 
-            <div className="mt-3.5 space-y-2.5">
+            <div className="p-4 sm:p-5 space-y-2.5">
               {teamEvents.map((ev, idx) => (
                 <div
-                  key={ev.event_id || idx}
-                  className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/70 hover:bg-slate-50 transition-colors"
+                  key={ev.event_id || ev.id || idx}
+                  className="flex items-center justify-between p-3.5 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-white hover:border-indigo-200 hover:shadow-2xs transition-all"
                 >
                   <div className="min-w-0 pr-3">
                     <p className="text-xs font-semibold text-slate-900 truncate">
-                      {ev.event_name || 'Active Festival'}
+                      {ev.event_name || ev.title || 'Active Festival'}
                     </p>
                     <div className="mt-1 flex items-center gap-2 text-[10px] text-slate-400">
                       <span>Contribution: {ev.percentage ? `${ev.percentage}%` : '100%'}</span>
@@ -579,30 +580,30 @@ const TeamManagerDashboard = () => {
                       <span className="text-[10px] text-slate-400 ml-0.5">pts</span>
                     </div>
                     <button
-                      onClick={() => navigate('/team-manager/events')}
-                      className="rounded-lg bg-white border border-slate-200 px-3 py-1.5 text-[11px] font-medium text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors"
+                      onClick={() => navigate(ev.event_id || ev.id ? `/team-manager/events/${ev.event_id || ev.id}/portal` : '/team-manager/events')}
+                      className="rounded-xl bg-white border border-slate-200/80 px-3.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 shadow-2xs transition-all cursor-pointer"
                     >
-                      Open Event
+                      Enter Portal →
                     </button>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="pt-3 border-t border-slate-100 mt-3.5 flex items-center justify-between">
+            <div className="px-4 py-3 sm:px-5 border-t border-slate-100 bg-slate-50/30 flex items-center justify-between">
               <button
                 onClick={() => navigate('/team-manager/students')}
-                className="text-[11px] font-medium text-slate-600 hover:text-indigo-600 flex items-center gap-1"
+                className="text-xs font-medium text-slate-600 hover:text-indigo-600 flex items-center gap-1.5 cursor-pointer"
               >
-                <Users className="h-3 w-3 text-slate-400" />
+                <Users className="h-3.5 w-3.5 text-slate-400" />
                 <span>My Students ({totalMembers})</span>
               </button>
               <button
                 onClick={() => navigate('/team-manager/events')}
-                className="text-[11px] font-medium text-indigo-600 hover:text-indigo-700 flex items-center gap-1"
+                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 flex items-center gap-1 cursor-pointer"
               >
-                <span>Go to Events Portal</span>
-                <ArrowRight className="h-3 w-3" />
+                <span>Go to Events Directory</span>
+                <ArrowRight className="h-3.5 w-3.5" />
               </button>
             </div>
           </article>
