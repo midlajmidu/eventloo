@@ -179,9 +179,9 @@ const ProgramAssignmentPage = () => {
   const assignStudentsToSubTeam = async () => {
     if (!program || !event || selectedStudentIds.length === 0) return;
 
-    const requiredSize = program.team_size || 1;
-    if (selectedStudentIds.length !== requiredSize) {
-      alert(`Please select exactly ${requiredSize} students for Sub-Team ${selectedSubTeam}.`);
+    const maxSize = program.team_size || 1;
+    if (selectedStudentIds.length > maxSize) {
+      alert(`You can select at most ${maxSize} students for Sub-Team ${selectedSubTeam}.`);
       return;
     }
 
@@ -482,7 +482,7 @@ const ProgramAssignmentPage = () => {
                   <span>Team Group Assignments ({totalSubTeams} Teams allowed)</span>
                 </h2>
                 <p className="text-[11px] text-slate-500 mt-0.5">
-                  Each sub-team requires exactly <strong className="text-slate-700">{teamSize} members</strong>. Select a team to assign or manage leaders.
+                  Each sub-team allows up to <strong className="text-slate-700">{teamSize} members</strong> (minimum 1). Select a team to assign or manage leaders.
                 </p>
               </div>
             </div>
@@ -705,7 +705,7 @@ const ProgramAssignmentPage = () => {
 
                   <button
                     onClick={assignStudentsToSubTeam}
-                    disabled={assigning || selectedStudentIds.length !== teamSize}
+                    disabled={assigning || selectedStudentIds.length === 0 || selectedStudentIds.length > teamSize}
                     className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs flex items-center justify-center space-x-1 cursor-pointer w-full sm:w-auto"
                   >
                     <UserPlus className="h-3.5 w-3.5" />
@@ -841,7 +841,7 @@ const ProgramAssignmentPage = () => {
                             : Math.max(0, (program.per_team_limit || program.max_participants || 1) - assignedStudents.length);
                           if (selectedStudentIds.length >= maxAllowed) {
                             alert(program.is_team_based
-                              ? `You can only select exactly ${teamSize} students for Sub-Team ${selectedSubTeam}.`
+                              ? `You can select up to ${teamSize} students for Sub-Team ${selectedSubTeam}.`
                               : `You can select up to ${maxAllowed} student(s) for the remaining slots.`);
                             return;
                           }
@@ -938,7 +938,7 @@ const ProgramAssignmentPage = () => {
                         return;
                       }
                       if (selectedStudentIds.length >= teamSize) {
-                        alert(`You can only select exactly ${teamSize} students for Sub-Team ${selectedSubTeam}.`);
+                        alert(`You can select up to ${teamSize} students for Sub-Team ${selectedSubTeam}.`);
                         return;
                       }
                       setSelectedStudentIds([...selectedStudentIds, student.id]);
@@ -1053,7 +1053,7 @@ const ProgramAssignmentPage = () => {
             </div>
             <button
               onClick={program.is_team_based ? assignStudentsToSubTeam : assignMultipleIndividualStudents}
-              disabled={assigning || (program.is_team_based && selectedStudentIds.length !== teamSize)}
+              disabled={assigning || selectedStudentIds.length === 0 || (program.is_team_based && selectedStudentIds.length > teamSize)}
               className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg shadow-2xs transition-all shrink-0 cursor-pointer"
             >
               {assigning ? 'Assigning...' : `Assign (${selectedStudentIds.length})`}

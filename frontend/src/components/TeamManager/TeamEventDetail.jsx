@@ -1976,9 +1976,10 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                     }}
                     disabled={
                       assigningStudent ||
+                      modalSelectedStudents.length === 0 ||
                       (isTeam
-                        ? isCurrentSubTeamFull || modalSelectedStudents.length !== neededForCurrentSubTeam
-                        : isIndividualFull || modalSelectedStudents.length === 0)
+                        ? isCurrentSubTeamFull || modalSelectedStudents.length > neededForCurrentSubTeam
+                        : isIndividualFull || modalSelectedStudents.length > remainingIndividualSlots)
                     }
                     className="inline-flex items-center gap-1.5 rounded-lg sm:rounded-xl bg-indigo-600 px-3 py-1.5 sm:px-5 sm:py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
@@ -1995,18 +1996,18 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                             <span className="hidden sm:inline">Sub-Team {modalSelectedSubTeam} Full</span>
                             <span className="sm:hidden">Full</span>
                           </>
-                        ) : modalSelectedStudents.length === neededForCurrentSubTeam ? (
+                        ) : modalSelectedStudents.length > 0 ? (
                           <>
-                            <span className="hidden sm:inline">Confirm & Assign {teamDisplayName} ({neededForCurrentSubTeam} Members)</span>
-                            <span className="sm:hidden">Confirm ({neededForCurrentSubTeam})</span>
+                            <span className="hidden sm:inline">Confirm & Assign {teamDisplayName} ({modalSelectedStudents.length} Member{modalSelectedStudents.length === 1 ? '' : 's'})</span>
+                            <span className="sm:hidden">Confirm ({modalSelectedStudents.length})</span>
                           </>
                         ) : (
                           <>
                             <span className="hidden sm:inline">
-                              Select {neededForCurrentSubTeam - modalSelectedStudents.length} More Member{neededForCurrentSubTeam - modalSelectedStudents.length === 1 ? '' : 's'}
+                              Select Members (Max {neededForCurrentSubTeam})
                             </span>
                             <span className="sm:hidden">
-                              Select {neededForCurrentSubTeam - modalSelectedStudents.length}
+                              Select Members
                             </span>
                           </>
                         )

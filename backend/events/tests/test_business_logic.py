@@ -645,10 +645,11 @@ class EventBusinessLogicTests(TestCase):
             event=self.event, name='Group', category='junior', is_team_based=True,
             team_size=2, max_teams_per_school=2, max_participants_per_team=4,
         )
+        # Exceeding the team_size capacity raises ValidationError
         with self.assertRaises(ValidationError):
             assign_students(
                 user=self.admin, team=self.team, program=program,
-                student_ids=[self.students[0].id], sub_team_number=1,
+                student_ids=[self.students[0].id, self.students[1].id, self.students[2].id], sub_team_number=1,
             )
         self.assertFalse(ProgramAssignment.objects.filter(program=program).exists())
 
@@ -686,9 +687,9 @@ class EventBusinessLogicTests(TestCase):
                 ProgramAssignment.objects.filter(program=program, team=self.team).count(),
                 index + 1,
             )
-            self.assertEqual(
-                ProgramResult.objects.filter(program=program, team=self.team).exists(),
-                index == 3,
+            # ProgramResult exists from the first member so partial squads can be scored
+            self.assertTrue(
+                ProgramResult.objects.filter(program=program, team=self.team).exists()
             )
 
         assignments = ProgramAssignment.objects.filter(program=program, team=self.team)

@@ -1405,7 +1405,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
 
                       <div>
                         <label className="block text-xs font-semibold text-gray-800 mb-1">
-                          Team Size (Members per Sub-Team) *
+                          Team Size / Squad Limit (Max Members per Sub-Team) *
                         </label>
                         <input
                           type="number"
@@ -1414,8 +1414,11 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                           value={formData.team_size}
                           onChange={(e) => setFormData({...formData, team_size: e.target.value})}
                           className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-xs"
-                          placeholder="e.g., 3"
+                          placeholder="e.g., 7 (e.g. 5 playing + 2 subs)"
                         />
+                        <p className="mt-1 text-[11px] text-gray-500">
+                          Maximum squad limit per sub-team. Teams can register with fewer members if needed (e.g. 5 or 6).
+                        </p>
                       </div>
                     </div>
                   )}

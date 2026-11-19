@@ -341,9 +341,9 @@ def assign_students(
     if program.is_team_based:
         if not team:
             raise ValidationError('A team is required for a group program.')
-        required_size = program.team_size or 0
-        if required_size < 1:
-            raise ValidationError('Configure the exact team size before assigning this program.')
+        max_size = program.team_size or 0
+        if max_size < 1:
+            raise ValidationError('Configure the team size limit before assigning this program.')
         max_subteams = program.max_teams_per_school or 1
         if sub_team_number > max_subteams:
             raise ValidationError(
@@ -355,19 +355,10 @@ def assign_students(
             sub_team_number=sub_team_number,
         )
         existing_count = existing_subteam.count()
-        if allow_partial_group:
-            if existing_count + len(students) > required_size:
-                raise ValidationError(
-                    f'Sub-team {sub_team_number} is full. {program.name} allows exactly '
-                    f'{required_size} members.'
-                )
-        elif len(students) != required_size:
+        if existing_count + len(students) > max_size:
             raise ValidationError(
-                f'{program.name} requires exactly {required_size} members; {len(students)} were selected.'
-            )
-        elif existing_count:
-            raise ValidationError(
-                f'Sub-team {sub_team_number} already exists for {team.name}. Remove it before replacing it.'
+                f'Sub-team {sub_team_number} can have at most {max_size} members for {program.name}. '
+                f'Currently has {existing_count}; adding {len(students)} exceeds the maximum capacity.'
             )
         if program.max_participants_per_team:
             assigned_count = ProgramAssignment.objects.select_for_update().filter(
@@ -428,7 +419,7 @@ def assign_students(
         complete_subteam = ProgramAssignment.objects.filter(
             program=program, team=team, sub_team_number=sub_team_number,
         ).select_related('student')
-        if complete_subteam.count() == required_size:
+        if complete_subteam.exists():
             representative = complete_subteam.filter(is_leader=True).first()
             representative = representative or complete_subteam.first()
             ProgramResult.objects.update_or_create(
