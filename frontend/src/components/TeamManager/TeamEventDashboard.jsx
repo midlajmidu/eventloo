@@ -745,31 +745,12 @@ const TeamEventDashboard = () => {
               </div>
             </div>
 
-            {/* Right Side: Team badge + Status badge & Eventloo Logo */}
-            <div className="flex items-center space-x-2.5 sm:space-x-3 shrink-0">
-              {teamName && (
-                <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-2xs">
-                  <Users className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                  <span className="truncate max-w-[100px] sm:max-w-[140px]">{teamName}</span>
-                </div>
-              )}
-
-              <span
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider border ${getStatusBadge(
-                  event.status
-                )}`}
-              >
-                {event.status && typeof event.status === 'string'
-                  ? event.status.charAt(0).toUpperCase() + event.status.slice(1)
-                  : 'Active'}
-              </span>
-
-              <div className="h-5 w-px bg-slate-200 hidden sm:block" />
-
+            {/* Right Side: Eventloo Logo */}
+            <div className="flex items-center shrink-0">
               <a
                 href="/"
                 title="Eventloo"
-                className="hidden sm:flex items-center hover:opacity-90 transition-opacity pl-0.5 shrink-0"
+                className="flex items-center hover:opacity-90 transition-opacity pl-0.5 shrink-0"
               >
                 <img
                   src="/eventloo-loop-logo.svg"
