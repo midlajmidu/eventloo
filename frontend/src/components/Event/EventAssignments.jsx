@@ -175,7 +175,8 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
     setSavingStatus('Updating leader...');
     setDrawerError('');
     try {
-      await teamManagerAPI.setSubTeamLeader(selectedTeamId, eventId, programId, studentId, subTeamNum);
+      const numericStudentId = typeof studentId === 'object' && studentId !== null ? studentId.id : studentId;
+      await teamManagerAPI.setSubTeamLeader(selectedTeamId, eventId, programId, numericStudentId, subTeamNum);
       await reloadAssignments();
       setSavingStatus('All changes saved');
     } catch (error) {
@@ -189,18 +190,31 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
   };
 
   // Remove / unassign a student from a program
-  const handleRemoveAssignment = async (programId, studentId) => {
-    if (!selectedTeamId || !studentId) return;
+  const handleRemoveAssignment = async (programId, studentId, assignmentId) => {
+    if (!selectedTeamId) return;
 
     setSavingStatus('Saving changes...');
     setDrawerError('');
     try {
-      await teamManagerAPI.removeStudentFromProgram(selectedTeamId, eventId, programId, studentId);
+      if (assignmentId) {
+        try {
+          await teamManagerAPI.removeAssignmentById(selectedTeamId, assignmentId);
+          await reloadAssignments();
+          setSavingStatus('All changes saved');
+          return;
+        } catch (idErr) {
+          console.warn('Remove by assignment ID fallback:', idErr);
+        }
+      }
+      const numericStudentId = typeof studentId === 'object' && studentId !== null ? studentId.id : studentId;
+      if (numericStudentId) {
+        await teamManagerAPI.removeStudentFromProgram(selectedTeamId, eventId, programId, numericStudentId);
+      }
       await reloadAssignments();
       setSavingStatus('All changes saved');
     } catch (error) {
       console.error('Error removing assignment:', error);
-      const errMsg = error.response?.data?.error || 'Failed to remove assignment';
+      const errMsg = error.response?.data?.error || error.response?.data?.message || 'Failed to remove assignment';
       setDrawerError(errMsg);
       setMessage(errMsg);
       setSavingStatus('Save failed');
@@ -806,10 +820,14 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                               ) : (
                                 <div className="space-y-1.5">
                                   {subMembers.map(assignment => {
-                                    const studentId = assignment.student || assignment.student_id || assignment.student_details?.id;
-                                    const studentObj = students.find(s => s.id === studentId);
-                                    const studentName = assignment.student_name || assignment.student_details?.name || studentObj?.name || (studentObj?.first_name ? `${studentObj.first_name} ${studentObj.last_name || ''}`.trim() : '') || 'Assigned Student';
-                                    const chestNo = assignment.chest_number || assignment.student_details?.chest_number || studentObj?.chest_number;
+                                    const studentId = typeof assignment.student === 'object' && assignment.student !== null
+                                      ? assignment.student.id
+                                      : (assignment.student_id || assignment.student || assignment.student_details?.id);
+                                    const studentObj = teamMembers.find(s => s.id === studentId) || students.find(s => s.id === studentId);
+                                    const studentName = (typeof assignment.student === 'object' && assignment.student?.name)
+                                      ? assignment.student.name
+                                      : (assignment.student_name || assignment.student_details?.name || studentObj?.name || (studentObj?.first_name ? `${studentObj.first_name} ${studentObj.last_name || ''}`.trim() : '') || 'Assigned Student');
+                                    const chestNo = assignment.chest_number || (typeof assignment.student === 'object' && assignment.student?.chest_number) || assignment.student_details?.chest_number || studentObj?.chest_number;
                                     const isLeader = assignment.is_leader || studentObj?.is_leader;
 
                                     return (
@@ -839,7 +857,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
 
                                           <button
                                             type="button"
-                                            onClick={() => handleRemoveAssignment(activeDrawerProgram.id, studentId)}
+                                            onClick={() => handleRemoveAssignment(activeDrawerProgram.id, studentId, assignment.id)}
                                             className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                                             title="Remove"
                                           >
@@ -884,10 +902,14 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                       /* Flat List for Single/Individual Events */
                       <div className="space-y-2">
                         {paginatedIndividualAssignments.map(assignment => {
-                          const studentId = assignment.student || assignment.student_id || assignment.student_details?.id;
-                          const studentObj = students.find(s => s.id === studentId);
-                          const studentName = assignment.student_name || assignment.student_details?.name || studentObj?.name || (studentObj?.first_name ? `${studentObj.first_name} ${studentObj.last_name || ''}`.trim() : '') || 'Assigned Student';
-                          const chestNo = assignment.chest_number || assignment.student_details?.chest_number || studentObj?.chest_number;
+                          const studentId = typeof assignment.student === 'object' && assignment.student !== null
+                            ? assignment.student.id
+                            : (assignment.student_id || assignment.student || assignment.student_details?.id);
+                          const studentObj = teamMembers.find(s => s.id === studentId) || students.find(s => s.id === studentId);
+                          const studentName = (typeof assignment.student === 'object' && assignment.student?.name)
+                            ? assignment.student.name
+                            : (assignment.student_name || assignment.student_details?.name || studentObj?.name || (studentObj?.first_name ? `${studentObj.first_name} ${studentObj.last_name || ''}`.trim() : '') || 'Assigned Student');
+                          const chestNo = assignment.chest_number || (typeof assignment.student === 'object' && assignment.student?.chest_number) || assignment.student_details?.chest_number || studentObj?.chest_number;
 
                           return (
                             <div key={assignment.id} className="p-2.5 bg-gray-50/60 rounded-xl border border-gray-200/60 flex items-center justify-between text-xs">
@@ -898,7 +920,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
 
                               <button
                                 type="button"
-                                onClick={() => handleRemoveAssignment(activeDrawerProgram.id, studentId)}
+                                onClick={() => handleRemoveAssignment(activeDrawerProgram.id, studentId, assignment.id)}
                                 className="px-2.5 py-1 text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-red-200 transition-colors inline-flex items-center space-x-1 cursor-pointer"
                               >
                                 <UserMinus className="w-3.5 h-3.5" />
