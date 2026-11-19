@@ -315,6 +315,42 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
     return Array.from(memberMap.values());
   })();
 
+  const getAssignmentStudentId = (assignment) => {
+    if (!assignment) return null;
+    if (typeof assignment.student === 'object' && assignment.student !== null) {
+      return assignment.student.id;
+    }
+    return assignment.student_id || assignment.student || assignment.student_details?.id || null;
+  };
+
+  const getAssignmentStudentName = (assignment) => {
+    if (!assignment) return 'Assigned Student';
+    if (assignment.student_name) return assignment.student_name;
+    if (typeof assignment.student === 'object' && assignment.student !== null) {
+      if (assignment.student.name) return assignment.student.name;
+      if (assignment.student.full_name) return assignment.student.full_name;
+      if (assignment.student.display_name) return assignment.student.display_name;
+    }
+    const sId = getAssignmentStudentId(assignment);
+    const sObj = teamMembers.find(s => s.id === sId) || students.find(s => s.id === sId);
+    if (sObj) {
+      if (sObj.name) return sObj.name;
+      if (sObj.display_name) return sObj.display_name;
+      if (sObj.first_name) return `${sObj.first_name} ${sObj.last_name || ''}`.trim();
+    }
+    if (assignment.student_details?.name) return assignment.student_details.name;
+    return sId ? `Student #${sId}` : 'Assigned Student';
+  };
+
+  const getAssignmentChestNumber = (assignment) => {
+    if (!assignment) return null;
+    if (assignment.chest_number) return assignment.chest_number;
+    if (typeof assignment.student === 'object' && assignment.student?.chest_number) return assignment.student.chest_number;
+    const sId = getAssignmentStudentId(assignment);
+    const sObj = teamMembers.find(s => s.id === sId) || students.find(s => s.id === sId);
+    return sObj?.chest_number || sObj?.chest_no || assignment.student_details?.chest_number || null;
+  };
+
   // Filtered Programs for selected Category & Search Pad
   const filteredPrograms = programs.filter(p => {
     // 1. Category filter
@@ -820,15 +856,10 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                               ) : (
                                 <div className="space-y-1.5">
                                   {subMembers.map(assignment => {
-                                    const studentId = typeof assignment.student === 'object' && assignment.student !== null
-                                      ? assignment.student.id
-                                      : (assignment.student_id || assignment.student || assignment.student_details?.id);
-                                    const studentObj = teamMembers.find(s => s.id === studentId) || students.find(s => s.id === studentId);
-                                    const studentName = (typeof assignment.student === 'object' && assignment.student?.name)
-                                      ? assignment.student.name
-                                      : (assignment.student_name || assignment.student_details?.name || studentObj?.name || (studentObj?.first_name ? `${studentObj.first_name} ${studentObj.last_name || ''}`.trim() : '') || 'Assigned Student');
-                                    const chestNo = assignment.chest_number || (typeof assignment.student === 'object' && assignment.student?.chest_number) || assignment.student_details?.chest_number || studentObj?.chest_number;
-                                    const isLeader = assignment.is_leader || studentObj?.is_leader;
+                                    const studentId = getAssignmentStudentId(assignment);
+                                    const studentName = getAssignmentStudentName(assignment);
+                                    const chestNo = getAssignmentChestNumber(assignment);
+                                    const isLeader = assignment.is_leader;
 
                                     return (
                                       <div key={assignment.id} className="p-2.5 bg-gray-50/60 rounded-xl border border-gray-200/60 flex items-center justify-between text-xs hover:border-gray-300 transition-colors">
@@ -902,14 +933,9 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                       /* Flat List for Single/Individual Events */
                       <div className="space-y-2">
                         {paginatedIndividualAssignments.map(assignment => {
-                          const studentId = typeof assignment.student === 'object' && assignment.student !== null
-                            ? assignment.student.id
-                            : (assignment.student_id || assignment.student || assignment.student_details?.id);
-                          const studentObj = teamMembers.find(s => s.id === studentId) || students.find(s => s.id === studentId);
-                          const studentName = (typeof assignment.student === 'object' && assignment.student?.name)
-                            ? assignment.student.name
-                            : (assignment.student_name || assignment.student_details?.name || studentObj?.name || (studentObj?.first_name ? `${studentObj.first_name} ${studentObj.last_name || ''}`.trim() : '') || 'Assigned Student');
-                          const chestNo = assignment.chest_number || (typeof assignment.student === 'object' && assignment.student?.chest_number) || assignment.student_details?.chest_number || studentObj?.chest_number;
+                          const studentId = getAssignmentStudentId(assignment);
+                          const studentName = getAssignmentStudentName(assignment);
+                          const chestNo = getAssignmentChestNumber(assignment);
 
                           return (
                             <div key={assignment.id} className="p-2.5 bg-gray-50/60 rounded-xl border border-gray-200/60 flex items-center justify-between text-xs">

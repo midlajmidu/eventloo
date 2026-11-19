@@ -1485,7 +1485,14 @@ def team_manager_remove_assignment(request, team_id, assignment_id):
         team = Team.objects.get(id=team_id, school_id=request.user.school_id)
         from events.models import ProgramAssignment
         
-        assignment = ProgramAssignment.objects.get(id=assignment_id, team=team)
+        try:
+            assignment = ProgramAssignment.objects.get(id=assignment_id, team=team)
+        except ProgramAssignment.DoesNotExist:
+            is_admin = request.user and (request.user.is_superuser or getattr(request.user, 'role', '') in ['admin', 'event_manager'])
+            if is_admin:
+                assignment = ProgramAssignment.objects.get(id=assignment_id, program__event__school_id=request.user.school_id)
+            else:
+                raise
         from events.services import remove_assignment_group
         remove_assignment_group(user=request.user, assignment=assignment)
         return Response({'message': 'Assignment group removed successfully'}, status=status.HTTP_200_OK)
@@ -1572,22 +1579,30 @@ def team_manager_remove_student_from_program(request, team_id, event_id, program
     except User.DoesNotExist:
         return Response({'error': f'Student (ID: {student_id}) not found'}, status=status.HTTP_404_NOT_FOUND)
         
-    # Validate student belongs to team
-    if not team.members.filter(id=student_id).exists():
+    is_admin = request.user and (request.user.is_superuser or getattr(request.user, 'role', '') in ['admin', 'event_manager'])
+
+    # Validate student belongs to team (non-admin team managers only)
+    if not is_admin and not team.members.filter(id=student_id).exists():
         return Response({'error': 'Student does not belong to this team'}, status=status.HTTP_400_BAD_REQUEST)
     
     # Find and delete the assignment
     try:
-        assignment = ProgramAssignment.objects.get(
+        assignment = ProgramAssignment.objects.filter(
             team=team,
             program=program,
             student=student
-        )
+        ).first()
+        if not assignment and is_admin:
+            assignment = ProgramAssignment.objects.filter(
+                program=program,
+                student=student
+            ).first()
+        if not assignment:
+            return Response({'error': 'Student is not assigned to this program'}, status=status.HTTP_404_NOT_FOUND)
+
         from events.services import remove_assignment_group
         remove_assignment_group(user=request.user, assignment=assignment)
         return Response({'message': 'Assignment group removed successfully'}, status=status.HTTP_200_OK)
-    except ProgramAssignment.DoesNotExist:
-        return Response({'error': 'Student is not assigned to this program'}, status=status.HTTP_404_NOT_FOUND)
     except ValidationError as exc:
         return Response({'error': exc.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
 
