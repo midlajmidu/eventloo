@@ -699,7 +699,7 @@ const TeamEventDashboard = () => {
             <div className="flex items-center min-w-0">
               <button
                 onClick={() => navigate('/team-manager/events')}
-                className="mr-3 p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors border border-slate-200/70 shrink-0 cursor-pointer"
+                className="mr-2 sm:mr-3 p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-100 transition-colors border border-slate-200/70 shrink-0 cursor-pointer"
                 title="Back to Events"
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -708,7 +708,7 @@ const TeamEventDashboard = () => {
                 <img
                   src={event.logo || event.event_logo}
                   alt={event.title || 'Event Logo'}
-                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-contain bg-slate-50 border border-slate-200/80 p-0.5 shrink-0 mr-3 shadow-2xs"
+                  className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl object-contain bg-slate-50 border border-slate-200/80 p-0.5 shrink-0 mr-2.5 sm:mr-3 shadow-2xs"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                     if (e.currentTarget.nextSibling) {
@@ -718,26 +718,17 @@ const TeamEventDashboard = () => {
                 />
               ) : null}
               <div
-                className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-200/70 items-center justify-center text-indigo-600 shrink-0 mr-3 shadow-2xs ${
+                className={`w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-indigo-50 border border-indigo-200/70 items-center justify-center text-indigo-600 shrink-0 mr-2.5 sm:mr-3 shadow-2xs ${
                   (event.logo || event.event_logo) ? 'hidden' : 'flex'
                 }`}
               >
-                <Calendar className="w-5 h-5" />
+                <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-indigo-600 truncate">
-                    {event.school_name || 'Team Event Portal'}
-                  </p>
-                  <span className="text-slate-300 hidden sm:inline">·</span>
-                  <span className="text-[10px] font-medium text-slate-400 hidden sm:inline truncate">
-                    Team Portal
-                  </span>
-                </div>
-                <h1 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-slate-900 truncate">
+                <h1 className="text-base sm:text-xl md:text-2xl font-bold tracking-tight text-slate-900 truncate">
                   {event.title}
                 </h1>
-                <p className="text-xs text-slate-400 mt-0.5 font-normal truncate">
+                <p className="hidden sm:block text-xs text-slate-400 mt-0.5 font-normal truncate">
                   {event.start_date
                     ? new Date(event.start_date).toLocaleDateString()
                     : 'Date TBA'} · {event.venue || 'Campus Venue'}
@@ -745,8 +736,8 @@ const TeamEventDashboard = () => {
               </div>
             </div>
 
-            {/* Right Side: Eventloo Logo */}
-            <div className="flex items-center shrink-0">
+            {/* Right Side: Eventloo Logo (Hidden on mobile screen) */}
+            <div className="hidden sm:flex items-center shrink-0">
               <a
                 href="/"
                 title="Eventloo"
