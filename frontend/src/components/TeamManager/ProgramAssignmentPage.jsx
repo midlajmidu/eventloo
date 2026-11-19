@@ -140,6 +140,41 @@ const ProgramAssignmentPage = () => {
     }
   };
 
+  const assignMultipleIndividualStudents = async () => {
+    if (!program || !event || selectedStudentIds.length === 0) return;
+
+    setAssigning(true);
+    try {
+      const teamData = JSON.parse(localStorage.getItem('team_data') || '{}');
+      const teamId = teamData.id || teamData.team_id;
+
+      await teamManagerAPI.assignStudentsToProgram(teamId, event.id, program.id, selectedStudentIds, 1);
+      await loadProgramData();
+      setSelectedStudentIds([]);
+
+      setMessage(`${selectedStudentIds.length} participant(s) assigned successfully!`);
+      setMessageType('success');
+
+      setTimeout(() => {
+        setMessage('');
+        setMessageType('');
+      }, 3000);
+
+    } catch (err) {
+      console.error('Error assigning students:', err);
+      const errorMessage = err.response?.data?.error || err.response?.data?.message || 'Failed to assign students';
+      setMessage(errorMessage);
+      setMessageType('error');
+
+      setTimeout(() => {
+        setMessage('');
+        setMessageType('');
+      }, 3000);
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   const assignStudentsToSubTeam = async () => {
     if (!program || !event || selectedStudentIds.length === 0) return;
 
@@ -637,44 +672,62 @@ const ProgramAssignmentPage = () => {
               {showAssignedOnly ? 'Assigned Students' : 'Available Students'} ({filteredStudents.length})
             </h2>
 
-            {program.is_team_based && !showAssignedOnly && (
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
-                {/* Active Sub-Team Selector Pills */}
-                <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-lg border border-slate-200/80 overflow-x-auto max-w-full pb-0.5 scrollbar-none">
-                  <span className="text-[10px] font-semibold text-slate-500 px-1.5 shrink-0 uppercase tracking-wider">Target:</span>
-                  {Array.from({ length: totalSubTeams }).map((_, idx) => {
-                    const subNum = idx + 1;
-                    const subCount = assignedStudents.filter(s => (s.sub_team_number || 1) === subNum).length;
-                    const isSelected = selectedSubTeam === subNum;
+            {!showAssignedOnly && (
+              program.is_team_based ? (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+                  {/* Active Sub-Team Selector Pills */}
+                  <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-lg border border-slate-200/80 overflow-x-auto max-w-full pb-0.5 scrollbar-none">
+                    <span className="text-[10px] font-semibold text-slate-500 px-1.5 shrink-0 uppercase tracking-wider">Target:</span>
+                    {Array.from({ length: totalSubTeams }).map((_, idx) => {
+                      const subNum = idx + 1;
+                      const subCount = assignedStudents.filter(s => (s.sub_team_number || 1) === subNum).length;
+                      const isSelected = selectedSubTeam === subNum;
 
-                    return (
-                      <button
-                        key={subNum}
-                        type="button"
-                        onClick={() => {
-                          setSelectedSubTeam(subNum);
-                          setSelectedStudentIds([]);
-                        }}
-                        className={`px-2 py-0.5 text-xs font-medium rounded-md transition-all border cursor-pointer shrink-0 ${isSelected
-                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
-                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
-                          }`}
-                      >
-                        Sub-Team {subNum} ({subCount}/{teamSize})
-                      </button>
-                    );
-                  })}
+                      return (
+                        <button
+                          key={subNum}
+                          type="button"
+                          onClick={() => {
+                            setSelectedSubTeam(subNum);
+                            setSelectedStudentIds([]);
+                          }}
+                          className={`px-2 py-0.5 text-xs font-medium rounded-md transition-all border cursor-pointer shrink-0 ${isSelected
+                              ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs'
+                              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                            }`}
+                        >
+                          Sub-Team {subNum} ({subCount}/{teamSize})
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    onClick={assignStudentsToSubTeam}
+                    disabled={assigning || selectedStudentIds.length !== teamSize}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs flex items-center justify-center space-x-1 cursor-pointer w-full sm:w-auto"
+                  >
+                    <UserPlus className="h-3.5 w-3.5" />
+                    <span>Assign to Sub-Team {selectedSubTeam}</span>
+                  </button>
                 </div>
-
-                <button
-                  onClick={assignStudentsToSubTeam}
-                  disabled={assigning || selectedStudentIds.length !== teamSize}
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs flex items-center justify-center space-x-1 cursor-pointer w-full sm:w-auto"
-                >
-                  <UserPlus className="h-3.5 w-3.5" />
-                  <span>Assign to Sub-Team {selectedSubTeam}</span>
-                </button>
-              </div>
+              ) : (
+                selectedStudentIds.length > 0 && (
+                  <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                    <span className="text-xs font-medium text-indigo-700 bg-indigo-50 border border-indigo-200 px-2.5 py-1 rounded-lg">
+                      {selectedStudentIds.length} Selected
+                    </span>
+                    <button
+                      onClick={assignMultipleIndividualStudents}
+                      disabled={assigning}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs flex items-center justify-center space-x-1 cursor-pointer"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      <span>Assign Selected ({selectedStudentIds.length})</span>
+                    </button>
+                  </div>
+                )
+              )
             )}
           </div>
 
@@ -737,7 +790,7 @@ const ProgramAssignmentPage = () => {
                 <table className="min-w-full divide-y divide-slate-100">
                   <thead className="bg-slate-50/60">
                     <tr>
-                      {program.is_team_based && !showAssignedOnly && (
+                      {!showAssignedOnly && (
                         <th className="px-4 py-2 text-center text-[10px] font-semibold text-slate-400 uppercase tracking-wider w-10">Select</th>
                       )}
                       <th className="px-4 py-2 text-left text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Student Name</th>
@@ -754,19 +807,31 @@ const ProgramAssignmentPage = () => {
                       const assigned = isStudentAssigned(student.id);
                       const isSelected = selectedStudentIds.includes(student.id);
                       const groupLimit = event?.max_group_programs_per_student;
+                      const singleLimit = event?.max_single_programs_per_student;
                       const isGeneral = isGeneralCategory(program?.category);
-                      const isLimitReached = !isGeneral && program.is_team_based && groupLimit > 0 && (student.group_count || 0) >= groupLimit;
+                      const isLimitReached = !isGeneral && (
+                        program.is_team_based
+                          ? (groupLimit > 0 && (student.group_count || 0) >= groupLimit)
+                          : (singleLimit > 0 && (student.single_count || 0) >= singleLimit)
+                      );
 
                       const toggleSelect = () => {
                         if (isSelected) {
                           setSelectedStudentIds(selectedStudentIds.filter(id => id !== student.id));
                         } else {
                           if (isLimitReached) {
-                            alert(`${student.name} has reached the event limit of ${groupLimit} group programs.`);
+                            alert(program.is_team_based
+                              ? `${student.name} has reached the event limit of ${groupLimit} group programs.`
+                              : `${student.name} has reached the event limit of ${singleLimit} single programs.`);
                             return;
                           }
-                          if (selectedStudentIds.length >= teamSize) {
-                            alert(`You can only select exactly ${teamSize} students for Sub-Team ${selectedSubTeam}.`);
+                          const maxAllowed = program.is_team_based
+                            ? teamSize
+                            : Math.max(0, (program.per_team_limit || program.max_participants || 1) - assignedStudents.length);
+                          if (selectedStudentIds.length >= maxAllowed) {
+                            alert(program.is_team_based
+                              ? `You can only select exactly ${teamSize} students for Sub-Team ${selectedSubTeam}.`
+                              : `You can select up to ${maxAllowed} student(s) for the remaining slots.`);
                             return;
                           }
                           setSelectedStudentIds([...selectedStudentIds, student.id]);
@@ -775,7 +840,7 @@ const ProgramAssignmentPage = () => {
 
                       return (
                         <tr key={student.id} className={`hover:bg-indigo-50/20 transition-colors ${isSelected ? 'bg-indigo-50/40' : ''} ${isLimitReached && !assigned ? 'opacity-60 bg-slate-50/50' : ''}`}>
-                          {program.is_team_based && !showAssignedOnly && (
+                          {!showAssignedOnly && (
                             <td className="px-4 py-2.5 text-center">
                               <input
                                 type="checkbox"
@@ -807,7 +872,7 @@ const ProgramAssignmentPage = () => {
                               </span>
                             ) : isLimitReached ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
-                                Limit Reached ({student.group_count || 0}/{groupLimit})
+                                Limit Reached
                               </span>
                             ) : (
                               <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600">
@@ -826,24 +891,15 @@ const ProgramAssignmentPage = () => {
                                 <span>Remove</span>
                               </button>
                             ) : (
-                              program.is_team_based ? (
-                                <button
-                                  onClick={toggleSelect}
-                                  className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-200'
-                                    }`}
-                                >
-                                  {isSelected ? 'Selected' : 'Select'}
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => assignStudent(student.id)}
-                                  disabled={assigning || !canAssignMore()}
-                                  className="px-2.5 py-1 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 rounded-md border border-indigo-200 transition-colors disabled:opacity-50 inline-flex items-center space-x-1 cursor-pointer"
-                                >
-                                  <UserPlus className="h-3 w-3" />
-                                  <span>Assign</span>
-                                </button>
-                              )
+                              <button
+                                onClick={toggleSelect}
+                                disabled={assigning || (!isSelected && !canAssignMore())}
+                                className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
+                                  isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-200 disabled:opacity-40'
+                                }`}
+                              >
+                                {isSelected ? 'Selected' : 'Select'}
+                              </button>
                             )}
                           </td>
                         </tr>
@@ -881,7 +937,7 @@ const ProgramAssignmentPage = () => {
                   return (
                     <div
                       key={student.id}
-                      onClick={program.is_team_based && !showAssignedOnly && !assigned && !isLimitReached ? toggleSelect : undefined}
+                      onClick={!showAssignedOnly && !assigned && !isLimitReached ? toggleSelect : undefined}
                       className={`p-3 space-y-2 transition-colors ${
                         isLimitReached && !assigned
                           ? 'opacity-60 bg-slate-50/70 cursor-not-allowed'
@@ -892,7 +948,7 @@ const ProgramAssignmentPage = () => {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-2.5 min-w-0">
-                          {program.is_team_based && !showAssignedOnly && (
+                          {!showAssignedOnly && (
                             <input
                               type="checkbox"
                               disabled={assigned || isLimitReached}
@@ -950,31 +1006,18 @@ const ProgramAssignmentPage = () => {
                               <span>Remove</span>
                             </button>
                           ) : (
-                            program.is_team_based ? (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleSelect();
-                                }}
-                                className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
-                                  isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-200'
-                                }`}
-                              >
-                                {isSelected ? 'Selected' : 'Select'}
-                              </button>
-                            ) : (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  assignStudent(student.id);
-                                }}
-                                disabled={assigning || !canAssignMore()}
-                                className="px-2.5 py-1 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md shadow-2xs transition-colors disabled:opacity-50 inline-flex items-center space-x-1 cursor-pointer"
-                              >
-                                <UserPlus className="h-3 w-3" />
-                                <span>Assign</span>
-                              </button>
-                            )
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleSelect();
+                              }}
+                              disabled={assigning || (!isSelected && !canAssignMore())}
+                              className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
+                                isSelected ? 'bg-indigo-600 text-white border-indigo-600 shadow-2xs' : 'text-indigo-600 hover:bg-indigo-50 border-indigo-200 disabled:opacity-40'
+                              }`}
+                            >
+                              {isSelected ? 'Selected' : 'Select'}
+                            </button>
                           )}
                         </div>
                       </div>
@@ -986,23 +1029,23 @@ const ProgramAssignmentPage = () => {
           )}
         </div>
 
-        {/* Sticky Mobile Floating Action Bar for Team Programs */}
-        {program.is_team_based && selectedStudentIds.length > 0 && !showAssignedOnly && (
+        {/* Sticky Mobile Floating Action Bar */}
+        {selectedStudentIds.length > 0 && !showAssignedOnly && (
           <div className="fixed bottom-4 left-4 right-4 z-40 bg-slate-900/95 text-white shadow-xl rounded-xl p-3 sm:hidden backdrop-blur-md border border-slate-700 animate-in slide-in-from-bottom duration-200 flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs font-medium text-white truncate">
-                {selectedStudentIds.length} / {teamSize} Selected
+                {selectedStudentIds.length} {program.is_team_based ? `/ ${teamSize}` : ''} Selected
               </p>
               <p className="text-[11px] text-slate-300 truncate">
-                Target: Sub-Team {selectedSubTeam}
+                {program.is_team_based ? `Target: Sub-Team ${selectedSubTeam}` : 'Ready to assign'}
               </p>
             </div>
             <button
-              onClick={assignStudentsToSubTeam}
-              disabled={assigning || selectedStudentIds.length !== teamSize}
+              onClick={program.is_team_based ? assignStudentsToSubTeam : assignMultipleIndividualStudents}
+              disabled={assigning || (program.is_team_based && selectedStudentIds.length !== teamSize)}
               className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg shadow-2xs transition-all shrink-0 cursor-pointer"
             >
-              {assigning ? 'Assigning...' : `Assign (${selectedSubTeam})`}
+              {assigning ? 'Assigning...' : `Assign (${selectedStudentIds.length})`}
             </button>
           </div>
         )}

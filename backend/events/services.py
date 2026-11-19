@@ -391,8 +391,6 @@ def assign_students(
         else:
             leader_id = unique_ids[0]
     else:
-        if len(students) != 1:
-            raise ValidationError('An individual program accepts one participant per assignment.')
         sub_team_number = 1
         leader_id = None
         if team and program.max_participants:
@@ -400,9 +398,11 @@ def assign_students(
                 program=program,
                 team=team,
             ).count()
-            if assigned_count + 1 > program.max_participants:
+            if assigned_count + len(students) > program.max_participants:
+                max_p = program.max_participants
+                remaining = max(0, max_p - assigned_count)
                 raise ValidationError(
-                    f'{team.name} has reached the limit of {program.max_participants} participants for this program.'
+                    f'{team.name} can only add {remaining} more participant(s) for {program.name} (Max: {max_p}).'
                 )
 
     assigned_by = user if getattr(user, 'pk', None) else None
@@ -449,13 +449,13 @@ def assign_students(
                 is_team_result=True,
             ).delete()
     else:
-        assignment = assignments[0]
-        ProgramResult.objects.get_or_create(
-            program=program,
-            participant=assignment.student,
-            is_team_result=False,
-            defaults={'team': team, 'entry_status': 'draft'},
-        )
+        for assignment in assignments:
+            ProgramResult.objects.get_or_create(
+                program=program,
+                participant=assignment.student,
+                is_team_result=False,
+                defaults={'team': team, 'entry_status': 'draft'},
+            )
     program.refresh_schedule_end()
     return assignments
 

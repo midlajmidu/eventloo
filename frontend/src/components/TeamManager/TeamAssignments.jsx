@@ -173,24 +173,13 @@ const TeamAssignments = () => {
 
     try {
       setSubmitting(true);
-      if (selectedProgram.is_team_based) {
-        await teamManagerAPI.assignStudentsToProgram(
-          selectedTeam,
-          selectedProgram.event_id,
-          selectedProgram.id,
-          selectedStudents,
-          selectedSubTeam
-        );
-      } else {
-        for (const studentId of selectedStudents) {
-          await teamManagerAPI.assignStudentToProgram(
-            selectedTeam,
-            selectedProgram.event_id,
-            selectedProgram.id,
-            studentId
-          );
-        }
-      }
+      await teamManagerAPI.assignStudentsToProgram(
+        selectedTeam,
+        selectedProgram.event_id,
+        selectedProgram.id,
+        selectedStudents,
+        selectedProgram.is_team_based ? selectedSubTeam : 1
+      );
 
       setShowAssignModal(false);
       setSelectedProgram(null);
@@ -721,6 +710,11 @@ const TeamAssignments = () => {
           return false;
         };
 
+        const maxLimit = selectedProgram.is_team_based
+          ? (selectedProgram.team_size || null)
+          : (selectedProgram.max_participants || null);
+        const remainingSlots = maxLimit !== null ? Math.max(0, maxLimit - programAssignments.length) : null;
+
         const eligibleMembers = teamMembers.filter((m) => {
           if (assignedStudentIds.has(m.id) || assignedStudentIds.has(m.student_id)) return false;
           return isCatAllowed(m.category, selectedProgram.category);
@@ -752,41 +746,50 @@ const TeamAssignments = () => {
               </div>
 
               <form onSubmit={handleAssignSubmit} className="mt-3.5 space-y-3.5">
-                <p className="text-xs text-slate-500">
-                  Select eligible <span className="font-medium text-slate-700">{getCategoryDisplay(selectedProgram.category)}</span> students:
-                </p>
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span>
+                    Select eligible <span className="font-medium text-slate-700">{getCategoryDisplay(selectedProgram.category)}</span> students:
+                  </span>
+                  {remainingSlots !== null && (
+                    <span className="text-[11px] font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-100">
+                      {selectedStudents.length} / {remainingSlots} slots
+                    </span>
+                  )}
+                </div>
 
                 <div className="space-y-1.5 max-h-56 overflow-y-auto border border-slate-200/80 rounded-lg p-1.5 bg-slate-50/50">
                   {eligibleMembers.length > 0 ? (
                     eligibleMembers.map((student) => {
                       const sId = student.id || student.student_id;
                       const isSelected = selectedStudents.includes(sId);
+                      const isOptionDisabled = !isSelected && remainingSlots !== null && selectedStudents.length >= remainingSlots;
+
                       return (
                         <label
                           key={sId}
                           className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all border ${
                             isSelected
                               ? 'bg-indigo-50/70 border-indigo-200 shadow-2xs'
-                              : 'bg-white border-transparent hover:border-slate-200'
+                              : isOptionDisabled
+                                ? 'bg-slate-50/60 border-transparent opacity-50 cursor-not-allowed'
+                                : 'bg-white border-transparent hover:border-slate-200'
                           }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <input
-                              type={selectedProgram.is_team_based ? 'checkbox' : 'radio'}
+                              type="checkbox"
                               name="assignedStudent"
                               checked={isSelected}
+                              disabled={isOptionDisabled}
                               onChange={(e) => {
-                                if (selectedProgram.is_team_based) {
-                                  if (e.target.checked) {
-                                    setSelectedStudents((prev) => [...prev, sId]);
-                                  } else {
-                                    setSelectedStudents((prev) => prev.filter((id) => id !== sId));
-                                  }
+                                if (e.target.checked) {
+                                  if (remainingSlots !== null && selectedStudents.length >= remainingSlots) return;
+                                  setSelectedStudents((prev) => [...prev, sId]);
                                 } else {
-                                  setSelectedStudents([sId]);
+                                  setSelectedStudents((prev) => prev.filter((id) => id !== sId));
                                 }
                               }}
-                              className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                              className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                             />
                             <div className="min-w-0">
                               <p className="text-xs font-medium text-slate-900 truncate">{student.name}</p>
@@ -822,9 +825,9 @@ const TeamAssignments = () => {
                   <button
                     type="submit"
                     disabled={submitting || selectedStudents.length === 0}
-                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50 shadow-2xs transition-colors"
+                    className="px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-medium hover:bg-indigo-700 disabled:opacity-50 shadow-2xs transition-colors cursor-pointer"
                   >
-                    {submitting ? 'Assigning...' : 'Confirm'}
+                    {submitting ? 'Assigning...' : `Confirm (${selectedStudents.length} Selected)`}
                   </button>
                 </div>
               </form>

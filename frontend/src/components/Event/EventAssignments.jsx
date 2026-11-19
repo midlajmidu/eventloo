@@ -10,7 +10,8 @@ import {
   Crown,
   UserMinus,
   UserPlus,
-  BookOpen
+  BookOpen,
+  CheckSquare
 } from 'lucide-react';
 import { 
   eventProgramsAPI, 
@@ -37,6 +38,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
   const [drawerSearch, setDrawerSearch] = useState('');
   const [drawerSubTeam, setDrawerSubTeam] = useState(1);
   const [drawerError, setDrawerError] = useState('');
+  const [selectedDrawerStudentIds, setSelectedDrawerStudentIds] = useState([]);
 
   // Drawer Pagination States
   const [availablePage, setAvailablePage] = useState(1);
@@ -138,6 +140,27 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
     } catch (error) {
       console.error('Error assigning student:', error);
       const errMsg = error.response?.data?.error || 'Failed to assign student';
+      setDrawerError(errMsg);
+      setMessage(errMsg);
+      setSavingStatus('Save failed');
+      setTimeout(() => setMessage(''), 4000);
+    }
+  };
+
+  // Assign multiple students to a program
+  const handleAssignMultipleStudents = async (programId, studentIds, subTeamNum = 1) => {
+    if (!selectedTeamId || !studentIds || studentIds.length === 0) return;
+
+    setSavingStatus('Saving changes...');
+    setDrawerError('');
+    try {
+      await teamManagerAPI.assignStudentsToProgram(selectedTeamId, eventId, programId, studentIds, subTeamNum);
+      await reloadAssignments();
+      setSelectedDrawerStudentIds([]);
+      setSavingStatus('All changes saved');
+    } catch (error) {
+      console.error('Error assigning students:', error);
+      const errMsg = error.response?.data?.error || 'Failed to assign students';
       setDrawerError(errMsg);
       setMessage(errMsg);
       setSavingStatus('Save failed');
@@ -572,6 +595,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                             <button
                               onClick={() => {
                                 setActiveDrawerProgram(program);
+                                setSelectedDrawerStudentIds([]);
                                 setDrawerSearch('');
                                 setDrawerSubTeam(1);
                               }}
@@ -629,6 +653,13 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
 
         const maxLimit = !isTeamProgram ? activeDrawerProgram.max_participants : null;
         const isIndividualLimitReached = !isTeamProgram && maxLimit && drawerAssignments.length >= maxLimit;
+        const currentSubTeamAssignments = isTeamProgram
+          ? drawerAssignments.filter(a => (a.sub_team_number ?? a.sub_team ?? 1) === drawerSubTeam)
+          : [];
+        const isSubTeamFull = isTeamProgram && teamSize > 0 && currentSubTeamAssignments.length >= teamSize;
+        const remainingSlots = !isTeamProgram
+          ? (maxLimit ? Math.max(0, maxLimit - drawerAssignments.length) : null)
+          : (teamSize ? Math.max(0, teamSize - currentSubTeamAssignments.length) : null);
 
         // Filter available team members for search (excluding already assigned members)
         const filteredDrawerMembers = teamMembers.filter(m => {
@@ -956,14 +987,52 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                     <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   </div>
 
+                  {/* Bulk Assignment Bar */}
+                  {selectedDrawerStudentIds.length > 0 && (
+                    <div className="bg-indigo-50 border border-indigo-200/80 rounded-xl p-2.5 flex items-center justify-between text-xs animate-in fade-in">
+                      <div className="flex items-center space-x-2 text-indigo-900 font-bold">
+                        <CheckSquare className="w-4 h-4 text-indigo-600 shrink-0" />
+                        <span>{selectedDrawerStudentIds.length} student{selectedDrawerStudentIds.length > 1 ? 's' : ''} selected</span>
+                        {remainingSlots !== null && (
+                          <span className="text-[10px] text-indigo-600 font-normal">
+                            (Max {remainingSlots} allowed)
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDrawerStudentIds([])}
+                          className="px-2 py-1 text-slate-500 hover:text-slate-800 text-[11px] font-semibold cursor-pointer"
+                        >
+                          Clear
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAssignMultipleStudents(activeDrawerProgram.id, selectedDrawerStudentIds, isTeamProgram ? drawerSubTeam : 1)}
+                          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-2xs cursor-pointer flex items-center space-x-1"
+                        >
+                          <UserPlus className="w-3.5 h-3.5" />
+                          <span>Assign Selected ({selectedDrawerStudentIds.length})</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Available Members List */}
                   <div className="space-y-2">
                     {paginatedAvailableMembers.length > 0 ? (
                       paginatedAvailableMembers.map((student) => {
+                        const isSelected = selectedDrawerStudentIds.includes(student.id);
                         const currentSubTeamCount = isTeamProgram
                           ? drawerAssignments.filter(a => (a.sub_team_number ?? a.sub_team ?? 1) === drawerSubTeam).length
                           : 0;
                         const isSubTeamFull = isTeamProgram && teamSize > 0 && currentSubTeamCount >= teamSize;
+
+                        const isSelectionDisabled =
+                          isIndividualLimitReached ||
+                          (isTeamProgram && isSubTeamFull) ||
+                          (!isSelected && remainingSlots !== null && selectedDrawerStudentIds.length >= remainingSlots);
 
                         // Find alternative sub-team if selected sub-team is full
                         let altSubTeam = null;
@@ -986,9 +1055,27 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                         return (
                           <div
                             key={student.id}
-                            className="p-3 rounded-xl border border-gray-200/80 bg-white hover:border-gray-300 flex items-center justify-between transition-colors shadow-2xs gap-3"
+                            className={`p-3 rounded-xl border transition-colors shadow-2xs flex items-center justify-between gap-3 ${
+                              isSelected
+                                ? 'border-indigo-500 bg-indigo-50/40 ring-1 ring-indigo-500/20'
+                                : 'border-gray-200/80 bg-white hover:border-gray-300'
+                            }`}
                           >
                             <div className="flex items-center space-x-3 min-w-0">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                disabled={isSelectionDisabled}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    if (remainingSlots !== null && selectedDrawerStudentIds.length >= remainingSlots) return;
+                                    setSelectedDrawerStudentIds(prev => [...prev, student.id]);
+                                  } else {
+                                    setSelectedDrawerStudentIds(prev => prev.filter(id => id !== student.id));
+                                  }
+                                }}
+                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                              />
                               <div className="w-8 h-8 rounded-xl bg-slate-100 text-slate-800 flex items-center justify-center font-extrabold text-xs shrink-0 border border-slate-200/60">
                                 {initialLetter}
                               </div>

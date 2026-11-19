@@ -1326,7 +1326,12 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
 
         const activeSubTeamMembers = subTeamsMap[modalSelectedSubTeam] || [];
         const isCurrentSubTeamFull = isTeam && activeSubTeamMembers.length >= teamSize;
-        const neededForCurrentSubTeam = isTeam ? Math.max(0, teamSize - activeSubTeamMembers.length) : 1;
+        const maxIndividualLimit = activeModalProgram.per_team_limit || activeModalProgram.max_participants || 1;
+        const remainingIndividualSlots = Math.max(0, maxIndividualLimit - (activeModalProgram.assigned_students || []).length);
+        const isIndividualFull = !isTeam && remainingIndividualSlots <= 0;
+        const neededForCurrentSubTeam = isTeam 
+          ? Math.max(0, teamSize - activeSubTeamMembers.length) 
+          : remainingIndividualSlots;
 
         const isProgramGeneral = isProgramGeneralOrMixed(activeModalProgram);
         const applicableLimit = isProgramGeneral
@@ -1713,9 +1718,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                       const stats = getStudentProgramStats(member);
                       const limitCheck = checkStudentLimitForProgram(member, activeModalProgram);
                       const isLimitReached = limitCheck.reached;
-                      const isSelected = isTeam
-                        ? modalSelectedStudents.includes(member.id)
-                        : modalSelectedStudent === member.id;
+                      const isSelected = modalSelectedStudents.includes(member.id);
                       const isLeader = isTeam && (modalSelectedLeader || modalSelectedStudents[0]) === member.id;
 
                       const initials = (member.name || 'S')
@@ -1730,15 +1733,11 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                           key={member.id}
                           onClick={() => {
                             if (isLimitReached) return;
-                            if (isTeam) {
-                              if (isCurrentSubTeamFull) return;
-                              handleToggleCandidate(member.id);
-                            } else {
-                              setModalSelectedStudent(member.id);
-                            }
+                            if (isTeam ? isCurrentSubTeamFull : isIndividualFull) return;
+                            handleToggleCandidate(member.id);
                           }}
                           className={`group relative flex items-center gap-2.5 sm:gap-3 rounded-xl p-2 sm:p-2.5 border transition-all ${
-                            isLimitReached || (isTeam && isCurrentSubTeamFull)
+                            isLimitReached || (isTeam ? isCurrentSubTeamFull : isIndividualFull)
                               ? 'border-slate-200/60 bg-slate-100/60 opacity-60 cursor-not-allowed select-none'
                               : isSelected
                                 ? 'border-indigo-600 bg-indigo-50/70 shadow-2xs ring-1 ring-indigo-600/30 cursor-pointer'
@@ -1746,40 +1745,26 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                           }`}
                         >
                           {/* Selection indicator */}
-                          {isTeam ? (
-                            <input
-                              type="checkbox"
-                              disabled={isLimitReached || isCurrentSubTeamFull || (!isSelected && modalSelectedStudents.length >= neededForCurrentSubTeam)}
-                              checked={isSelected}
-                              onChange={() => {
-                                if (!isLimitReached && !isCurrentSubTeamFull) {
-                                  handleToggleCandidate(member.id);
-                                }
-                              }}
-                              className={`h-3.5 w-3.5 sm:h-4 sm:w-4 rounded ${
-                                isLimitReached || isCurrentSubTeamFull
-                                  ? 'border-slate-300 text-slate-300 cursor-not-allowed'
-                                  : 'border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer'
-                              }`}
-                            />
-                          ) : (
-                            <input
-                              type="radio"
-                              name="modalStudentSelection"
-                              disabled={isLimitReached}
-                              checked={isSelected}
-                              onChange={() => {
-                                if (!isLimitReached) {
-                                  setModalSelectedStudent(member.id);
-                                }
-                              }}
-                              className={`h-3.5 w-3.5 sm:h-4 sm:w-4 rounded-full ${
-                                isLimitReached
-                                  ? 'border-slate-300 text-slate-300 cursor-not-allowed'
-                                  : 'border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer'
-                              }`}
-                            />
-                          )}
+                          <input
+                            type="checkbox"
+                            disabled={
+                              isLimitReached ||
+                              (isTeam
+                                ? isCurrentSubTeamFull || (!isSelected && modalSelectedStudents.length >= neededForCurrentSubTeam)
+                                : isIndividualFull || (!isSelected && modalSelectedStudents.length >= remainingIndividualSlots))
+                            }
+                            checked={isSelected}
+                            onChange={() => {
+                              if (!isLimitReached && !(isTeam ? isCurrentSubTeamFull : isIndividualFull)) {
+                                handleToggleCandidate(member.id);
+                              }
+                            }}
+                            className={`h-3.5 w-3.5 sm:h-4 sm:w-4 rounded ${
+                              isLimitReached || (isTeam ? isCurrentSubTeamFull : isIndividualFull)
+                                ? 'border-slate-300 text-slate-300 cursor-not-allowed'
+                                : 'border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer'
+                            }`}
+                          />
 
                           {/* Student Avatar */}
                           <div
@@ -1924,51 +1909,27 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                     </div>
                   )
                 ) : (
-                  selectedStudentData && (
-                    <div
-                      className={`border-t px-3.5 py-2 sm:px-5 sm:py-2.5 flex items-center justify-between gap-2 shrink-0 animate-in fade-in ${
-                        isSelectedStudentLimitReached ? 'border-rose-200 bg-rose-50' : 'border-indigo-100 bg-indigo-50/90'
-                      }`}
-                    >
+                  modalSelectedStudents.length > 0 && (
+                    <div className="border-t border-indigo-100 bg-indigo-50/90 px-3.5 py-2 sm:px-5 sm:py-2.5 flex items-center justify-between gap-2 shrink-0 animate-in fade-in">
                       <div className="min-w-0 flex items-center gap-2">
-                        <div
-                          className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs ${
-                            isSelectedStudentLimitReached ? 'bg-rose-600 text-white' : 'bg-indigo-600 text-white'
-                          }`}
-                        >
-                          {isSelectedStudentLimitReached ? (
-                            <AlertCircle className="h-3 w-3" />
-                          ) : (
-                            <Check className="h-3 w-3" />
-                          )}
+                        <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 shadow-2xs bg-indigo-600 text-white">
+                          <Check className="h-3 w-3" />
                         </div>
                         <div className="min-w-0">
-                          <p
-                            className={`text-xs font-semibold truncate ${
-                              isSelectedStudentLimitReached ? 'text-rose-950' : 'text-indigo-950'
-                            }`}
-                          >
-                            <span className="font-bold">{selectedStudentData.name}</span>
+                          <p className="text-xs font-semibold truncate text-indigo-950">
+                            <span className="font-bold">{modalSelectedStudents.length} participant{modalSelectedStudents.length > 1 ? 's' : ''} selected</span>
                           </p>
-                          <p
-                            className={`text-[10px] sm:text-[11px] truncate ${
-                              isSelectedStudentLimitReached ? 'text-rose-700' : 'text-indigo-700'
-                            }`}
-                          >
-                            ID: #{selectedStudentData.student_id} · {getCategoryDisplay(selectedStudentData.category)}
+                          <p className="text-[10px] sm:text-[11px] truncate text-indigo-700">
+                            Available slots: {remainingIndividualSlots} · Maximum per team: {maxIndividualLimit}
                           </p>
                         </div>
                       </div>
                       <button
                         type="button"
-                        onClick={() => setModalSelectedStudent('')}
-                        className={`text-[11px] sm:text-xs font-medium underline shrink-0 ${
-                          isSelectedStudentLimitReached
-                            ? 'text-rose-700 hover:text-rose-900'
-                            : 'text-indigo-600 hover:text-indigo-800'
-                        }`}
+                        onClick={() => setModalSelectedStudents([])}
+                        className="text-[11px] sm:text-xs font-medium underline shrink-0 text-indigo-600 hover:text-indigo-800"
                       >
-                        Deselect
+                        Clear
                       </button>
                     </div>
                   )
@@ -1995,14 +1956,19 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                           modalSelectedLeader
                         );
                       } else {
-                        handleAssignStudent(activeModalProgram.id, modalSelectedStudent);
+                        handleAssignTeam(
+                          activeModalProgram.id,
+                          modalSelectedStudents,
+                          1,
+                          null
+                        );
                       }
                     }}
                     disabled={
                       assigningStudent ||
                       (isTeam
                         ? isCurrentSubTeamFull || modalSelectedStudents.length !== neededForCurrentSubTeam
-                        : !modalSelectedStudent || isSelectedStudentLimitReached)
+                        : isIndividualFull || modalSelectedStudents.length === 0)
                     }
                     className="inline-flex items-center gap-1.5 rounded-lg sm:rounded-xl bg-indigo-600 px-3 py-1.5 sm:px-5 sm:py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                   >
@@ -2010,7 +1976,7 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                     <span>
                       {assigningStudent ? (
                         <>
-                          <span className="hidden sm:inline">{isTeam ? 'Assigning Team...' : 'Assigning Student...'}</span>
+                          <span className="hidden sm:inline">{isTeam ? 'Assigning Team...' : 'Assigning...'}</span>
                           <span className="sm:hidden">Assigning...</span>
                         </>
                       ) : isTeam ? (
@@ -2034,20 +2000,20 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
                             </span>
                           </>
                         )
-                      ) : isSelectedStudentLimitReached ? (
+                      ) : isIndividualFull ? (
                         <>
-                          <span className="hidden sm:inline">Limit Reached for Student</span>
-                          <span className="sm:hidden">Limit Reached</span>
+                          <span className="hidden sm:inline">Program Slots Full</span>
+                          <span className="sm:hidden">Slots Full</span>
                         </>
-                      ) : modalSelectedStudent ? (
+                      ) : modalSelectedStudents.length > 0 ? (
                         <>
-                          <span className="hidden sm:inline">Confirm & Assign Student</span>
-                          <span className="sm:hidden">Confirm</span>
+                          <span className="hidden sm:inline">Confirm & Assign ({modalSelectedStudents.length} Selected)</span>
+                          <span className="sm:hidden">Confirm ({modalSelectedStudents.length})</span>
                         </>
                       ) : (
                         <>
-                          <span className="hidden sm:inline">Select a Student to Assign</span>
-                          <span className="sm:hidden">Select Student</span>
+                          <span className="hidden sm:inline">Select Students to Assign</span>
+                          <span className="sm:hidden">Select Students</span>
                         </>
                       )}
                     </span>
