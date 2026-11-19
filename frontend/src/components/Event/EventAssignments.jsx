@@ -400,6 +400,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
       if (slotFilter === 'assigned' && !isAssigned) return false;
       if (slotFilter === 'unassigned' && isAssigned) return false;
       if (slotFilter === 'full' && !isFull) return false;
+      if (slotFilter === 'partial' && (!isAssigned || isFull)) return false;
     }
 
     // 4. Program Type Filter
@@ -573,9 +574,10 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                 className="px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-2xs cursor-pointer"
               >
                 <option value="all">All Slots</option>
-                <option value="assigned">Assigned</option>
-                <option value="unassigned">Unassigned</option>
+                <option value="assigned">All Assigned</option>
+                <option value="partial">Partially Assigned</option>
                 <option value="full">Full Slots</option>
+                <option value="unassigned">Unassigned</option>
               </select>
 
               {/* Types Select Filter */}
@@ -612,12 +614,6 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
-            </div>
-
-            {/* Status indicator */}
-            <div className="flex items-center space-x-2 text-xs font-semibold text-emerald-700 bg-emerald-50/80 px-3 py-1.5 rounded-xl border border-emerald-200 shrink-0 self-start lg:self-auto">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
-              <span>{savingStatus}</span>
             </div>
           </div>
 
@@ -682,14 +678,17 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                         ? (program.max_teams_per_school || Math.floor((program.per_team_limit || program.team_size || 4) / (program.team_size || 4)) || 1) * (program.team_size || 4)
                         : (program.per_team_limit || program.max_participants || 1);
                       const isFull = isAssigned && progAssignments.length >= maxSlots;
+                      const isPartial = isAssigned && !isFull;
 
                       return (
                         <tr
                           key={program.id}
                           className={`transition-all border-b border-gray-100 ${
-                            isAssigned
+                            isFull
                               ? 'bg-emerald-50/20 hover:bg-emerald-50/35 border-l-[3.5px] border-l-emerald-500'
-                              : 'hover:bg-slate-50/80 border-l-[3.5px] border-l-transparent'
+                              : isPartial
+                                ? 'bg-amber-50/25 hover:bg-amber-50/45 border-l-[3.5px] border-l-amber-500'
+                                : 'hover:bg-slate-50/80 border-l-[3.5px] border-l-transparent'
                           }`}
                         >
                           {/* Competition Info */}
@@ -698,14 +697,16 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                               <span className="font-bold text-gray-900 text-xs sm:text-sm">
                                 {program.name}
                               </span>
-                              {isAssigned && (
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                  isFull
-                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                    : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                }`}>
+                              {isFull && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                                   <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
-                                  <span>{progAssignments.length} Assigned{isFull ? ' (Full)' : ''}</span>
+                                  <span>{progAssignments.length}/{maxSlots} Full</span>
+                                </span>
+                              )}
+                              {isPartial && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                                  <AlertCircle className="w-3 h-3 text-amber-600 shrink-0" />
+                                  <span>{progAssignments.length}/{maxSlots} Assigned</span>
                                 </span>
                               )}
                               {program.team_size && program.team_size > 1 && (
@@ -753,13 +754,19 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                                 setDrawerSubTeam(1);
                               }}
                               className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all shadow-2xs inline-flex items-center space-x-1.5 cursor-pointer ${
-                                isAssigned
+                                isFull
                                   ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                  : isPartial
+                                    ? 'bg-amber-500 hover:bg-amber-600 text-white'
+                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
                               }`}
                             >
                               {isAssigned ? <Users className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                              <span>{isAssigned ? `Manage (${progAssignments.length})` : 'Assign Members'}</span>
+                              <span>
+                                {isAssigned
+                                  ? `Manage (${progAssignments.length}/${maxSlots})`
+                                  : 'Assign Members'}
+                              </span>
                             </button>
                           </td>
                         </tr>
