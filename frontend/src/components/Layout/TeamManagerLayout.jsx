@@ -27,7 +27,7 @@ const TeamManagerLayout = () => {
   return (
     <div className="flex h-screen bg-slate-50">
       {/* Sidebar */}
-      <TeamManagerSidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
+      <TeamManagerSidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} user={teamUser} />
 
       {/* Main content column */}
       <div className="flex-1 flex flex-col overflow-hidden lg:ml-0">
