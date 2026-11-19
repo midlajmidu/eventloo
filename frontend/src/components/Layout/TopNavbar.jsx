@@ -380,23 +380,25 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
             </button>
           ) : null}
 
-          {/* Brand Logo for Mobile (or when no sidebar is mounted like Event Manager Portal) */}
-          <div className={`${typeof setSidebarOpen === 'function' ? 'lg:hidden' : 'flex'} items-center gap-2 shrink-0`}>
-            <Link
-              to={userRole === 'event_manager' ? '/user/dashboard' : isTeamManager ? '/team-manager' : '/admin'}
-              className="flex items-center gap-2 hover:opacity-90 transition-opacity"
-            >
-              {schoolLogo && !logoImgError ? (
-                <img
-                  src={schoolLogo}
-                  alt={schoolData?.name || 'School Logo'}
-                  className="h-8 w-8 rounded-lg object-contain bg-slate-50 border border-slate-200/80 p-0.5"
-                  onError={() => setLogoImgError(true)}
-                />
-              ) : null}
-              <EventlooLogo variant="full" size="sm" />
-            </Link>
-          </div>
+          {/* Brand Logo for Mobile (or when no sidebar is mounted like Event Manager Portal) - Hidden in Team Manager portal */}
+          {!isTeamManager && (
+            <div className={`${typeof setSidebarOpen === 'function' ? 'lg:hidden' : 'flex'} items-center gap-2 shrink-0`}>
+              <Link
+                to={userRole === 'event_manager' ? '/user/dashboard' : '/admin'}
+                className="flex items-center gap-2 hover:opacity-90 transition-opacity"
+              >
+                {schoolLogo && !logoImgError ? (
+                  <img
+                    src={schoolLogo}
+                    alt={schoolData?.name || 'School Logo'}
+                    className="h-8 w-8 rounded-lg object-contain bg-slate-50 border border-slate-200/80 p-0.5"
+                    onError={() => setLogoImgError(true)}
+                  />
+                ) : null}
+                <EventlooLogo variant="full" size="sm" />
+              </Link>
+            </div>
+          )}
 
           {/* Search Bar */}
           <div className="hidden md:block">
