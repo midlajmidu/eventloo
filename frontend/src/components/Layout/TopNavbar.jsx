@@ -380,17 +380,25 @@ const TopNavbar = ({ sidebarOpen, setSidebarOpen, user }) => {
             </button>
           ) : null}
 
-          {/* Brand Logo - Only shown when no sidebar is mounted (e.g. standalone views without navigation drawer) */}
-          {typeof setSidebarOpen !== 'function' ? (
-            <div className="flex items-center gap-2 shrink-0">
-              <Link
-                to={userRole === 'event_manager' ? '/user/dashboard' : '/admin'}
-                className="flex items-center gap-2 hover:opacity-90 transition-opacity"
-              >
-                <EventlooLogo variant="full" size="sm" />
-              </Link>
-            </div>
-          ) : null}
+          {/* Brand Logo - On mobile screen: shown on the right side of the hamburger button (lg:hidden); on desktop: shown if no vertical sidebar is mounted */}
+          <div
+            className={`items-center gap-2 shrink-0 ${
+              typeof setSidebarOpen === 'function' ? 'flex lg:hidden' : 'flex'
+            }`}
+          >
+            <Link
+              to={
+                isTeamManager
+                  ? '/team-manager'
+                  : userRole === 'event_manager'
+                  ? '/user/dashboard'
+                  : '/admin'
+              }
+              className="flex items-center gap-2 hover:opacity-90 transition-opacity"
+            >
+              <EventlooLogo variant="full" size="sm" />
+            </Link>
+          </div>
 
           {/* Search Bar */}
           <div className="hidden md:block">
