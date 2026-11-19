@@ -452,7 +452,7 @@ def assign_students(
 
 
 @transaction.atomic
-def remove_assignment_group(*, user, assignment):
+def remove_assignment_group(*, user, assignment, remove_whole_subteam=False):
     ensure_registration_modifiable(user, assignment.program.event)
     if getattr(user, 'school_id', None) != assignment.program.event.school_id:
         raise ValidationError('This assignment does not belong to your school.')
@@ -469,28 +469,70 @@ def remove_assignment_group(*, user, assignment):
         )
         if not manages_team:
             raise ValidationError('You can manage only your assigned team.')
-    if assignment.program.is_team_based:
+
+    program = assignment.program
+    team = assignment.team
+    sub_team_number = assignment.sub_team_number or 1
+
+    if program.is_team_based and remove_whole_subteam:
         ProgramResult.objects.filter(
-            program=assignment.program,
-            team=assignment.team,
-            sub_team_number=assignment.sub_team_number or 1,
+            program=program,
+            team=team,
+            sub_team_number=sub_team_number,
             is_team_result=True,
         ).delete()
         queryset = ProgramAssignment.objects.filter(
-            program=assignment.program,
-            team=assignment.team,
-            sub_team_number=assignment.sub_team_number or 1,
+            program=program,
+            team=team,
+            sub_team_number=sub_team_number,
         )
+    elif program.is_team_based:
+        remaining_subteam = ProgramAssignment.objects.filter(
+            program=program,
+            team=team,
+            sub_team_number=sub_team_number,
+        ).exclude(pk=assignment.pk)
+
+        was_leader = assignment.is_leader
+        queryset = ProgramAssignment.objects.filter(pk=assignment.pk)
+        deleted, _ = queryset.delete()
+
+        if remaining_subteam.exists():
+            if was_leader:
+                new_leader = remaining_subteam.first()
+                remaining_subteam.filter(pk=new_leader.pk).update(is_leader=True)
+                rep = new_leader.student
+            else:
+                leader = remaining_subteam.filter(is_leader=True).first()
+                rep = leader.student if leader else remaining_subteam.first().student
+            ProgramResult.objects.filter(
+                program=program,
+                team=team,
+                sub_team_number=sub_team_number,
+                is_team_result=True,
+            ).update(participant=rep)
+        else:
+            ProgramResult.objects.filter(
+                program=program,
+                team=team,
+                sub_team_number=sub_team_number,
+                is_team_result=True,
+            ).delete()
+
+        program.refresh_schedule_end()
+        recalculate_program_results(program)
+        return deleted
     else:
         ProgramResult.objects.filter(
-            program=assignment.program,
+            program=program,
             participant=assignment.student,
             is_team_result=False,
         ).delete()
         queryset = ProgramAssignment.objects.filter(pk=assignment.pk)
+
     deleted, _ = queryset.delete()
-    assignment.program.refresh_schedule_end()
-    recalculate_program_results(assignment.program)
+    program.refresh_schedule_end()
+    recalculate_program_results(program)
     return deleted
 
 
