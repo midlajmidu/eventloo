@@ -715,31 +715,6 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                               )}
                             </div>
 
-                            {/* Assigned Students Preview Pills */}
-                            {isAssigned && (
-                              <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                                {progAssignments.slice(0, 4).map((a) => {
-                                  const sName = getAssignmentStudentName(a);
-                                  const cNum = getAssignmentChestNumber(a);
-                                  return (
-                                    <span
-                                      key={a.id}
-                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-white text-slate-700 border border-slate-200/90 shadow-2xs"
-                                    >
-                                      <span className={`w-1.5 h-1.5 rounded-full ${a.is_leader ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-                                      <span className="truncate max-w-[120px]">{sName}</span>
-                                      {cNum ? <span className="text-slate-400 text-[9px]">#{cNum}</span> : null}
-                                    </span>
-                                  );
-                                })}
-                                {progAssignments.length > 4 && (
-                                  <span className="text-[10px] text-gray-400 font-medium">
-                                    +{progAssignments.length - 4} more
-                                  </span>
-                                )}
-                              </div>
-                            )}
-
                             {program.description && (
                               <div className="text-[11px] text-gray-400 mt-1 line-clamp-1">{program.description}</div>
                             )}
