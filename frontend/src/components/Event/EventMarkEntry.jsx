@@ -9,8 +9,7 @@ import {
   AlertCircle,
   Users,
   User,
-  RotateCcw,
-  Shuffle
+  RotateCcw
 } from 'lucide-react';
 import { eventProgramsAPI, markEntryAPI } from '../../services/api';
 import Pagination from '../common/Pagination';
@@ -24,7 +23,6 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const [shuffling, setShuffling] = useState(false);
   const [message, setMessage] = useState('');
   const [drawerError, setDrawerError] = useState('');
 
@@ -244,54 +242,6 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
   const hasAnyEnteredMarks = useMemo(() => {
     return participants.some(p => hasAnyJudgeMark(p) || (p.code_letter || '').trim() !== '');
   }, [participants, numJudges]);
-
-  const handleShuffleCodes = async () => {
-    if (!selectedProgram) return;
-
-    const hasSubmitted = ['submitted', 'published'].includes(selectedProgram.result_status) ||
-      participants.some(p => hasAnyJudgeMark(p));
-    
-    if (hasSubmitted) {
-      const confirmed = window.confirm(
-        'Marks or status are already recorded for this competition. Re-shuffling code letters will overwrite existing codes. Are you sure you want to re-shuffle?'
-      );
-      if (!confirmed) return;
-    }
-
-    setShuffling(true);
-    setDrawerError('');
-    try {
-      const response = await markEntryAPI.shuffleCodeLetters(eventId, selectedProgram.id, hasSubmitted);
-      if (response.data && response.data.participants) {
-        const codeMap = {};
-        response.data.participants.forEach(p => {
-          if (p.participant_id) codeMap[p.participant_id] = p.code_letter;
-          if (p.team_id && p.sub_team_number !== undefined) {
-            codeMap[`${p.team_id}_${p.sub_team_number}`] = p.code_letter;
-          }
-        });
-        setParticipants(prev => prev.map(p => {
-          const key = p.team_id && p.sub_team_number !== undefined ? `${p.team_id}_${p.sub_team_number}` : null;
-          const assignedCode = codeMap[p.id] || (key && codeMap[key]);
-          return assignedCode ? { ...p, code_letter: assignedCode } : p;
-        }));
-      }
-
-      // Re-fetch to ensure sync with backend
-      const refreshed = await markEntryAPI.getParticipants(eventId, selectedProgram.id);
-      const partsData = Array.isArray(refreshed.data) ? refreshed.data : (refreshed.data.results || []);
-      setParticipants(partsData);
-
-      setMessage('Code letters successfully shuffled and assigned!');
-      setTimeout(() => setMessage(''), 4000);
-    } catch (error) {
-      console.error('Error shuffling code letters:', error);
-      const errMsg = error.response?.data?.error || error.response?.data?.detail || 'Failed to shuffle code letters.';
-      setDrawerError(errMsg);
-    } finally {
-      setShuffling(false);
-    }
-  };
 
   const handleClearAllMarks = async () => {
     if (!selectedProgram) return;
@@ -899,19 +849,8 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                       </button>
                     </div>
 
-                    {/* Small Option Area: Shuffle Codes & Clear All Marks */}
-                    <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
-                      <button
-                        type="button"
-                        onClick={handleShuffleCodes}
-                        disabled={shuffling || loadingParticipants || participants.length === 0}
-                        className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-indigo-700 hover:text-indigo-800 active:text-indigo-900 bg-indigo-50 hover:bg-indigo-100/80 active:bg-indigo-200/70 border border-indigo-200 rounded-lg transition-all duration-150 shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                        title="Randomly shuffle and assign secret code letters (A, B, C...) to participants"
-                      >
-                        <Shuffle className={`w-3.5 h-3.5 ${shuffling ? 'animate-spin' : ''}`} />
-                        <span>{shuffling ? 'Shuffling...' : 'Shuffle Codes'}</span>
-                      </button>
-
+                    {/* Small Option Area: Clear All Marks */}
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
                       <button
                         type="button"
                         onClick={handleClearAllMarks}

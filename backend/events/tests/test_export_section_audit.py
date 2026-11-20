@@ -242,6 +242,12 @@ class ExportSectionDeepAuditTests(APITestCase):
         self.assertIn("VALUATION SHEET", pdf_val['text'])
         self.assertTrue("A" in pdf_val['text'] or "B" in pdf_val['text'])
 
+        # 3. Calling Sheet: Code Letter column is NOT included in Call List
+        res_call = self.client.get(f'/api/programs/{self.p_lp_ind.id}/formatted-calling-sheet/')
+        self.assertEqual(res_call.status_code, 200)
+        pdf_call = self.extract_pdf_text(res_call.content)
+        self.assertNotIn("Code Letter", pdf_call['text'])
+
     def test_valuation_sheet_dynamic_judge_count(self):
         # 1. Test 4 judges: set program.num_judges = 4
         self.p_lp_ind.num_judges = 4

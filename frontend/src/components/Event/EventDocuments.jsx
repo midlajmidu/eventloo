@@ -633,12 +633,11 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                   <td class="center font-bold">${escapeHtml(row.chestNo)}</td>
                   <td>${escapeHtml(row.participantNames)}</td>
                   <td>${escapeHtml(row.teamName)}</td>
-                  <td class="center font-bold">${escapeHtml(row.codeLetter || '')}</td>
                 </tr>
               `;
             }).join('');
           } else {
-            rowsHtml = '<tr><td colspan="5" class="center">No assigned participants.</td></tr>';
+            rowsHtml = '<tr><td colspan="4" class="center">No assigned participants.</td></tr>';
           }
 
           pageCount++;
@@ -667,11 +666,10 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
               <table class="main-table">
                 <thead>
                   <tr>
-                    <th class="center" style="width: 8%;">Sl. No</th>
-                    <th class="center" style="width: 14%;">Chest No</th>
-                    <th style="width: 38%;">Participant</th>
-                    <th style="width: 26%;">Team Name</th>
-                    <th class="center" style="width: 14%;">Code Letter</th>
+                    <th class="center" style="width: 10%;">Sl. No</th>
+                    <th class="center" style="width: 16%;">Chest No</th>
+                    <th style="width: 44%;">Participant</th>
+                    <th style="width: 30%;">Team Name</th>
                   </tr>
                 </thead>
                 <tbody>

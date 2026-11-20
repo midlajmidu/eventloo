@@ -1851,6 +1851,45 @@ class EventBusinessLogicTests(TestCase):
         team_codes = [r.code_letter for r in team_results]
         self.assertEqual(set(team_codes), {'A', 'B'})
 
+    def test_ensure_program_code_letters_auto_generated_in_mark_entry(self):
+        from events.services import ensure_program_code_letters
+
+        # 1. Individual program with 2 students
+        ind_program = Program.objects.create(
+            event=self.event,
+            name='Auto Code Letter Solo',
+            category='junior',
+            is_team_based=False,
+            num_judges=2,
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=ind_program,
+            student_ids=[self.students[0].id, self.students[1].id],
+        )
+
+        # 2. Assigning students automatically generates shuffled code letters
+        self.assertEqual(ProgramResult.objects.filter(program=ind_program).count(), 2)
+        initial_codes = list(ProgramResult.objects.filter(program=ind_program).values_list('code_letter', flat=True))
+        self.assertEqual(set(initial_codes), {'A', 'B'})
+
+        # 3. GET mark_entry endpoint returns the pre-assigned shuffled code letters for every chest number
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        endpoint = f'/api/events/{self.event.id}/programs/{ind_program.id}/results/mark_entry/'
+        response = client.get(endpoint)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 2)
+
+        codes = [item['code_letter'] for item in response.data]
+        self.assertEqual(set(codes), {'A', 'B'})
+        self.assertTrue(all(item['chest_number'] for item in response.data))
+
+        # 4. Repeated visits preserve the EXACT same code letter mapping (stable)
+        response_second = client.get(endpoint)
+        self.assertEqual(response_second.status_code, 200)
+        codes_second = [item['code_letter'] for item in response_second.data]
+        self.assertEqual(codes, codes_second)
+
     def test_shuffle_code_letters_api_endpoint(self):
         program = Program.objects.create(
             event=self.event,

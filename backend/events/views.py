@@ -4115,6 +4115,10 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
                 program.num_judges = program.event.num_judges
                 program.save(update_fields=['num_judges'])
         
+        # Ensure shuffled code letters exist for all assigned participants / sub-teams
+        from .services import ensure_program_code_letters
+        ensure_program_code_letters(program)
+
         # Get all assignments for this program
         assignments = ProgramAssignment.objects.filter(program=program)
         
@@ -4909,7 +4913,7 @@ def generate_formatted_calling_sheet(request, program_id):
         
         if assignments.exists():
             # Single table with all information
-            table_data = [['Chest No.', 'Participant Name', 'Gender', 'Team Name', 'Code Letter']]
+            table_data = [['Chest No.', 'Participant Name', 'Gender', 'Team Name']]
             
             # For all programs, group by team and show only main name with "and team" suffix
             team_groups = {}
@@ -4940,10 +4944,7 @@ def generate_formatted_calling_sheet(request, program_id):
                                 chest_no = ''
                         chest_no_display = str(chest_no) if chest_no else 'N/A'
                         gender = assignment.student.get_gender_display() if assignment.student.gender else 'Not set'
-                        from events.models import ProgramResult
-                        res = ProgramResult.objects.filter(program=program, participant=assignment.student).first()
-                        c_code = res.code_letter if res and res.code_letter else ''
-                        table_data.append([chest_no_display, participant_name, gender, team_name, c_code])
+                        table_data.append([chest_no_display, participant_name, gender, team_name])
                 else:
                     grouped_entry = get_grouped_assignments_for_report(
                         program,
@@ -4954,9 +4955,9 @@ def generate_formatted_calling_sheet(request, program_id):
                     )[0]
                     participant_name = grouped_entry['participant_names']
                     chest_no_display = grouped_entry['chest_no'] or 'N/A'
-                    table_data.append([chest_no_display, participant_name, grouped_entry['gender'], team_name, grouped_entry.get('code_letter') or ''])
+                    table_data.append([chest_no_display, participant_name, grouped_entry['gender'], team_name])
             
-            table = Table(table_data, colWidths=[0.9*inch, 2.3*inch, 0.9*inch, 1.3*inch, 1.0*inch])
+            table = Table(table_data, colWidths=[1.1*inch, 2.7*inch, 1.1*inch, 1.5*inch])
             table.setStyle(TableStyle([
                 # Header styling (green background, white text - same as valuation sheet)
                 ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#27AE60')),
@@ -5013,6 +5014,9 @@ def get_program_participants(request, program_id):
         # Build dynamic category lookup map
         from accounts.models import StudentCategory
         cat_map = {c.code: c.name for c in StudentCategory.objects.filter(school=program.event.school)}
+
+        from .services import ensure_program_code_letters
+        ensure_program_code_letters(program)
 
         from events.models import ProgramResult
         code_map = {}
@@ -7702,6 +7706,8 @@ def get_grouped_assignments_for_report(program, assignments, event):
 
     code_map = {}
     if program:
+        from .services import ensure_program_code_letters
+        ensure_program_code_letters(program)
         from events.models import ProgramResult
         for r in ProgramResult.objects.filter(program=program).only('id', 'participant_id', 'team_id', 'sub_team_number', 'code_letter'):
             if program.is_team_based:

@@ -447,6 +447,7 @@ def assign_students(
                 is_team_result=False,
                 defaults={'team': team, 'entry_status': 'draft'},
             )
+    ensure_program_code_letters(program)
     program.refresh_schedule_end()
     return assignments
 
@@ -886,6 +887,89 @@ def shuffle_program_code_letters(program, force=False):
     rng.shuffle(codes)
 
     for result, code in zip(results, codes):
+        result.code_letter = code
+        result.save(update_fields=['code_letter'])
+
+    return results
+
+
+@transaction.atomic
+def ensure_program_code_letters(program):
+    """
+    Ensures that every assigned participant or group sub-team in a program
+    has a pre-assigned, uniquely shuffled secret code letter (A, B, C...).
+    Existing code letters are strictly preserved so codes do not change on repeated visits.
+    If any results are missing code letters, unused letters from the sequential alphabet
+    are assigned in a shuffled manner.
+    """
+    import random
+
+    # 1. Ensure ProgramResult rows exist for all assignments
+    if not program.is_team_based:
+        assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
+        for assignment in assignments:
+            if assignment.student_id:
+                ProgramResult.objects.get_or_create(
+                    program=program,
+                    participant=assignment.student,
+                    is_team_result=False,
+                    defaults={'team': assignment.team, 'entry_status': 'draft'},
+                )
+        results = list(ProgramResult.objects.select_for_update().filter(program=program).order_by('id'))
+    else:
+        assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
+        grouped_subteams = set()
+        for assignment in assignments:
+            if assignment.team_id:
+                grouped_subteams.add((assignment.team_id, getattr(assignment, 'sub_team_number', 1) or 1))
+
+        for team_id, sub_team_num in grouped_subteams:
+            rep = ProgramAssignment.objects.filter(
+                program=program, team_id=team_id, sub_team_number=sub_team_num, is_leader=True
+            ).first()
+            if not rep:
+                rep = ProgramAssignment.objects.filter(
+                    program=program, team_id=team_id, sub_team_number=sub_team_num
+                ).first()
+            if rep and rep.student_id:
+                ProgramResult.objects.get_or_create(
+                    program=program,
+                    team_id=team_id,
+                    sub_team_number=sub_team_num,
+                    is_team_result=True,
+                    defaults={'participant': rep.student, 'entry_status': 'draft'},
+                )
+        results = list(ProgramResult.objects.select_for_update().filter(program=program).order_by('id'))
+
+    if not results:
+        return []
+
+    # Check which results are missing code_letter
+    missing_results = [r for r in results if not (r.code_letter or '').strip()]
+    if not missing_results:
+        return results
+
+    # If ALL results are missing code letters, generate full sequence and shuffle
+    if len(missing_results) == len(results):
+        codes = generate_code_sequence(len(results))
+        rng = random.SystemRandom()
+        rng.shuffle(codes)
+        for result, code in zip(results, codes):
+            result.code_letter = code
+            result.save(update_fields=['code_letter'])
+        return results
+
+    # Partial missing: preserve existing codes and allocate unused letters
+    existing_codes = set((r.code_letter or '').strip().upper() for r in results if (r.code_letter or '').strip())
+    needed_count = len(missing_results)
+
+    candidate_codes = generate_code_sequence(len(results) + len(existing_codes) + 5)
+    available_codes = [c for c in candidate_codes if c not in existing_codes]
+
+    rng = random.SystemRandom()
+    rng.shuffle(available_codes)
+
+    for result, code in zip(missing_results, available_codes[:needed_count]):
         result.code_letter = code
         result.save(update_fields=['code_letter'])
 
