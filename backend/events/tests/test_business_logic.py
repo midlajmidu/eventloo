@@ -1890,6 +1890,50 @@ class EventBusinessLogicTests(TestCase):
         codes_second = [item['code_letter'] for item in response_second.data]
         self.assertEqual(codes, codes_second)
 
+    def test_shuffled_code_letters_never_orderly_for_six_participants(self):
+        # Create 6 students and assign them to a program
+        students_6 = []
+        for i in range(1, 7):
+            u = User.objects.create(
+                username=f'six_stu_{i}',
+                name=f'Six Stu {i}',
+                role='student',
+                school=self.school,
+                category='junior',
+                gender='male'
+            )
+            self.team.members.add(u)
+            students_6.append(u)
+
+        prog_6 = Program.objects.create(
+            event=self.event,
+            name='Six Participants Test',
+            category='junior',
+            is_team_based=False,
+            num_judges=2,
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=prog_6,
+            student_ids=[s.id for s in students_6],
+        )
+
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        endpoint = f'/api/events/{self.event.id}/programs/{prog_6.id}/results/mark_entry/'
+        response = client.get(endpoint)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data), 6)
+
+        codes = [item['code_letter'] for item in response.data]
+        # Must be a permutation of A, B, C, D, E, F
+        self.assertEqual(set(codes), {'A', 'B', 'C', 'D', 'E', 'F'})
+        # Must NOT be sequential alphabetical A, B, C, D, E, F
+        self.assertNotEqual(codes, ['A', 'B', 'C', 'D', 'E', 'F'])
+        # Must NOT start with A, B
+        self.assertFalse(codes[0] == 'A' and codes[1] == 'B')
+        # Must NOT be sorted ascending
+        self.assertNotEqual(codes, sorted(codes))
+
     def test_shuffle_code_letters_api_endpoint(self):
         program = Program.objects.create(
             event=self.event,

@@ -886,6 +886,22 @@ def shuffle_program_code_letters(program, force=False):
     rng = random.SystemRandom()
     rng.shuffle(codes)
 
+    sequential_seq = generate_code_sequence(len(results))
+    attempts = 0
+    while len(codes) > 1 and attempts < 100:
+        if len(codes) == 2:
+            if codes == ['A', 'B']:
+                codes = ['B', 'A']
+            break
+        orderly_check = (codes == sequential_seq) or (codes[0] == 'A' and codes[1] == 'B') or (codes == sorted(codes))
+        if not orderly_check:
+            break
+        rng.shuffle(codes)
+        attempts += 1
+
+    if len(codes) == 2 and codes == ['A', 'B']:
+        codes = ['B', 'A']
+
     for result, code in zip(results, codes):
         result.code_letter = code
         result.save(update_fields=['code_letter'])
@@ -894,15 +910,21 @@ def shuffle_program_code_letters(program, force=False):
 
 
 @transaction.atomic
-def ensure_program_code_letters(program):
+def ensure_program_code_letters(program, force=False):
     """
     Ensures that every assigned participant or group sub-team in a program
     has a pre-assigned, uniquely shuffled secret code letter (A, B, C...).
-    Existing code letters are strictly preserved so codes do not change on repeated visits.
-    If any results are missing code letters, unused letters from the sequential alphabet
-    are assigned in a shuffled manner.
+    Guarantees that code letters are NEVER orderly (e.g. participant 1 getting A, participant 2 getting B, etc.).
+    If there are N participants (e.g. 6), letters A, B, C, D, E, F are shuffled by system and distributed randomly.
+    If marks have already been submitted, existing code letters are strictly preserved unless force=True.
     """
     import random
+
+    # Check if marks are already submitted or published
+    has_submitted_marks = program.results.filter(
+        entry_status='submitted',
+        average_marks__isnull=False,
+    ).exists() or program.is_published
 
     # 1. Ensure ProgramResult rows exist for all assignments
     if not program.is_team_based:
@@ -944,32 +966,65 @@ def ensure_program_code_letters(program):
     if not results:
         return []
 
-    # Check which results are missing code_letter
-    missing_results = [r for r in results if not (r.code_letter or '').strip()]
-    if not missing_results:
-        return results
-
-    # If ALL results are missing code letters, generate full sequence and shuffle
-    if len(missing_results) == len(results):
-        codes = generate_code_sequence(len(results))
+    # If marks have already been submitted and not forced, preserve existing codes
+    if has_submitted_marks and not force:
+        missing_results = [r for r in results if not (r.code_letter or '').strip()]
+        if not missing_results:
+            return results
+        existing_codes = set((r.code_letter or '').strip().upper() for r in results if (r.code_letter or '').strip())
+        candidate_codes = generate_code_sequence(len(results) + len(existing_codes) + 5)
+        available_codes = [c for c in candidate_codes if c not in existing_codes]
         rng = random.SystemRandom()
-        rng.shuffle(codes)
-        for result, code in zip(results, codes):
+        rng.shuffle(available_codes)
+        for result, code in zip(missing_results, available_codes[:len(missing_results)]):
             result.code_letter = code
             result.save(update_fields=['code_letter'])
         return results
 
-    # Partial missing: preserve existing codes and allocate unused letters
-    existing_codes = set((r.code_letter or '').strip().upper() for r in results if (r.code_letter or '').strip())
-    needed_count = len(missing_results)
+    # If marks have NOT been submitted (or force=True):
+    # Check whether existing codes are complete, valid AND NOT orderly
+    current_codes = [(r.code_letter or '').strip().upper() for r in results]
+    sequential_seq = generate_code_sequence(len(results))
 
-    candidate_codes = generate_code_sequence(len(results) + len(existing_codes) + 5)
-    available_codes = [c for c in candidate_codes if c not in existing_codes]
+    any_empty = any(not c for c in current_codes)
+    has_duplicates = len(set(current_codes)) != len(current_codes)
+    # Check if codes match the exact alphabetical sequence [A, B, C...] or are sorted ascending
+    is_orderly = (
+        len(results) > 1 and (
+            current_codes == sequential_seq or
+            current_codes == sorted(current_codes) or
+            (len(results) > 2 and current_codes[0] == 'A' and current_codes[1] == 'B')
+        )
+    )
 
+    # If all participants have unique codes and they are already properly shuffled (not orderly), keep them stable
+    if not any_empty and not has_duplicates and not is_orderly and not force:
+        return results
+
+    # Otherwise, generate full sequence (A, B, C...) and cryptographically shuffle it!
+    codes = generate_code_sequence(len(results))
     rng = random.SystemRandom()
-    rng.shuffle(available_codes)
+    rng.shuffle(codes)
 
-    for result, code in zip(missing_results, available_codes[:needed_count]):
+    # Strictly guarantee that for len(results) > 1, the shuffled sequence is NEVER orderly:
+    # 1. Not in exact alphabetical order (A, B, C, D...)
+    # 2. Not starting with ['A', 'B']
+    attempts = 0
+    while len(codes) > 1 and attempts < 100:
+        if len(codes) == 2:
+            if codes == ['A', 'B']:
+                codes = ['B', 'A']
+            break
+        orderly_check = (codes == sequential_seq) or (codes[0] == 'A' and codes[1] == 'B') or (codes == sorted(codes))
+        if not orderly_check:
+            break
+        rng.shuffle(codes)
+        attempts += 1
+
+    if len(codes) == 2 and codes == ['A', 'B']:
+        codes = ['B', 'A']
+
+    for result, code in zip(results, codes):
         result.code_letter = code
         result.save(update_fields=['code_letter'])
 
