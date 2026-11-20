@@ -30,7 +30,8 @@ import {
   ChevronDown,
   ChevronUp,
   Layers,
-  HelpCircle
+  HelpCircle,
+  Shuffle
 } from 'lucide-react';
 import Pagination from '../common/Pagination';
 
@@ -62,6 +63,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
   const [openMenuId, setOpenMenuId] = useState(null);
   const [assignedStudents, setAssignedStudents] = useState([]);
   const [loadingAssignedStudents, setLoadingAssignedStudents] = useState(false);
+  const [shufflingCodes, setShufflingCodes] = useState(false);
   
   // Filter and sort states
   const [searchInput, setSearchInput] = useState('');
@@ -399,6 +401,23 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
       setAssignedStudents([]);
     } finally {
       setLoadingAssignedStudents(false);
+    }
+  };
+
+  const handleShuffleProgramCodes = async () => {
+    if (!selectedViewProgram) return;
+    const actualEventId = eventId || event?.id;
+    setShufflingCodes(true);
+    try {
+      await markEntryAPI.shuffleCodeLetters(actualEventId, selectedViewProgram.id, true);
+      const res = await markEntryAPI.getParticipants(actualEventId, selectedViewProgram.id);
+      const participants = res.data || [];
+      setAssignedStudents(participants);
+    } catch (error) {
+      console.error('Error shuffling code letters:', error);
+      alert(error.response?.data?.error || 'Failed to shuffle code letters');
+    } finally {
+      setShufflingCodes(false);
     }
   };
 
@@ -1117,11 +1136,23 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
 
                 {/* Assigned Participants List Section */}
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
                     <h3 className="text-sm font-bold text-gray-900 flex items-center space-x-2">
                       <Users className="h-4 w-4 text-indigo-600" />
                       <span>Assigned Participants ({assignedStudents.length})</span>
                     </h3>
+                    {!readOnly && (
+                      <button
+                        type="button"
+                        onClick={handleShuffleProgramCodes}
+                        disabled={shufflingCodes || loadingAssignedStudents || assignedStudents.length === 0}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-indigo-700 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs"
+                        title="Randomly shuffle and assign secret code letters (A, B, C...) to participants"
+                      >
+                        <Shuffle className={`w-3.5 h-3.5 ${shufflingCodes ? 'animate-spin' : ''}`} />
+                        <span>{shufflingCodes ? 'Shuffling...' : 'Shuffle Codes'}</span>
+                      </button>
+                    )}
                   </div>
 
                   {loadingAssignedStudents ? (
@@ -1134,7 +1165,8 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                       <table className="w-full text-left border-collapse text-xs">
                         <thead className="bg-gray-50 border-b border-gray-200 font-semibold text-gray-600">
                           <tr>
-                            <th className="px-4 py-2.5 w-24">Chest #</th>
+                            <th className="px-4 py-2.5 w-20 text-center">Chest #</th>
+                            <th className="px-4 py-2.5 w-24 text-center">Code Letter</th>
                             <th className="px-4 py-2.5">Participant Name</th>
                             <th className="px-4 py-2.5">Team</th>
                           </tr>
@@ -1142,8 +1174,17 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                         <tbody className="divide-y divide-gray-100 bg-white">
                           {assignedStudents.map((std, i) => (
                             <tr key={std.id || i} className="hover:bg-gray-50/60 transition-colors">
-                              <td className="px-4 py-2.5 font-bold text-indigo-700">
+                              <td className="px-4 py-2.5 text-center font-bold text-indigo-700">
                                 {std.chest_number || std.student_details?.chest_number || '#'}
+                              </td>
+                              <td className="px-4 py-2.5 text-center">
+                                {std.code_letter ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    {std.code_letter}
+                                  </span>
+                                ) : (
+                                  <span className="text-gray-300 font-mono text-xs">-</span>
+                                )}
                               </td>
                               <td className="px-4 py-2.5 font-semibold text-gray-900">
                                 {std.participant_name || std.student_name || std.name || std.student_details?.name || 'Participant'}

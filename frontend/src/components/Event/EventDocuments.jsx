@@ -63,6 +63,7 @@ const groupDocumentAssignments = (program, assignments = []) => {
   if (!program?.is_team_based) {
     return assignments.map(assignment => ({
       chestNo: getAssignmentChest(assignment),
+      codeLetter: assignment?.code_letter || assignment?.code || '',
       participantNames: getParticipantName(assignment, ''),
       teamName: getTeamName(assignment, 'Individual'),
       members: [assignment]
@@ -86,8 +87,10 @@ const groupDocumentAssignments = (program, assignments = []) => {
       const chest = getAssignmentChest(member);
       return chest ? `${name} (${chest})` : name;
     }).join(', ');
+    const codeLetter = ordered.find(m => m.code_letter || m.code)?.code_letter || ordered.find(m => m.code_letter || m.code)?.code || '';
     return {
       chestNo: chestNumbers.join(', '),
+      codeLetter,
       participantNames,
       teamName: getTeamName(ordered[0], 'Team'),
       members: ordered
@@ -630,11 +633,12 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                   <td class="center font-bold">${escapeHtml(row.chestNo)}</td>
                   <td>${escapeHtml(row.participantNames)}</td>
                   <td>${escapeHtml(row.teamName)}</td>
+                  <td class="center font-bold">${escapeHtml(row.codeLetter || '')}</td>
                 </tr>
               `;
             }).join('');
           } else {
-            rowsHtml = '<tr><td colspan="4" class="center">No assigned participants.</td></tr>';
+            rowsHtml = '<tr><td colspan="5" class="center">No assigned participants.</td></tr>';
           }
 
           pageCount++;
@@ -663,10 +667,11 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
               <table class="main-table">
                 <thead>
                   <tr>
-                    <th class="center" style="width: 10%;">Sl. No</th>
-                    <th class="center" style="width: 16%;">Chest No</th>
-                    <th style="width: 44%;">Participant</th>
-                    <th style="width: 30%;">Team Name</th>
+                    <th class="center" style="width: 8%;">Sl. No</th>
+                    <th class="center" style="width: 14%;">Chest No</th>
+                    <th style="width: 38%;">Participant</th>
+                    <th style="width: 26%;">Team Name</th>
+                    <th class="center" style="width: 14%;">Code Letter</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -732,12 +737,17 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
             6
           ));
 
+          const documentRows = assignments.length > 0 ? groupDocumentAssignments(prog, assignments) : [];
+          const sortedDocRows = [...documentRows].sort((a, b) => (a.codeLetter || '').localeCompare(b.codeLetter || ''));
+          rowCount = Math.max(sortedDocRows.length, rowCount);
+
           // Generate exact number of rows matching participating candidates / sub-teams
           for (let r = 0; r < rowCount; r++) {
             const judgeCells = Array.from({ length: judgeCount }, () => `<td style="padding: 14px 6px;"></td>`).join('');
+            const cLetter = sortedDocRows[r]?.codeLetter || '';
             rowsHtml += `
               <tr>
-                <td class="center font-bold" style="padding: 14px 6px;"></td>
+                <td class="center font-bold" style="padding: 14px 6px;">${escapeHtml(cLetter)}</td>
                 ${judgeCells}
               </tr>
             `;
@@ -831,7 +841,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                   <td class="center font-bold" style="padding: 10px 6px;">${escapeHtml(row.chestNo)}</td>
                   <td style="padding: 10px 8px;">${escapeHtml(row.participantNames)}</td>
                   <td class="center" style="padding: 10px 6px;">${escapeHtml(gender)}</td>
-                  <td class="center" style="padding: 10px 6px;"></td>
+                  <td class="center font-bold" style="padding: 10px 6px;">${escapeHtml(row.codeLetter || '')}</td>
                   <td style="padding: 10px 6px;"></td>
                 </tr>
               `;

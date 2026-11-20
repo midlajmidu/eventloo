@@ -1791,6 +1791,87 @@ class EventBusinessLogicTests(TestCase):
         self.assertEqual(res.code_letter, '')
         self.assertEqual(res.points_earned, 0)
 
+    def test_generate_code_sequence_format(self):
+        from events.services import generate_code_sequence
+        seq_5 = generate_code_sequence(5)
+        self.assertEqual(seq_5, ['A', 'B', 'C', 'D', 'E'])
+
+        seq_30 = generate_code_sequence(30)
+        self.assertEqual(seq_30[0], 'A')
+        self.assertEqual(seq_30[25], 'Z')
+        self.assertEqual(seq_30[26], 'AA')
+        self.assertEqual(seq_30[29], 'AD')
+        self.assertEqual(len(seq_30), 30)
+        self.assertEqual(len(set(seq_30)), 30)
+
+    def test_shuffle_program_code_letters_individual_and_team(self):
+        from events.services import shuffle_program_code_letters
+
+        # 1. Individual program with 2 students
+        ind_program = Program.objects.create(
+            event=self.event,
+            name='Solo Speech',
+            category='junior',
+            is_team_based=False,
+            num_judges=2,
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=ind_program,
+            student_ids=[self.students[0].id, self.students[1].id],
+        )
+        results = shuffle_program_code_letters(ind_program)
+        self.assertEqual(len(results), 2)
+        codes = [r.code_letter for r in results]
+        self.assertEqual(set(codes), {'A', 'B'})
+
+        # 2. Team program with 2 sub-teams
+        team_program = Program.objects.create(
+            event=self.event,
+            name='Group Dance',
+            category='junior',
+            is_team_based=True,
+            team_size=2,
+            max_teams_per_school=2,
+            num_judges=2,
+        )
+        # Sub-team 1
+        assign_students(
+            user=self.admin, team=self.team, program=team_program,
+            student_ids=[self.students[0].id, self.students[1].id],
+            sub_team_number=1,
+        )
+        # Sub-team 2
+        assign_students(
+            user=self.admin, team=self.team, program=team_program,
+            student_ids=[self.students[2].id, self.students[3].id],
+            sub_team_number=2,
+        )
+        team_results = shuffle_program_code_letters(team_program)
+        self.assertEqual(len(team_results), 2)
+        team_codes = [r.code_letter for r in team_results]
+        self.assertEqual(set(team_codes), {'A', 'B'})
+
+    def test_shuffle_code_letters_api_endpoint(self):
+        program = Program.objects.create(
+            event=self.event,
+            name='Shuffle API Test',
+            category='junior',
+            is_team_based=False,
+            num_judges=2,
+        )
+        assign_students(
+            user=self.admin, team=self.team, program=program,
+            student_ids=[self.students[0].id, self.students[1].id],
+        )
+        client = APIClient()
+        client.force_authenticate(self.admin)
+        endpoint = f'/api/events/{self.event.id}/programs/{program.id}/results/shuffle_code_letters/'
+        response = client.post(endpoint, {}, format='json')
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(response.data['results']), 2)
+        assigned_codes = [r['code_letter'] for r in response.data['results']]
+        self.assertEqual(set(assigned_codes), {'A', 'B'})
+
     def test_global_points_sum_each_published_event_percentage(self):
         opponent = User.objects.create_user(
             username='opponent', email='opponent@example.com', password='x',

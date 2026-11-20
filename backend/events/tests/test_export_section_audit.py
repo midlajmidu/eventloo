@@ -224,6 +224,24 @@ class ExportSectionDeepAuditTests(APITestCase):
         self.assertIn("LP Classical Music", pdf['text'])
         self.assertIn("Powered by eventloo.in", pdf['text'])
 
+    def test_green_room_and_valuation_sheet_display_shuffled_code_letters(self):
+        from events.services import shuffle_program_code_letters
+        shuffle_program_code_letters(self.p_lp_ind)
+
+        # 1. Green Room Sheet
+        res_gr = self.client.get(f'/api/events/{self.event.id}/green-room-sign/?program_id={self.p_lp_ind.id}')
+        self.assertEqual(res_gr.status_code, 200)
+        pdf_gr = self.extract_pdf_text(res_gr.content)
+        self.assertIn("Green Room Sign Sheet", pdf_gr['text'])
+        self.assertTrue("A" in pdf_gr['text'] or "B" in pdf_gr['text'])
+
+        # 2. Valuation Sheet
+        res_val = self.client.get(f'/api/events/{self.event.id}/valuation-sheet/?program_id={self.p_lp_ind.id}&copies=1')
+        self.assertEqual(res_val.status_code, 200)
+        pdf_val = self.extract_pdf_text(res_val.content)
+        self.assertIn("VALUATION SHEET", pdf_val['text'])
+        self.assertTrue("A" in pdf_val['text'] or "B" in pdf_val['text'])
+
     def test_valuation_sheet_dynamic_judge_count(self):
         # 1. Test 4 judges: set program.num_judges = 4
         self.p_lp_ind.num_judges = 4

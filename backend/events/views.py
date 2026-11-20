@@ -2099,6 +2099,38 @@ class EventViewSet(viewsets.ModelViewSet):
             'published_program_ids': published,
             'skipped_incomplete_program_ids': skipped,
         })
+
+    @action(detail=True, methods=['post'])
+    def bulk_shuffle_code_letters(self, request, pk=None):
+        """Shuffle and assign secret code letters for all un-submitted programs in an event."""
+        event = self.get_object()
+        from .services import shuffle_program_code_letters
+        programs = Program.objects.filter(event=event)
+        category = request.data.get('category')
+        if category and category != 'all':
+            programs = programs.filter(category=category)
+
+        shuffled_count = 0
+        skipped_count = 0
+        for program in programs:
+            # Skip if results are already submitted or published
+            if program.is_published or program.results.filter(entry_status='submitted', average_marks__isnull=False).exists():
+                skipped_count += 1
+                continue
+            res = shuffle_program_code_letters(program, force=False)
+            if res:
+                shuffled_count += 1
+
+        audit_security_event(
+            request, 'event_bulk_code_letters_shuffle', 'success',
+            school_id=event.school_id, target=event.id,
+        )
+
+        return Response({
+            'message': f'Code letters shuffled for {shuffled_count} programs ({skipped_count} skipped).',
+            'shuffled_programs_count': shuffled_count,
+            'skipped_count': skipped_count,
+        })
     
     @action(detail=True, methods=['get'])
     def admin_programs(self, request, pk=None):
@@ -4020,7 +4052,7 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in [
             'create', 'update', 'partial_update', 'destroy',
-            'bulk_mark_entry', 'clear_marks',
+            'bulk_mark_entry', 'clear_marks', 'shuffle_code_letters',
         ]:
             return [IsAdminOrEventManager()]
         elif self.action in ['list', 'retrieve', 'results_summary', 'results_pdf', 'mark_entry']:
@@ -4388,6 +4420,38 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
         return Response({
             'message': f'All marks cleared successfully for {program.name}.',
             'cleared_count': results.count(),
+        })
+
+    @action(detail=False, methods=['post'])
+    def shuffle_code_letters(self, request, event_pk=None, program_pk=None):
+        """Shuffle and assign secret code letters for all competing participants in a program."""
+        try:
+            program = Program.objects.get(
+                id=program_pk, event_id=event_pk,
+                event__school_id=request.user.school_id,
+            )
+        except Program.DoesNotExist:
+            return Response({'error': 'Program not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        from django.core.exceptions import ValidationError
+        from .services import shuffle_program_code_letters
+
+        force = request.data.get('force', False)
+        try:
+            results = shuffle_program_code_letters(program, force=force)
+        except ValidationError as exc:
+            err_msg = str(exc.messages[0] if getattr(exc, 'messages', None) else exc)
+            return Response({'error': err_msg}, status=status.HTTP_400_BAD_REQUEST)
+
+        audit_security_event(
+            request, 'program_code_letters_shuffle', 'success',
+            school_id=program.event.school_id, target=program.id,
+        )
+
+        serializer = MarkEntrySerializer(results, many=True)
+        return Response({
+            'message': f'Generated shuffled code letters for {len(results)} entries in {program.name}.',
+            'results': serializer.data,
         })
     
     @action(detail=False, methods=['get'])
@@ -4876,7 +4940,10 @@ def generate_formatted_calling_sheet(request, program_id):
                                 chest_no = ''
                         chest_no_display = str(chest_no) if chest_no else 'N/A'
                         gender = assignment.student.get_gender_display() if assignment.student.gender else 'Not set'
-                        table_data.append([chest_no_display, participant_name, gender, team_name, ''])
+                        from events.models import ProgramResult
+                        res = ProgramResult.objects.filter(program=program, participant=assignment.student).first()
+                        c_code = res.code_letter if res and res.code_letter else ''
+                        table_data.append([chest_no_display, participant_name, gender, team_name, c_code])
                 else:
                     grouped_entry = get_grouped_assignments_for_report(
                         program,
@@ -4887,7 +4954,7 @@ def generate_formatted_calling_sheet(request, program_id):
                     )[0]
                     participant_name = grouped_entry['participant_names']
                     chest_no_display = grouped_entry['chest_no'] or 'N/A'
-                    table_data.append([chest_no_display, participant_name, grouped_entry['gender'], team_name, ''])
+                    table_data.append([chest_no_display, participant_name, grouped_entry['gender'], team_name, grouped_entry.get('code_letter') or ''])
             
             table = Table(table_data, colWidths=[0.9*inch, 2.3*inch, 0.9*inch, 1.3*inch, 1.0*inch])
             table.setStyle(TableStyle([
@@ -4946,6 +5013,14 @@ def get_program_participants(request, program_id):
         # Build dynamic category lookup map
         from accounts.models import StudentCategory
         cat_map = {c.code: c.name for c in StudentCategory.objects.filter(school=program.event.school)}
+
+        from events.models import ProgramResult
+        code_map = {}
+        for r in ProgramResult.objects.filter(program=program).only('id', 'participant_id', 'team_id', 'sub_team_number', 'code_letter'):
+            if program.is_team_based:
+                code_map[(r.team_id, r.sub_team_number or 1)] = r.code_letter or ""
+            else:
+                code_map[r.participant_id] = r.code_letter or ""
         
         participants = []
         if program.is_team_based:
@@ -4994,6 +5069,7 @@ def get_program_participants(request, program_id):
                     'team_name': team_display,
                     'category_display': cat_display,
                     'chest_number': ", ".join(chest_numbers) if chest_numbers else None,
+                    'code_letter': code_map.get((team_id, sub_num), ""),
                     'team_id': team_id,
                     'sub_team_number': sub_num,
                     'is_leader': True,
@@ -5024,6 +5100,7 @@ def get_program_participants(request, program_id):
                     'team_name': assignment.team.name if assignment.team else None,
                     'category_display': category_display,
                     'chest_number': assignment.chest_number,
+                    'code_letter': code_map.get(assignment.student_id, ""),
                     'team_id': assignment.team_id,
                     'sub_team_number': assignment.sub_team_number or 1,
                     'is_leader': assignment.is_leader,
@@ -6447,6 +6524,11 @@ def generate_program_details_report(request, event_id):
         
         # Get school settings for custom template
         from accounts.models import SchoolSettings
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
         school_settings = SchoolSettings.get_settings(event.school)
         
         # Create PDF using custom template
@@ -6662,6 +6744,11 @@ def generate_complete_results_report(request, event_id):
         
         # Get school settings for custom template
         from accounts.models import SchoolSettings
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
         school_settings = SchoolSettings.get_settings(event.school)
         
         # Create PDF using custom template
@@ -6819,6 +6906,11 @@ def generate_first_place_report(request, event_id):
         
         # Get school settings for custom template
         from accounts.models import SchoolSettings
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
         school_settings = SchoolSettings.get_settings(event.school)
         
         # Create PDF using custom template
@@ -6918,6 +7010,11 @@ def generate_second_place_report(request, event_id):
         
         # Get school settings for custom template
         from accounts.models import SchoolSettings
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
         school_settings = SchoolSettings.get_settings(event.school)
         
         # Create PDF using custom template
@@ -7017,6 +7114,11 @@ def generate_third_place_report(request, event_id):
         
         # Get school settings for custom template
         from accounts.models import SchoolSettings
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
         school_settings = SchoolSettings.get_settings(event.school)
         
         # Create PDF using custom template
@@ -7118,6 +7220,11 @@ def generate_participants_team_report(request, event_id):
         
         # Get school settings for custom template
         from accounts.models import SchoolSettings
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
         school_settings = SchoolSettings.get_settings(event.school)
         
         # Create PDF using custom template
@@ -7447,6 +7554,11 @@ def generate_all_results_report(request, event_id):
         
         # Get school settings for custom template
         from accounts.models import SchoolSettings
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib import colors
+        from reportlab.lib.units import inch
         school_settings = SchoolSettings.get_settings(event.school)
         
         # Create PDF using custom template
@@ -7588,6 +7700,15 @@ def get_grouped_assignments_for_report(program, assignments, event):
             return "Not set"
         return a.student.get_gender_display()
 
+    code_map = {}
+    if program:
+        from events.models import ProgramResult
+        for r in ProgramResult.objects.filter(program=program).only('id', 'participant_id', 'team_id', 'sub_team_number', 'code_letter'):
+            if program.is_team_based:
+                code_map[(r.team_id, r.sub_team_number or 1)] = r.code_letter or ""
+            else:
+                code_map[r.participant_id] = r.code_letter or ""
+
     is_team = program.is_team_based if program else False
     if is_team:
         grouped = {}
@@ -7631,6 +7752,7 @@ def get_grouped_assignments_for_report(program, assignments, event):
             combined_names = ", ".join(name_parts)
             chest_display = ", ".join(chest_parts)
             team_name = leader.team.name if (leader and leader.team) else ""
+            assigned_code = code_map.get((key[0], key[1]), "")
 
             entries.append({
                 'team_id': leader.team_id if leader else (a_list[0].team_id if a_list else None),
@@ -7638,6 +7760,7 @@ def get_grouped_assignments_for_report(program, assignments, event):
                 'participant_names': combined_names,
                 'team_name': team_name,
                 'gender': ', '.join(gender_parts),
+                'code_letter': assigned_code,
                 'is_group': True,
                 'assignments': a_list,
                 'program': program
@@ -7651,6 +7774,7 @@ def get_grouped_assignments_for_report(program, assignments, event):
             if getattr(a, 'is_leader', False) and nm:
                 nm += " (Leader)"
             team_name = a.team.name if a.team else ""
+            assigned_code = code_map.get(a.student_id, "")
 
             entries.append({
                 'team_id': a.team_id,
@@ -7658,6 +7782,7 @@ def get_grouped_assignments_for_report(program, assignments, event):
                 'participant_names': nm,
                 'team_name': team_name,
                 'gender': resolve_gender(a),
+                'code_letter': assigned_code,
                 'is_group': False,
                 'assignments': [a],
                 'program': a.program if hasattr(a, 'program') else program
@@ -7901,7 +8026,7 @@ def generate_green_room_sign_sheet(request, event_id):
                         Paragraph(escape(entry['chest_no']), table_body_center),
                         Paragraph(escape(entry['participant_names']), table_body_style),
                         Paragraph(escape(entry['gender']), table_body_center),
-                        Paragraph("", table_body_center),
+                        Paragraph(escape(entry.get('code_letter') or ""), table_body_center),
                         Paragraph("", table_body_style)
                     ])
 
@@ -8223,14 +8348,21 @@ def generate_valuation_sheet(request, event_id):
                 # Determine rows: exact total number of participants / sub-teams competing
                 if assignments.exists():
                     entries = get_grouped_assignments_for_report(program, assignments, event)
-                    row_count = len(entries)
+                    has_any_codes = any(bool(e.get('code_letter')) for e in entries)
+                    if has_any_codes:
+                        # Sort by code letter so judges evaluate in exact sequence A, B, C...
+                        entries = sorted(entries, key=lambda e: (not bool(e.get('code_letter')), e.get('code_letter', '')))
+                        for entry in entries:
+                            c_letter = entry.get('code_letter') or ""
+                            row_cells = [Paragraph(f"<b>{escape(c_letter)}</b>", table_body_center)] + ([""] * judge_count)
+                            table_data.append(row_cells)
+                    else:
+                        for _ in range(len(entries)):
+                            row_cells = [""] * (judge_count + 1)
+                            table_data.append(row_cells)
                 else:
-                    row_count = 1 if not only_with_participants else 0
-
-                # Leave code letter and marks empty for organizers and judges to enter manually
-                for _ in range(row_count):
-                    row_cells = [""] * (judge_count + 1)
-                    table_data.append(row_cells)
+                    if not only_with_participants:
+                        table_data.append([""] * (judge_count + 1))
 
                 main_table = Table(
                     table_data,

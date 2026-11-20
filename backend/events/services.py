@@ -797,3 +797,97 @@ def program_results_complete(program):
         average_marks__isnull=False,
     ).count()
     return submitted > 0
+
+
+def generate_code_sequence(count: int) -> list[str]:
+    """
+    Generates an alphabetical sequence for anonymous judging:
+    1..26 -> 'A'..'Z'
+    27..52 -> 'AA'..'AZ'
+    53..78 -> 'BA'..'BZ', etc.
+    """
+    import string
+    alphabet = string.ascii_uppercase
+    codes = []
+    for i in range(count):
+        if i < 26:
+            codes.append(alphabet[i])
+        else:
+            first = alphabet[(i // 26) - 1]
+            second = alphabet[i % 26]
+            codes.append(f"{first}{second}")
+    return codes
+
+
+@transaction.atomic
+def shuffle_program_code_letters(program, force=False):
+    """
+    Generates and shuffles secret code letters (A, B, C...) for all competing
+    participants or sub-teams in a program and saves them to ProgramResult.
+    Raises ValidationError if marks have already been submitted and force is False.
+    """
+    from django.core.exceptions import ValidationError
+    import random
+
+    # Check if marks have already been submitted
+    has_submitted_marks = program.results.filter(
+        entry_status='submitted',
+        average_marks__isnull=False,
+    ).exists()
+
+    if has_submitted_marks and not force:
+        raise ValidationError(
+            f"Cannot re-shuffle code letters for '{program.name}' because marks have already been submitted. "
+            "Clear marks first if you wish to re-evaluate."
+        )
+
+    # Ensure results exist for all assignments
+    if not program.is_team_based:
+        assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
+        for assignment in assignments:
+            ProgramResult.objects.get_or_create(
+                program=program,
+                participant=assignment.student,
+                is_team_result=False,
+                defaults={'team': assignment.team, 'entry_status': 'draft'},
+            )
+        results = list(ProgramResult.objects.select_for_update().filter(program=program).order_by('id'))
+    else:
+        assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
+        grouped_subteams = set()
+        for assignment in assignments:
+            if assignment.team_id:
+                grouped_subteams.add((assignment.team_id, getattr(assignment, 'sub_team_number', 1) or 1))
+
+        for team_id, sub_team_num in grouped_subteams:
+            rep = ProgramAssignment.objects.filter(
+                program=program, team_id=team_id, sub_team_number=sub_team_num, is_leader=True
+            ).first()
+            if not rep:
+                rep = ProgramAssignment.objects.filter(
+                    program=program, team_id=team_id, sub_team_number=sub_team_num
+                ).first()
+            if rep:
+                ProgramResult.objects.get_or_create(
+                    program=program,
+                    team_id=team_id,
+                    sub_team_number=sub_team_num,
+                    is_team_result=True,
+                    defaults={'participant': rep.student, 'entry_status': 'draft'},
+                )
+        results = list(ProgramResult.objects.select_for_update().filter(program=program).order_by('id'))
+
+    if not results:
+        return []
+
+    # Generate sequence and shuffle cryptographically
+    codes = generate_code_sequence(len(results))
+    rng = random.SystemRandom()
+    rng.shuffle(codes)
+
+    for result, code in zip(results, codes):
+        result.code_letter = code
+        result.save(update_fields=['code_letter'])
+
+    return results
+

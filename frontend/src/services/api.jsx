@@ -445,9 +445,17 @@ export const eventsAPI = {
   // Get chest numbers / assigned participants for an event
   getChestNumbers: (eventId, params = {}) => api.get(`events/${eventId}/chest_numbers/`, { params }),
 
+  // Shuffle code letters for a program
+  shuffleCodeLetters: (eventId, programId, force = false) =>
+    api.post(`events/${eventId}/programs/${programId}/results/shuffle_code_letters/`, { force }),
+
   // Toggle schedule publish status for team managers
   toggleSchedulePublish: (eventId, isPublished) =>
     api.post(`events/${eventId}/toggle_schedule_publish/`, isPublished !== undefined ? { is_published: isPublished } : {}),
+
+  // Bulk shuffle secret code letters across un-submitted programs
+  bulkShuffleCodeLetters: (eventId, params = {}) =>
+    api.post(`events/${eventId}/bulk_shuffle_code_letters/`, params),
 };
 
 // Programs API
@@ -744,6 +752,10 @@ export const eventProgramsAPI = {
 
   // Get chest numbers / assigned participants for an event
   getChestNumbers: (eventId, params = {}) => api.get(`events/${eventId}/chest_numbers/`, { params }),
+
+  // Shuffle code letters for a program
+  shuffleCodeLetters: (eventId, programId, force = false) =>
+    api.post(`events/${eventId}/programs/${programId}/results/shuffle_code_letters/`, { force }),
 };
 
 export const eventProgramTypesAPI = {
@@ -917,6 +929,10 @@ export const markEntryAPI = {
     api.post(`events/${eventId}/programs/${programId}/results/clear_marks/`, {
       confirm_published_clear: confirmPublishedClear,
     }),
+
+  // Shuffle and assign code letters
+  shuffleCodeLetters: (eventId, programId, force = false) =>
+    api.post(`events/${eventId}/programs/${programId}/results/shuffle_code_letters/`, { force }),
   
   // Get results summary
   getResultsSummary: (eventId, programId) =>
