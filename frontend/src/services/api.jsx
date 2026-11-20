@@ -911,6 +911,12 @@ export const markEntryAPI = {
       entry_status: entryStatus,
       confirm_published_edit: confirmPublishedEdit,
     }),
+
+  // Clear all marks for a program
+  clearMarks: (eventId, programId, confirmPublishedClear = false) =>
+    api.post(`events/${eventId}/programs/${programId}/results/clear_marks/`, {
+      confirm_published_clear: confirmPublishedClear,
+    }),
   
   // Get results summary
   getResultsSummary: (eventId, programId) =>

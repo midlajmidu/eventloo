@@ -2334,6 +2334,7 @@ class StudentViewSet(viewsets.ModelViewSet):
     
     def _process_student_excel_with_ai(self, df):
         """Processing of Excel data for student creation with auto-category resolution and team assignment."""
+        import pandas as pd
         results = {
             'valid_students': [],
             'errors': [],

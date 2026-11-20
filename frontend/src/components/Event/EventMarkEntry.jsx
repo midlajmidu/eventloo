@@ -8,7 +8,8 @@ import {
   ArrowUpDown,
   AlertCircle,
   Users,
-  User
+  User,
+  RotateCcw
 } from 'lucide-react';
 import { eventProgramsAPI, markEntryAPI } from '../../services/api';
 import Pagination from '../common/Pagination';
@@ -21,6 +22,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
   const [loadingParticipants, setLoadingParticipants] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [message, setMessage] = useState('');
   const [drawerError, setDrawerError] = useState('');
 
@@ -235,6 +237,75 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
       }
       return p;
     }));
+  };
+
+  const hasAnyEnteredMarks = useMemo(() => {
+    return participants.some(p => hasAnyJudgeMark(p) || (p.code_letter || '').trim() !== '');
+  }, [participants, numJudges]);
+
+  const handleClearAllMarks = async () => {
+    if (!selectedProgram) return;
+
+    let confirmPublishedClear = false;
+    if (selectedProgram.is_published) {
+      confirmPublishedClear = window.confirm(
+        `Results for ${selectedProgram.name} are currently published. Clearing all marks will unpublish the results and reset all scores. Do you want to proceed?`
+      );
+      if (!confirmPublishedClear) return;
+    } else {
+      const confirmClear = window.confirm(
+        `Are you sure you want to clear all entered marks and code letters for ${selectedProgram.name}?`
+      );
+      if (!confirmClear) return;
+    }
+
+    setClearing(true);
+    setDrawerError('');
+
+    try {
+      await markEntryAPI.clearMarks(eventId, selectedProgram.id, confirmPublishedClear);
+
+      // Reset in-memory participant rows
+      setParticipants(prev => prev.map(p => ({
+        ...p,
+        code_letter: '',
+        judge1_marks: '',
+        judge2_marks: '',
+        judge3_marks: '',
+        judge4_marks: '',
+        total_marks: null,
+        average_marks: null,
+        raw_total_marks: null,
+      })));
+
+      // Remove from completed programs set
+      setCompletedPrograms(prev => {
+        const next = new Set(prev);
+        next.delete(selectedProgram.id);
+        return next;
+      });
+
+      setSelectedProgram(prev => prev ? {
+        ...prev,
+        is_published: false,
+        is_finished: false,
+        result_status: 'pending',
+      } : null);
+
+      fetchPrograms();
+
+      window.dispatchEvent(new CustomEvent('pointsUpdated', { detail: { eventId: parseInt(eventId) } }));
+
+      setMessage(`All marks cleared successfully for ${selectedProgram.name}.`);
+      setTimeout(() => setMessage(''), 4000);
+    } catch (error) {
+      console.error('Error clearing marks:', error);
+      const err = error.response?.data?.error || 'Failed to clear marks. Please try again.';
+      setDrawerError(err);
+      setMessage(err);
+    } finally {
+      setClearing(false);
+    }
   };
 
   const handleBulkSubmit = async (isDraft = false) => {
@@ -724,6 +795,75 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                 </div>
               ) : (
                 <>
+                  {/* Quick Controls Bar: Sorting & Clear Option Area */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-0.5">
+                    {/* Sort buttons */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mr-1">Sort:</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSortField('chest');
+                          setSortOrder(prev => sortField === 'chest' && prev === 'asc' ? 'desc' : 'asc');
+                        }}
+                        className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors flex items-center ${
+                          sortField === 'chest' 
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' 
+                            : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <ArrowUpDown className="w-3 h-3 mr-1" />
+                        <span>Chest #</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSortField('code');
+                          setSortOrder(prev => sortField === 'code' && prev === 'asc' ? 'desc' : 'asc');
+                        }}
+                        className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors flex items-center ${
+                          sortField === 'code' 
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' 
+                            : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <ArrowUpDown className="w-3 h-3 mr-1" />
+                        <span>Code Letter</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSortField('marks');
+                          setSortOrder(prev => sortField === 'marks' && prev === 'desc' ? 'asc' : 'desc');
+                        }}
+                        className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors flex items-center ${
+                          sortField === 'marks' 
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' 
+                            : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <ArrowUpDown className="w-3 h-3 mr-1" />
+                        <span>Marks</span>
+                      </button>
+                    </div>
+
+                    {/* Small Option Area: Clear All Marks */}
+                    <div className="flex items-center gap-2 self-start sm:self-auto">
+                      <button
+                        type="button"
+                        onClick={handleClearAllMarks}
+                        disabled={clearing || !hasAnyEnteredMarks}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-rose-600 hover:text-rose-700 active:text-rose-800 bg-rose-50 hover:bg-rose-100/80 active:bg-rose-200/70 border border-rose-200 rounded-lg transition-all duration-150 shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                        title="Clear all entered judge marks and code letters for this competition"
+                      >
+                        <RotateCcw className={`w-3.5 h-3.5 ${clearing ? 'animate-spin' : ''}`} />
+                        <span>{clearing ? 'Clearing...' : 'Clear All Marks'}</span>
+                      </button>
+                    </div>
+                  </div>
+
                   {/* Desktop Table View (md and up) */}
                   <div className="hidden md:block border border-gray-200 rounded-xl overflow-x-auto shadow-2xs">
                     <table className="w-full text-left border-collapse min-w-[600px]">
@@ -958,54 +1098,6 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                       </div>
                     )}
                   </div>
-
-                  {/* Sorting Action Buttons */}
-                  <div className="flex flex-wrap items-center gap-2 pt-1 sm:pt-2">
-                    <button
-                      onClick={() => {
-                        setSortField('chest');
-                        setSortOrder(prev => sortField === 'chest' && prev === 'asc' ? 'desc' : 'asc');
-                      }}
-                      className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center ${
-                        sortField === 'chest' 
-                          ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' 
-                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <ArrowUpDown className="w-3 h-3 mr-1" />
-                      <span>Chest #</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setSortField('code');
-                        setSortOrder(prev => sortField === 'code' && prev === 'asc' ? 'desc' : 'asc');
-                      }}
-                      className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center ${
-                        sortField === 'code' 
-                          ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' 
-                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <ArrowUpDown className="w-3 h-3 mr-1" />
-                      <span>Code Letter</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setSortField('marks');
-                        setSortOrder(prev => sortField === 'marks' && prev === 'desc' ? 'asc' : 'desc');
-                      }}
-                      className={`px-2.5 sm:px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors flex items-center ${
-                        sortField === 'marks' 
-                          ? 'bg-indigo-50 text-indigo-700 border-indigo-300 shadow-2xs' 
-                          : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                      }`}
-                    >
-                      <ArrowUpDown className="w-3 h-3 mr-1" />
-                      <span>Marks</span>
-                    </button>
-                  </div>
                 </>
               )}
             </div>
@@ -1038,6 +1130,21 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                   <span>
                     <strong className="text-gray-800">{participants.length - participants.filter(p => hasAnyJudgeMark(p)).length}</strong> absent
                   </span>
+                  {hasAnyEnteredMarks && (
+                    <>
+                      <span className="text-gray-300">·</span>
+                      <button
+                        type="button"
+                        onClick={handleClearAllMarks}
+                        disabled={clearing}
+                        className="text-rose-600 hover:text-rose-700 font-medium hover:underline inline-flex items-center gap-1 cursor-pointer"
+                        title="Clear all entered marks for this competition"
+                      >
+                        <RotateCcw className={`w-3 h-3 ${clearing ? 'animate-spin' : ''}`} />
+                        <span>Clear all marks</span>
+                      </button>
+                    </>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">

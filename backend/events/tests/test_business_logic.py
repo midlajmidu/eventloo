@@ -1747,6 +1747,50 @@ class EventBusinessLogicTests(TestCase):
         self.assertEqual(res.judge1_marks, Decimal('45.02'))
         self.assertEqual(res.judge2_marks, Decimal('42.35'))
 
+    def test_clear_all_marks_resets_marks_and_recalculates_points(self):
+        program = Program.objects.create(
+            event=self.event,
+            name='Clear Marks Test Program',
+            category='junior',
+            is_team_based=False,
+            num_judges=2,
+        )
+        assign_students(
+            user=self.admin,
+            team=self.team,
+            program=program,
+            student_ids=[self.students[0].id],
+        )
+        res = ProgramResult.objects.get(program=program, participant=self.students[0])
+        client = APIClient()
+        client.force_authenticate(self.admin)
+
+        # Submit marks first
+        bulk_endpoint = f'/api/events/{self.event.id}/programs/{program.id}/results/bulk_mark_entry/'
+        resp = client.post(bulk_endpoint, {
+            'marks': [{'id': res.id, 'code_letter': 'A', 'judge1_marks': 40, 'judge2_marks': 45}],
+            'entry_status': 'submitted',
+        }, format='json')
+        self.assertEqual(resp.status_code, 200, resp.data)
+
+        res.refresh_from_db()
+        self.assertEqual(res.entry_status, 'submitted')
+        self.assertIsNotNone(res.total_marks)
+
+        # Clear marks
+        clear_endpoint = f'/api/events/{self.event.id}/programs/{program.id}/results/clear_marks/'
+        response = client.post(clear_endpoint, {}, format='json')
+        self.assertEqual(response.status_code, 200)
+
+        res.refresh_from_db()
+        self.assertEqual(res.entry_status, 'draft')
+        self.assertIsNone(res.judge1_marks)
+        self.assertIsNone(res.judge2_marks)
+        self.assertIsNone(res.total_marks)
+        self.assertIsNone(res.average_marks)
+        self.assertEqual(res.code_letter, '')
+        self.assertEqual(res.points_earned, 0)
+
     def test_global_points_sum_each_published_event_percentage(self):
         opponent = User.objects.create_user(
             username='opponent', email='opponent@example.com', password='x',

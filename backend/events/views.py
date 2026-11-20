@@ -4020,7 +4020,7 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
     def get_permissions(self):
         if self.action in [
             'create', 'update', 'partial_update', 'destroy',
-            'bulk_mark_entry',
+            'bulk_mark_entry', 'clear_marks',
         ]:
             return [IsAdminOrEventManager()]
         elif self.action in ['list', 'retrieve', 'results_summary', 'results_pdf', 'mark_entry']:
@@ -4326,6 +4326,68 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
         return Response({
             'message': f'{entry_status.title()} marks for {len(updated_results)} entries.',
             'results': serializer.data
+        })
+
+    @action(detail=False, methods=['post'])
+    def clear_marks(self, request, event_pk=None, program_pk=None):
+        """Clear all entered marks, code letters and results for a program."""
+        try:
+            program = Program.objects.get(
+                id=program_pk, event_id=event_pk,
+                event__school_id=request.user.school_id,
+            )
+        except Program.DoesNotExist:
+            return Response(
+                {'error': 'Program not found'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        confirm_published_clear = request.data.get('confirm_published_clear', False)
+        if program.is_published:
+            if not confirm_published_clear:
+                return Response({
+                    'error': 'Results for this program are published. Please confirm that you want to unpublish and clear all marks.',
+                    'requires_confirmation': True,
+                }, status=status.HTTP_409_CONFLICT)
+            program.is_published = False
+            program.is_finished = False
+            program.save(update_fields=['is_published', 'is_finished', 'updated_at'])
+        elif program.is_finished:
+            program.is_finished = False
+            program.save(update_fields=['is_finished', 'updated_at'])
+
+        from django.db import transaction
+        from .services import recalculate_program_results
+
+        with transaction.atomic():
+            results = ProgramResult.objects.select_for_update().filter(program=program)
+            for r in results:
+                r.code_letter = ''
+                r.judge1_marks = None
+                r.judge2_marks = None
+                r.judge3_marks = None
+                r.judge4_marks = None
+                r.raw_total_marks = None
+                r.total_marks = None
+                r.average_marks = None
+                r.position = None
+                r.points_earned = 0
+                r.grade = ''
+                r.grade_extra_points = 0
+                r.entry_status = 'draft'
+                r.comments = ''
+                r.save()
+
+            recalculate_program_results(program)
+
+        audit_security_event(
+            request, 'program_marks_clear', 'success',
+            school_id=program.event.school_id, target=program.id,
+        )
+
+        return Response({
+            'message': f'All marks cleared successfully for {program.name}.',
+            'cleared_count': results.count(),
         })
     
     @action(detail=False, methods=['get'])
