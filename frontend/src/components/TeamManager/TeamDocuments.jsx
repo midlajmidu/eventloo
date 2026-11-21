@@ -460,8 +460,9 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
                       <th className="py-3 px-4 w-12 text-center">#</th>
                       <th className="py-3 px-4 text-center w-24">Chest No</th>
                       <th className="py-3 px-4">Participant</th>
-                      <th className="py-3 px-4 text-center w-24">Gender</th>
-                      <th className="py-3 px-4">Competitions & Secret Codes</th>
+                      <th className="py-3 px-4 text-center w-28">Category</th>
+                      <th className="py-3 px-4 text-center w-20">Gender</th>
+                      <th className="py-3 px-4">Competitions</th>
                     </tr>
                   ) : (
                     <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200">
@@ -489,6 +490,11 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
                           <td className="py-3 px-4 font-bold text-slate-900 align-top">
                             {item.participant_names || item.participant_name || '—'}
                           </td>
+                          <td className="py-3 px-4 text-center align-top">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold border border-slate-200">
+                              {item.category || 'General'}
+                            </span>
+                          </td>
                           <td className="py-3 px-4 text-center text-slate-600 font-medium capitalize align-top">
                             {item.gender || '—'}
                           </td>
@@ -496,16 +502,9 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
                             {item.competitions && item.competitions.length > 0 ? (
                               <div className="flex flex-col gap-1.5 py-0.5">
                                 {item.competitions.map((comp, cIdx) => (
-                                  <div key={cIdx} className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-semibold text-slate-800 text-[11px]">
-                                      &bull; {comp.program_name}
-                                      {comp.is_team_based && comp.team_size ? ` (${comp.team_size} Participants)` : ''}
-                                    </span>
-                                    {comp.code_letter ? (
-                                      <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-extrabold text-[10px] tracking-wider border border-indigo-200 shadow-2xs">
-                                        Code: {comp.code_letter}
-                                      </span>
-                                    ) : null}
+                                  <div key={cIdx} className="font-semibold text-slate-800 text-[11px]">
+                                    &bull; {comp.program_name}
+                                    {comp.is_team_based && comp.team_size ? ` (${comp.team_size} Participants)` : ''}
                                   </div>
                                 ))}
                               </div>

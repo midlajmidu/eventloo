@@ -557,14 +557,13 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                 studentMap[sid] = {
                   name: sName,
                   chestNo: a.chest_number || a.student?.chest_number || '—',
+                  category: a.category || a.student?.category || program.category || 'General',
                   gender: a.gender || a.student?.gender || '—',
                   competitions: []
                 };
               }
-              const code = a.code_letter || '';
               studentMap[sid].competitions.push({
                 name: program.name,
-                code: code,
                 is_team_based: program.is_team_based,
                 team_size: program.team_size
               });
@@ -582,17 +581,17 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
           sortedStudents.forEach((student, sIdx) => {
             const compHtml = student.competitions.map(c => {
               const countSuffix = (c.is_team_based && c.team_size) ? ` (${c.team_size} Participants)` : '';
-              const codeBadge = c.code ? ` &nbsp;<strong style="color: #312E81;">(Code: ${escapeHtml(c.code)})</strong>` : '';
-              return `<div style="margin-bottom: 2px;">&bull; ${escapeHtml(c.name)}${escapeHtml(countSuffix)}${codeBadge}</div>`;
+              return `<div style="margin-bottom: 2px;">&bull; ${escapeHtml(c.name)}${escapeHtml(countSuffix)}</div>`;
             }).join('');
 
             rows += `
               <tr>
-                <td class="center font-semibold" style="width: 8%; color: #64748b;">${sIdx + 1}</td>
-                <td class="center font-bold" style="width: 14%; color: #4338ca;">${escapeHtml(student.chestNo)}</td>
-                <td class="font-bold" style="width: 28%;">${escapeHtml(student.name)}</td>
+                <td class="center font-semibold" style="width: 7%; color: #64748b;">${sIdx + 1}</td>
+                <td class="center font-bold" style="width: 13%; color: #4338ca;">${escapeHtml(student.chestNo)}</td>
+                <td class="font-bold" style="width: 25%;">${escapeHtml(student.name)}</td>
+                <td class="center" style="width: 15%; font-weight: 500;">${escapeHtml(student.category)}</td>
                 <td class="center" style="width: 10%; text-transform: capitalize;">${escapeHtml(student.gender)}</td>
-                <td style="width: 40%; line-height: 1.4;">${compHtml || '—'}</td>
+                <td style="width: 30%; line-height: 1.4;">${compHtml || '—'}</td>
               </tr>
             `;
           });
@@ -603,11 +602,12 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
               <table class="main-table">
                 <thead>
                   <tr>
-                    <th class="center" style="width: 8%;">#</th>
-                    <th class="center" style="width: 14%;">Chest No</th>
-                    <th style="width: 28%;">Participant</th>
+                    <th class="center" style="width: 7%;">#</th>
+                    <th class="center" style="width: 13%;">Chest No</th>
+                    <th style="width: 25%;">Participant</th>
+                    <th class="center" style="width: 15%;">Category</th>
                     <th class="center" style="width: 10%;">Gender</th>
-                    <th style="width: 40%;">Competitions & Secret Codes</th>
+                    <th style="width: 30%;">Competitions</th>
                   </tr>
                 </thead>
                 <tbody>

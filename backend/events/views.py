@@ -8533,6 +8533,9 @@ def generate_call_list(request, event_id):
                     except ValueError:
                         teams = teams.none()
 
+                from accounts.models import StudentCategory
+                cat_map = {c.code.lower(): c.name for c in StudentCategory.objects.filter(school=event.school)}
+
                 for team in teams:
                     assignments = ProgramAssignment.objects.filter(
                         Q(team=team) | Q(student__team_memberships=team),
@@ -8546,26 +8549,7 @@ def generate_call_list(request, event_id):
                         except ValueError:
                             assignments = assignments.none()
 
-                    from events.services import ensure_program_code_letters
-                    from events.models import ProgramResult, ChestNumber
-
-                    involved_programs = list({a.program for a in assignments if a.program})
-                    for prog in involved_programs:
-                        try:
-                            ensure_program_code_letters(prog)
-                        except Exception:
-                            pass
-
-                    prog_ids = [p.id for p in involved_programs]
-                    results = ProgramResult.objects.filter(program_id__in=prog_ids).only(
-                        'id', 'program_id', 'participant_id', 'team_id', 'sub_team_number', 'is_team_result', 'code_letter'
-                    )
-                    code_map = {}
-                    for r in results:
-                        if r.is_team_result:
-                            code_map[(r.program_id, r.team_id, r.sub_team_number or 1)] = (r.code_letter or '').strip()
-                        else:
-                            code_map[(r.program_id, r.participant_id)] = (r.code_letter or '').strip()
+                    from events.models import ChestNumber
 
                     student_ids = list(set(a.student_id for a in assignments if a.student_id))
                     chest_records = ChestNumber.objects.filter(event=event, student_id__in=student_ids)
@@ -8581,6 +8565,7 @@ def generate_call_list(request, event_id):
                             chest = a.chest_number or chest_map.get(sid) or ''
                             gender_display = student.get_gender_display() if hasattr(student, 'get_gender_display') and student.gender else (student.gender or '—')
                             students_dict[sid] = {
+                                'student': student,
                                 'student_id': sid,
                                 'name': student.get_full_name() or student.username,
                                 'chest_no': str(chest) if chest else '—',
@@ -8590,11 +8575,6 @@ def generate_call_list(request, event_id):
 
                         prog = a.program
                         sub_num = getattr(a, 'sub_team_number', 1) or 1
-                        if prog.is_team_based:
-                            code = code_map.get((prog.id, a.team_id, sub_num), '')
-                        else:
-                            code = code_map.get((prog.id, sid), '')
-
                         students_dict[sid]['competitions'].append({
                             'program_id': prog.id,
                             'program_name': prog.name,
@@ -8602,7 +8582,7 @@ def generate_call_list(request, event_id):
                             'team_size': getattr(prog, 'team_size', 1),
                             'sub_team_number': sub_num,
                             'category': prog.get_category_display() if hasattr(prog, 'get_category_display') and callable(getattr(prog, 'get_category_display', None)) else str(prog.category).capitalize(),
-                            'code_letter': code,
+                            'category_code': (prog.category or '').strip().lower(),
                         })
 
                     def sort_key(s):
@@ -8611,15 +8591,19 @@ def generate_call_list(request, event_id):
                         return (0 if is_num else 1, int(c) if is_num else c, s['name'].lower())
 
                     for s in sorted(students_dict.values(), key=sort_key):
+                        student_obj = s['student']
+                        cat_code = (student_obj.category or '').strip()
+                        if not cat_code:
+                            non_gen = next((c['category_code'] for c in s['competitions'] if c['category_code'] not in ('general', 'gen', 'all')), None)
+                            cat_code = non_gen or (s['competitions'][0]['category_code'] if s['competitions'] else 'general')
+                        cat_display = cat_map.get(cat_code.lower(), cat_code.replace('_', ' ').replace('-', ' ').title())
+
                         comp_strs = []
                         for comp in s['competitions']:
                             p_title = comp['program_name']
                             if comp['is_team_based'] and comp['team_size']:
                                 p_title += f" ({comp['team_size']} Participants)"
-                            if comp['code_letter']:
-                                comp_strs.append(f"{p_title} (Code: {comp['code_letter']})")
-                            else:
-                                comp_strs.append(p_title)
+                            comp_strs.append(p_title)
 
                         items.append({
                             'team_id': team.id,
@@ -8628,11 +8612,11 @@ def generate_call_list(request, event_id):
                             'chest_no': s['chest_no'],
                             'participant_names': s['name'],
                             'participant_name': s['name'],
+                            'category': cat_display,
                             'gender': s['gender'],
                             'competitions': s['competitions'],
                             'competitions_display': ', '.join(comp_strs),
                             'program_name': ', '.join(c['program_name'] for c in s['competitions']),
-                            'category': s['competitions'][0]['category'] if s['competitions'] else 'General',
                             'is_team_based': any(c['is_team_based'] for c in s['competitions']),
                         })
             else:
@@ -8863,22 +8847,10 @@ def generate_call_list(request, event_id):
                 from events.models import ProgramResult, ChestNumber
 
                 involved_programs = list({a.program for a in assignments if a.program})
-                for prog in involved_programs:
-                    try:
-                        ensure_program_code_letters(prog)
-                    except Exception:
-                        pass
+                from accounts.models import StudentCategory
+                from events.models import ChestNumber
 
-                prog_ids = [p.id for p in involved_programs]
-                results = ProgramResult.objects.filter(program_id__in=prog_ids).only(
-                    'id', 'program_id', 'participant_id', 'team_id', 'sub_team_number', 'is_team_result', 'code_letter'
-                )
-                code_map = {}
-                for r in results:
-                    if r.is_team_result:
-                        code_map[(r.program_id, r.team_id, r.sub_team_number or 1)] = (r.code_letter or '').strip()
-                    else:
-                        code_map[(r.program_id, r.participant_id)] = (r.code_letter or '').strip()
+                cat_map = {c.code.lower(): c.name for c in StudentCategory.objects.filter(school=event.school)}
 
                 student_ids = list(set(a.student_id for a in assignments if a.student_id))
                 chest_records = ChestNumber.objects.filter(event=event, student_id__in=student_ids)
@@ -8894,6 +8866,7 @@ def generate_call_list(request, event_id):
                         chest = a.chest_number or chest_map.get(sid) or ''
                         gender_display = student.get_gender_display() if hasattr(student, 'get_gender_display') and student.gender else (student.gender or '—')
                         students_dict[sid] = {
+                            'student': student,
                             'student_id': sid,
                             'name': student.get_full_name() or student.username,
                             'chest_no': str(chest) if chest else '—',
@@ -8903,18 +8876,14 @@ def generate_call_list(request, event_id):
 
                     prog = a.program
                     sub_num = getattr(a, 'sub_team_number', 1) or 1
-                    if prog.is_team_based:
-                        code = code_map.get((prog.id, a.team_id, sub_num), '')
-                    else:
-                        code = code_map.get((prog.id, sid), '')
-
                     students_dict[sid]['competitions'].append({
                         'program_id': prog.id,
                         'program_name': prog.name,
                         'is_team_based': prog.is_team_based,
                         'team_size': getattr(prog, 'team_size', 1),
                         'sub_team_number': sub_num,
-                        'code_letter': code,
+                        'category': prog.get_category_display() if hasattr(prog, 'get_category_display') and callable(getattr(prog, 'get_category_display', None)) else str(prog.category).capitalize(),
+                        'category_code': (prog.category or '').strip().lower(),
                     })
 
                 def sort_key(s):
@@ -8929,23 +8898,26 @@ def generate_call_list(request, event_id):
                         Paragraph("<b>Sl. No</b>", table_header_center),
                         Paragraph("<b>Chest No</b>", table_header_center),
                         Paragraph("<b>Participant</b>", table_header_style),
+                        Paragraph("<b>Category</b>", table_header_center),
                         Paragraph("<b>Gender</b>", table_header_center),
-                        Paragraph("<b>Competitions (Code Letter)</b>", table_header_style),
+                        Paragraph("<b>Competitions</b>", table_header_style),
                     ]
                 ]
 
                 for s_idx, s in enumerate(sorted_students, start=1):
+                    student_obj = s['student']
+                    cat_code = (student_obj.category or '').strip()
+                    if not cat_code:
+                        non_gen = next((c['category_code'] for c in s['competitions'] if c['category_code'] not in ('general', 'gen', 'all')), None)
+                        cat_code = non_gen or (s['competitions'][0]['category_code'] if s['competitions'] else 'general')
+                    cat_display = cat_map.get(cat_code.lower(), cat_code.replace('_', ' ').replace('-', ' ').title())
+
                     comp_lines = []
                     for comp in s['competitions']:
                         p_name = escape(comp['program_name'])
                         if comp['is_team_based'] and comp['team_size']:
                             p_name += f" ({comp['team_size']} Participants)"
-                        code = comp['code_letter']
-                        if code:
-                            line = f"&bull; {p_name} &nbsp;<font color=\"#312E81\"><b>(Code: {escape(code)})</b></font>"
-                        else:
-                            line = f"&bull; {p_name}"
-                        comp_lines.append(line)
+                        comp_lines.append(f"&bull; {p_name}")
 
                     comp_html = "<br/>".join(comp_lines) if comp_lines else "—"
 
@@ -8953,11 +8925,12 @@ def generate_call_list(request, event_id):
                         Paragraph(str(s_idx), table_body_center),
                         Paragraph(f"<b>{escape(s['chest_no'])}</b>", table_body_center),
                         Paragraph(f"<b>{escape(s['name'])}</b>", table_body_style),
+                        Paragraph(escape(cat_display), table_body_center),
                         Paragraph(escape(s['gender']), table_body_center),
                         Paragraph(comp_html, table_body_style),
                     ])
 
-                table = Table(table_data, colWidths=[12 * mm, 22 * mm, 44 * mm, 18 * mm, 86 * mm], repeatRows=1)
+                table = Table(table_data, colWidths=[10 * mm, 20 * mm, 42 * mm, 24 * mm, 18 * mm, 68 * mm], repeatRows=1)
                 table.setStyle(TableStyle([
                     ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#312E81')),
                     ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
