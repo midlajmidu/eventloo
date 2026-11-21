@@ -3030,6 +3030,7 @@ class ProgramViewSet(viewsets.ModelViewSet):
 
     def perform_update(self, serializer):
         program = self.get_object()
+        previous_is_team_based = program.is_team_based
         previous_grading_points = dict(program.grading_points or {})
         prev_custom = (
             program.has_custom_points,
@@ -3046,6 +3047,10 @@ class ProgramViewSet(viewsets.ModelViewSet):
             updated_program.third_place_points,
             updated_program.participation_points,
         )
+        if previous_is_team_based != updated_program.is_team_based:
+            from .services import reconcile_program_result_placeholders, ensure_program_code_letters
+            reconcile_program_result_placeholders(updated_program)
+            ensure_program_code_letters(updated_program, force=True)
         if previous_grading_points != (updated_program.grading_points or {}) or prev_custom != new_custom:
             from .services import recalculate_program_results
             recalculate_program_results(updated_program)
@@ -4148,7 +4153,8 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
                     existing_result = ProgramResult.objects.filter(
                         program=program,
                         team=team,
-                        sub_team_number=sub_team_num
+                        sub_team_number=sub_team_num,
+                        is_team_result=True,
                     ).first()
                     
                     if existing_result:
@@ -4200,7 +4206,8 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
                 # First try to find an existing result with this participant
                 existing_result = ProgramResult.objects.filter(
                     program=program,
-                    participant=assignment.student
+                    participant=assignment.student,
+                    is_team_result=False,
                 ).first()
                 
                 if existing_result:
@@ -4293,6 +4300,7 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
                             program=program,
                             team_id=mark_data['team_id'],
                             sub_team_number=mark_data.get('sub_team_number', 1) or 1,
+                            is_team_result=True,
                         )
                     else:
                         raise DjangoValidationError('Every mark row must identify a valid result.')

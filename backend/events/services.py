@@ -422,6 +422,15 @@ def assign_students(
         if complete_subteam.exists():
             representative = complete_subteam.filter(is_leader=True).first()
             representative = representative or complete_subteam.first()
+            # Remove any legacy un-scored individual draft results for this team/program
+            ProgramResult.objects.filter(
+                program=program,
+                team=team,
+                is_team_result=False,
+                total_marks__isnull=True,
+                raw_total_marks__isnull=True,
+                average_marks__isnull=True,
+            ).delete()
             ProgramResult.objects.update_or_create(
                 program=program,
                 team=team,
@@ -440,6 +449,14 @@ def assign_students(
                 is_team_result=True,
             ).delete()
     else:
+        # Remove any legacy un-scored group draft results for this program without marks
+        ProgramResult.objects.filter(
+            program=program,
+            is_team_result=True,
+            total_marks__isnull=True,
+            raw_total_marks__isnull=True,
+            average_marks__isnull=True,
+        ).delete()
         for assignment in assignments:
             ProgramResult.objects.get_or_create(
                 program=program,
@@ -821,6 +838,140 @@ def generate_code_sequence(count: int) -> list[str]:
 
 
 @transaction.atomic
+def reconcile_program_result_placeholders(program):
+    """
+    Safely reconciles ProgramResult placeholder rows so they strictly match the program's
+    is_team_based configuration and active assignments without violating unique constraints.
+
+    1. If program.is_team_based is True:
+       - Removes legacy individual draft results (is_team_result=False) that have NO entered marks.
+       - Gathers active (team_id, sub_team_number) pairs from ProgramAssignment.
+       - Removes orphan group draft results (sub-teams that have NO assignments and NO entered marks).
+       - For each active sub-team, ensures exactly ONE ProgramResult row (with is_team_result=True) exists.
+       - If redundant duplicate draft rows exist for the same (program, team_id, sub_team_number),
+         cleans up the un-scored duplicates.
+    2. If program.is_team_based is False:
+       - Removes legacy group draft results (is_team_result=True) that have NO entered marks.
+       - Gathers active student_ids from ProgramAssignment.
+       - Removes orphan individual draft results for students who are no longer assigned and have no marks.
+       - For each active student, ensures exactly ONE ProgramResult row (with is_team_result=False) exists.
+    """
+    if not program:
+        return
+
+    if program.is_team_based:
+        # 1. Clean legacy individual draft results with no entered marks
+        ProgramResult.objects.filter(
+            program=program,
+            is_team_result=False,
+            total_marks__isnull=True,
+            raw_total_marks__isnull=True,
+            average_marks__isnull=True,
+        ).delete()
+
+        # 2. Gather active sub-teams
+        assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
+        active_subteams = set()
+        for a in assignments:
+            if a.team_id:
+                active_subteams.add((a.team_id, getattr(a, 'sub_team_number', 1) or 1))
+
+        # 3. Clean orphan draft results without assignments and without marks
+        existing_results = list(ProgramResult.objects.filter(program=program, is_team_result=True))
+        for res in existing_results:
+            key = (res.team_id, res.sub_team_number or 1)
+            if key not in active_subteams and not res.has_marks():
+                res.delete()
+
+        # 4. Ensure exactly one group result exists per active sub-team
+        for team_id, sub_team_num in active_subteams:
+            rep = ProgramAssignment.objects.filter(
+                program=program, team_id=team_id, sub_team_number=sub_team_num, is_leader=True
+            ).first()
+            if not rep:
+                rep = ProgramAssignment.objects.filter(
+                    program=program, team_id=team_id, sub_team_number=sub_team_num
+                ).first()
+            if not rep or not rep.student_id:
+                continue
+
+            matching = list(ProgramResult.objects.filter(
+                program=program,
+                team_id=team_id,
+                sub_team_number=sub_team_num,
+                is_team_result=True,
+            ).order_by('id'))
+
+            if not matching:
+                ProgramResult.objects.create(
+                    program=program,
+                    team_id=team_id,
+                    sub_team_number=sub_team_num,
+                    is_team_result=True,
+                    participant=rep.student,
+                    entry_status='draft',
+                )
+            else:
+                primary = matching[0]
+                if len(matching) > 1:
+                    for extra in matching[1:]:
+                        if not extra.has_marks():
+                            extra.delete()
+                        elif not primary.has_marks():
+                            primary.delete()
+                            primary = extra
+                if primary.participant_id != rep.student_id and not primary.has_marks():
+                    primary.participant = rep.student
+                    primary.save(update_fields=['participant'])
+    else:
+        # 1. Clean legacy group draft results with no entered marks
+        ProgramResult.objects.filter(
+            program=program,
+            is_team_result=True,
+            total_marks__isnull=True,
+            raw_total_marks__isnull=True,
+            average_marks__isnull=True,
+        ).delete()
+
+        # 2. Gather active students
+        assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
+        active_student_ids = set(a.student_id for a in assignments if a.student_id)
+
+        # 3. Clean orphan draft results without assignments and without marks
+        existing_results = list(ProgramResult.objects.filter(program=program, is_team_result=False))
+        for res in existing_results:
+            if res.participant_id not in active_student_ids and not res.has_marks():
+                res.delete()
+
+        # 4. Ensure exactly one individual result exists per assigned student
+        for a in assignments:
+            if not a.student_id:
+                continue
+            matching = list(ProgramResult.objects.filter(
+                program=program,
+                participant_id=a.student_id,
+                is_team_result=False,
+            ).order_by('id'))
+
+            if not matching:
+                ProgramResult.objects.create(
+                    program=program,
+                    participant=a.student,
+                    team=a.team,
+                    is_team_result=False,
+                    entry_status='draft',
+                )
+            elif len(matching) > 1:
+                primary = matching[0]
+                for extra in matching[1:]:
+                    if not extra.has_marks():
+                        extra.delete()
+                    elif not primary.has_marks():
+                        primary.delete()
+                        primary = extra
+
+
+@transaction.atomic
 def shuffle_program_code_letters(program, force=False):
     """
     Generates and shuffles secret code letters (A, B, C...) for all competing
@@ -829,6 +980,9 @@ def shuffle_program_code_letters(program, force=False):
     """
     from django.core.exceptions import ValidationError
     import random
+
+    if not program:
+        return []
 
     # Check if marks have already been submitted
     has_submitted_marks = program.results.filter(
@@ -842,41 +996,13 @@ def shuffle_program_code_letters(program, force=False):
             "Clear marks first if you wish to re-evaluate."
         )
 
-    # Ensure results exist for all assignments
-    if not program.is_team_based:
-        assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
-        for assignment in assignments:
-            ProgramResult.objects.get_or_create(
-                program=program,
-                participant=assignment.student,
-                is_team_result=False,
-                defaults={'team': assignment.team, 'entry_status': 'draft'},
-            )
-        results = list(ProgramResult.objects.select_for_update().filter(program=program).order_by('id'))
-    else:
-        assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
-        grouped_subteams = set()
-        for assignment in assignments:
-            if assignment.team_id:
-                grouped_subteams.add((assignment.team_id, getattr(assignment, 'sub_team_number', 1) or 1))
+    # Reconcile placeholders to prevent individual vs group collisions
+    reconcile_program_result_placeholders(program)
 
-        for team_id, sub_team_num in grouped_subteams:
-            rep = ProgramAssignment.objects.filter(
-                program=program, team_id=team_id, sub_team_number=sub_team_num, is_leader=True
-            ).first()
-            if not rep:
-                rep = ProgramAssignment.objects.filter(
-                    program=program, team_id=team_id, sub_team_number=sub_team_num
-                ).first()
-            if rep:
-                ProgramResult.objects.get_or_create(
-                    program=program,
-                    team_id=team_id,
-                    sub_team_number=sub_team_num,
-                    is_team_result=True,
-                    defaults={'participant': rep.student, 'entry_status': 'draft'},
-                )
-        results = list(ProgramResult.objects.select_for_update().filter(program=program).order_by('id'))
+    if not program.is_team_based:
+        results = list(ProgramResult.objects.select_for_update().filter(program=program, is_team_result=False).order_by('id'))
+    else:
+        results = list(ProgramResult.objects.select_for_update().filter(program=program, is_team_result=True).order_by('id'))
 
     if not results:
         return []
@@ -920,48 +1046,22 @@ def ensure_program_code_letters(program, force=False):
     """
     import random
 
+    if not program:
+        return []
+
     # Check if marks are already submitted or published
     has_submitted_marks = program.results.filter(
         entry_status='submitted',
         average_marks__isnull=False,
     ).exists() or program.is_published
 
-    # 1. Ensure ProgramResult rows exist for all assignments
-    if not program.is_team_based:
-        assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
-        for assignment in assignments:
-            if assignment.student_id:
-                ProgramResult.objects.get_or_create(
-                    program=program,
-                    participant=assignment.student,
-                    is_team_result=False,
-                    defaults={'team': assignment.team, 'entry_status': 'draft'},
-                )
-        results = list(ProgramResult.objects.select_for_update().filter(program=program).order_by('id'))
-    else:
-        assignments = ProgramAssignment.objects.filter(program=program).select_related('student', 'team')
-        grouped_subteams = set()
-        for assignment in assignments:
-            if assignment.team_id:
-                grouped_subteams.add((assignment.team_id, getattr(assignment, 'sub_team_number', 1) or 1))
+    # 1. Reconcile placeholders to strictly match program mode and assignments
+    reconcile_program_result_placeholders(program)
 
-        for team_id, sub_team_num in grouped_subteams:
-            rep = ProgramAssignment.objects.filter(
-                program=program, team_id=team_id, sub_team_number=sub_team_num, is_leader=True
-            ).first()
-            if not rep:
-                rep = ProgramAssignment.objects.filter(
-                    program=program, team_id=team_id, sub_team_number=sub_team_num
-                ).first()
-            if rep and rep.student_id:
-                ProgramResult.objects.get_or_create(
-                    program=program,
-                    team_id=team_id,
-                    sub_team_number=sub_team_num,
-                    is_team_result=True,
-                    defaults={'participant': rep.student, 'entry_status': 'draft'},
-                )
-        results = list(ProgramResult.objects.select_for_update().filter(program=program).order_by('id'))
+    if not program.is_team_based:
+        results = list(ProgramResult.objects.select_for_update().filter(program=program, is_team_result=False).order_by('id'))
+    else:
+        results = list(ProgramResult.objects.select_for_update().filter(program=program, is_team_result=True).order_by('id'))
 
     if not results:
         return []
