@@ -444,7 +444,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
             scale = min(box_w / float(orig_w), box_h / float(orig_h))
             logo_w = orig_w * scale
             logo_h = orig_h * scale
-            logo_cy = card_top - 18.0
+            logo_cy = card_top - 20.0
             logo_x = card_center_x - logo_w / 2.0
             logo_y = logo_cy - logo_h / 2.0
             pdf.drawImage(event_logo_path, logo_x, logo_y, width=logo_w, height=logo_h, mask='auto', preserveAspectRatio=True)
@@ -459,7 +459,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
             event_logo_path = None
 
     if not event_logo_path:
-        y_title = card_top - 24.0
+        y_title = card_top - 28.0
         t_size = 9.5 if len(event_title) <= 20 else 8.0
         max_title_w = card_w - 48.0
         while t_size > 6.0 and stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
@@ -477,7 +477,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         pdf.setFillColor(HexColor('#0F172A'))
         pdf.drawCentredString(card_center_x, y_title, event_title)
     else:
-        y_title = card_top - 34.0
+        y_title = card_top - 40.0
         t_size = 8.5 if len(event_title) <= 20 else (7.5 if len(event_title) <= 30 else 6.5)
         max_title_w = card_w - 24.0
         while t_size > 5.5 and stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
@@ -490,8 +490,8 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         pdf.setFillColor(HexColor('#0F172A'))
         pdf.drawCentredString(card_center_x, y_title, event_title)
 
-    # 4. Participant Name
-    y_name = y_title - 24.0
+    # 4. Participant Name (Space after event name until participant name)
+    y_name = card_top - 76.0
     name = (student.get_full_name() or student.display_name or 'Participant').strip()
     name_len = len(name)
     if name_len > 24:
@@ -504,7 +504,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pdf.setFillColor(HexColor('#0F172A'))
     pdf.drawCentredString(card_center_x, y_name, name.upper())
 
-    # 5. Hero Chest Number Pill: [ CHEST NO | #1000 ] - Perfectly dynamically centered
+    # 5. Hero Chest Number Pill: [ CHEST NO | #1000 ] - Space after name for chest no
     chest_number = prefetched_chest_number if prefetched_chest_number is not None else (assignment.chest_number if assignment else None)
     if not chest_number:
         chest_number = ChestNumber.objects.filter(event=event, student=student).values_list(
@@ -512,7 +512,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         ).first()
     chest_str = str(chest_number) if chest_number else 'N/A'
 
-    y_pill = y_name - 22.0
+    y_pill = card_top - 108.0
     label_text = 'CHEST NO'
     label_fs = 5.5
     num_text = f'#{chest_str}'
@@ -523,12 +523,12 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pad_x = 12.0
     gap = 6.5
     pill_w = pad_x + label_w + gap + 1.0 + gap + num_w + pad_x
-    pill_h = 17.0
+    pill_h = 17.5
     pill_x = card_center_x - pill_w / 2.0
     cy_pill = y_pill + pill_h / 2.0
 
     pdf.setFillColor(HexColor('#1E1B4B'))
-    pdf.roundRect(pill_x, y_pill, pill_w, pill_h, radius=8.5, stroke=0, fill=1)
+    pdf.roundRect(pill_x, y_pill, pill_w, pill_h, radius=8.75, stroke=0, fill=1)
 
     label_x = pill_x + pad_x
     pdf.setFont('Helvetica-Bold', label_fs)
@@ -547,7 +547,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
 
     # 6. Metadata Pills Row: [ Team ] [ Category ] [ Class / Grade ]
     # Generous spacing after chest pill
-    y_badges = y_pill - 22.0
+    y_badges = card_top - 135.5
 
     # Team
     team_name = assignment.team.name if assignment and assignment.team else (
@@ -590,7 +590,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         (card_x + 120.0, grade_sec, 'award')
     ]
     pill_w = 52.0
-    pill_h = 14.5
+    pill_h = 15.0
 
     for px, ptext, icon_key in pills_data:
         pdf.setFillColor(HexColor('#F8FAFC'))
@@ -624,7 +624,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         pdf.drawString(start_x + icon_sz + gap_it, cy - (fs * 0.35), clean_text)
 
     # 7. Subtle Divider Line below Metadata Pills
-    y_div = y_badges - 7.5
+    y_div = card_top - 144.0
     pdf.setStrokeColor(HexColor('#EEF2F6'))
     pdf.setLineWidth(0.5)
     pdf.line(card_x + 8.0, y_div, card_x + card_w - 8.0, y_div)
@@ -703,7 +703,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
 
     num_cols = max(1, len(cols_to_show))
 
-    stats_top = y_div - 9.0
+    stats_top = card_top - 153.5
     stats_w = card_w - 16.0
     stats_left = card_x + 8.0
     col_w = stats_w / float(num_cols)
@@ -712,7 +712,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     sh_h = 12.5
     sh_y = stats_top - sh_h
     sh_cy = sh_y + sh_h / 2.0
-    num_y = sh_y - 11.0
+    num_y = card_top - 177.0
 
     for i, (col_label, count_val, icon_key) in enumerate(cols_to_show):
         cx = stats_left + (i + 0.5) * col_w
@@ -768,7 +768,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
 
     # 9. Lower Footer Area: QR Code Container blending into footer wave
     qr_box_w = 44.0
-    qr_box_h = 52.0
+    qr_box_h = 50.0
     qr_box_x = card_x + card_w - qr_box_w - 9.0
     qr_box_y = card_y + 8.0
 
@@ -790,14 +790,14 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
             effective_base = ''
     qr_target_url = f"{effective_base.rstrip('/')}/events/{event.id}/badge/{student.id}" if effective_base else f"/events/{event.id}/badge/{student.id}"
 
-    qr_sz = 34.0
+    qr_sz = 33.0
     try:
         qr = QrCodeWidget(qr_target_url)
         bounds = qr.getBounds()
         d = Drawing(bounds[2], bounds[3], transform=[qr_sz / bounds[2], 0, 0, qr_sz / bounds[3], 0, 0])
         d.add(qr)
         qr_draw_x = qr_box_x + (qr_box_w - qr_sz) / 2.0
-        qr_draw_y = qr_box_y + 12.0
+        qr_draw_y = qr_box_y + 11.5
         renderPDF.draw(d, pdf, qr_draw_x, qr_draw_y)
     except Exception as qr_err:
         logger.warning("Badge QR generation failed: %s", qr_err)
