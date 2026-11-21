@@ -182,13 +182,29 @@ class ExportSectionDeepAuditTests(APITestCase):
         self.assertIn("Total participants:", pdf_comp['text'])
         self.assertIn("Powered by eventloo.in", pdf_comp['text'])
 
-        # Team Mode
+        # Team Mode (PDF)
         res_team = self.client.get(f'/api/events/{self.event.id}/call-list/?mode=team&category=all&program_id=all&team_id={self.team_red.id}')
         self.assertEqual(res_team.status_code, 200)
         pdf_team = self.extract_pdf_text(res_team.content)
         self.assertIn("Red House", pdf_team['text'])
         self.assertNotIn("Blue House", pdf_team['text'])
+        self.assertIn("Competitions (Code Letter)", pdf_team['text'])
+        self.assertIn("201", pdf_team['text'])
+        self.assertIn("Participant1", pdf_team['text'])
         self.assertIn("Powered by eventloo.in", pdf_team['text'])
+
+        # Team Mode (JSON Format)
+        res_team_json = self.client.get(f'/api/events/{self.event.id}/call-list/?mode=team&category=all&program_id=all&team_id={self.team_red.id}&format=json')
+        self.assertEqual(res_team_json.status_code, 200)
+        json_data = res_team_json.json()
+        self.assertIn('items', json_data)
+        self.assertTrue(len(json_data['items']) > 0)
+        first_item = json_data['items'][0]
+        self.assertIn('chest_no', first_item)
+        self.assertIn('participant_names', first_item)
+        self.assertIn('competitions', first_item)
+        self.assertTrue(len(first_item['competitions']) > 0)
+        self.assertIn('code_letter', first_item['competitions'][0])
 
     def test_green_room_sign_sheet(self):
         res = self.client.get(f'/api/events/{self.event.id}/green-room-sign/?category=all&program_id=all')

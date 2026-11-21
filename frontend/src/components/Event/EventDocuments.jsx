@@ -535,7 +535,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
           pageCount++;
           const pageBreak = pageCount > 1 ? 'style="page-break-before: always;"' : '';
 
-          const catMap = {};
+          const studentMap = {};
           for (const program of targetPrograms) {
             let assignments = [];
             try {
@@ -547,48 +547,78 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
             const teamAssignments = assignments.filter(assignment => (
               Number(assignment.team_id || assignment.team) === Number(tm.id)
             ));
-            const documentRows = groupDocumentAssignments(program, teamAssignments);
-            if (documentRows.length === 0) continue;
-            const categoryName = (program.category || 'General').toUpperCase();
-            if (!catMap[categoryName]) catMap[categoryName] = [];
-            catMap[categoryName].push({ program, rows: documentRows });
+
+            for (const a of teamAssignments) {
+              const sid = a.student_id || a.student?.id || a.id;
+              if (!studentMap[sid]) {
+                const sName = a.student_name || (a.student?.first_name 
+                  ? `${a.student.first_name || ''} ${a.student.last_name || ''}`.trim()
+                  : (a.participant_names || 'Participant'));
+                studentMap[sid] = {
+                  name: sName,
+                  chestNo: a.chest_number || a.student?.chest_number || '—',
+                  gender: a.gender || a.student?.gender || '—',
+                  competitions: []
+                };
+              }
+              const code = a.code_letter || '';
+              studentMap[sid].competitions.push({
+                name: program.name,
+                code: code,
+                is_team_based: program.is_team_based,
+                team_size: program.team_size
+              });
+            }
           }
 
-          let tablesHtml = '';
-          Object.keys(catMap).forEach(cName => {
-            const categoryPrograms = catMap[cName];
-            let rows = '';
-            categoryPrograms.forEach(({ program, rows: programRows }) => {
-              const countSuffix = (program.is_team_based && program.team_size)
-                ? ` (${program.team_size} Participants)`
-                : '';
-              programRows.forEach(row => {
-                rows += `
-                  <tr>
-                    <td>${escapeHtml(program.name)}${escapeHtml(countSuffix)}</td>
-                    <td class="center font-bold">${escapeHtml(row.chestNo)}</td>
-                    <td>${escapeHtml(row.participantNames)}</td>
-                  </tr>
-                `;
-              });
-            });
+          const sortedStudents = Object.values(studentMap).sort((a, b) => {
+            const aNum = parseInt(a.chestNo, 10);
+            const bNum = parseInt(b.chestNo, 10);
+            if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+            return String(a.name).localeCompare(String(b.name));
+          });
 
-            tablesHtml += `
-              <div class="category-header">${escapeHtml(cName)} (${categoryPrograms.length})</div>
+          let rows = '';
+          sortedStudents.forEach((student, sIdx) => {
+            const compHtml = student.competitions.map(c => {
+              const countSuffix = (c.is_team_based && c.team_size) ? ` (${c.team_size} Participants)` : '';
+              const codeBadge = c.code ? ` &nbsp;<strong style="color: #312E81;">(Code: ${escapeHtml(c.code)})</strong>` : '';
+              return `<div style="margin-bottom: 2px;">&bull; ${escapeHtml(c.name)}${escapeHtml(countSuffix)}${codeBadge}</div>`;
+            }).join('');
+
+            rows += `
+              <tr>
+                <td class="center font-semibold" style="width: 8%; color: #64748b;">${sIdx + 1}</td>
+                <td class="center font-bold" style="width: 14%; color: #4338ca;">${escapeHtml(student.chestNo)}</td>
+                <td class="font-bold" style="width: 28%;">${escapeHtml(student.name)}</td>
+                <td class="center" style="width: 10%; text-transform: capitalize;">${escapeHtml(student.gender)}</td>
+                <td style="width: 40%; line-height: 1.4;">${compHtml || '—'}</td>
+              </tr>
+            `;
+          });
+
+          let tablesHtml = '';
+          if (sortedStudents.length > 0) {
+            tablesHtml = `
               <table class="main-table">
                 <thead>
                   <tr>
-                    <th style="width: 45%;">Competition</th>
-                    <th class="center" style="width: 18%;">Chest No</th>
-                    <th style="width: 37%;">Participant</th>
+                    <th class="center" style="width: 8%;">#</th>
+                    <th class="center" style="width: 14%;">Chest No</th>
+                    <th style="width: 28%;">Participant</th>
+                    <th class="center" style="width: 10%;">Gender</th>
+                    <th style="width: 40%;">Competitions & Secret Codes</th>
                   </tr>
                 </thead>
                 <tbody>
                   ${rows}
                 </tbody>
               </table>
+              <div style="text-align: right; font-size: 11px; font-weight: bold; color: #475569; margin-top: 8px;">
+                Total participants: ${sortedStudents.length}
+              </div>
             `;
-          });
+          }
 
           pagesHtml += `
             <div class="program-page" ${pageBreak}>

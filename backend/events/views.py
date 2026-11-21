@@ -8546,36 +8546,95 @@ def generate_call_list(request, event_id):
                         except ValueError:
                             assignments = assignments.none()
 
-                    categories_dict = {}
-                    for a in assignments:
-                        cat_name = a.program.get_category_display() if hasattr(a.program, 'get_category_display') and callable(getattr(a.program, 'get_category_display', None)) else str(a.program.category).capitalize()
-                        if cat_name not in categories_dict:
-                            categories_dict[cat_name] = {}
-                        prog_key = (a.program_id, getattr(a, 'sub_team_number', 1) or 1 if a.program.is_team_based else a.id)
-                        if prog_key not in categories_dict[cat_name]:
-                            categories_dict[cat_name][prog_key] = []
-                        categories_dict[cat_name][prog_key].append(a)
+                    from events.services import ensure_program_code_letters
+                    from events.models import ProgramResult, ChestNumber
 
-                    for cat_name, cat_prog_map in categories_dict.items():
-                        for prog_key, a_list in cat_prog_map.items():
-                            first_a = a_list[0]
-                            program_obj = first_a.program
-                            entries = get_grouped_assignments_for_report(program_obj, ProgramAssignment.objects.filter(id__in=[x.id for x in a_list]), event)
-                            for entry in entries:
-                                items.append({
-                                    'team_id': team.id,
-                                    'team_name': team.name,
-                                    'category': cat_name,
-                                    'category_code': program_obj.category,
-                                    'program_id': program_obj.id,
-                                    'program_name': program_obj.name,
-                                    'program_code': getattr(program_obj, 'code', None) or str(program_obj.id),
-                                    'is_team_based': program_obj.is_team_based,
-                                    'team_size': getattr(program_obj, 'team_size', 1),
-                                    'chest_no': entry.get('chest_no') or 'N/A',
-                                    'participant_names': entry.get('participant_names') or '',
-                                    'gender': entry.get('gender') or '',
-                                })
+                    involved_programs = list({a.program for a in assignments if a.program})
+                    for prog in involved_programs:
+                        try:
+                            ensure_program_code_letters(prog)
+                        except Exception:
+                            pass
+
+                    prog_ids = [p.id for p in involved_programs]
+                    results = ProgramResult.objects.filter(program_id__in=prog_ids).only(
+                        'id', 'program_id', 'participant_id', 'team_id', 'sub_team_number', 'is_team_result', 'code_letter'
+                    )
+                    code_map = {}
+                    for r in results:
+                        if r.is_team_result:
+                            code_map[(r.program_id, r.team_id, r.sub_team_number or 1)] = (r.code_letter or '').strip()
+                        else:
+                            code_map[(r.program_id, r.participant_id)] = (r.code_letter or '').strip()
+
+                    student_ids = list(set(a.student_id for a in assignments if a.student_id))
+                    chest_records = ChestNumber.objects.filter(event=event, student_id__in=student_ids)
+                    chest_map = {c.student_id: c.chest_number for c in chest_records}
+
+                    students_dict = {}
+                    for a in assignments:
+                        student = a.student
+                        if not student:
+                            continue
+                        sid = student.id
+                        if sid not in students_dict:
+                            chest = a.chest_number or chest_map.get(sid) or ''
+                            gender_display = student.get_gender_display() if hasattr(student, 'get_gender_display') and student.gender else (student.gender or '—')
+                            students_dict[sid] = {
+                                'student_id': sid,
+                                'name': student.get_full_name() or student.username,
+                                'chest_no': str(chest) if chest else '—',
+                                'gender': gender_display,
+                                'competitions': []
+                            }
+
+                        prog = a.program
+                        sub_num = getattr(a, 'sub_team_number', 1) or 1
+                        if prog.is_team_based:
+                            code = code_map.get((prog.id, a.team_id, sub_num), '')
+                        else:
+                            code = code_map.get((prog.id, sid), '')
+
+                        students_dict[sid]['competitions'].append({
+                            'program_id': prog.id,
+                            'program_name': prog.name,
+                            'is_team_based': prog.is_team_based,
+                            'team_size': getattr(prog, 'team_size', 1),
+                            'sub_team_number': sub_num,
+                            'category': prog.get_category_display() if hasattr(prog, 'get_category_display') and callable(getattr(prog, 'get_category_display', None)) else str(prog.category).capitalize(),
+                            'code_letter': code,
+                        })
+
+                    def sort_key(s):
+                        c = str(s['chest_no'])
+                        is_num = c.isdigit()
+                        return (0 if is_num else 1, int(c) if is_num else c, s['name'].lower())
+
+                    for s in sorted(students_dict.values(), key=sort_key):
+                        comp_strs = []
+                        for comp in s['competitions']:
+                            p_title = comp['program_name']
+                            if comp['is_team_based'] and comp['team_size']:
+                                p_title += f" ({comp['team_size']} Participants)"
+                            if comp['code_letter']:
+                                comp_strs.append(f"{p_title} (Code: {comp['code_letter']})")
+                            else:
+                                comp_strs.append(p_title)
+
+                        items.append({
+                            'team_id': team.id,
+                            'team_name': team.name,
+                            'student_id': s['student_id'],
+                            'chest_no': s['chest_no'],
+                            'participant_names': s['name'],
+                            'participant_name': s['name'],
+                            'gender': s['gender'],
+                            'competitions': s['competitions'],
+                            'competitions_display': ', '.join(comp_strs),
+                            'program_name': ', '.join(c['program_name'] for c in s['competitions']),
+                            'category': s['competitions'][0]['category'] if s['competitions'] else 'General',
+                            'is_team_based': any(c['is_team_based'] for c in s['competitions']),
+                        })
             else:
                 programs = Program.objects.filter(event=event).order_by('category', 'name')
                 if category != 'all':
@@ -8800,72 +8859,121 @@ def generate_call_list(request, event_id):
                 elements.append(team_banner)
                 elements.append(Spacer(1, 3 * mm))
 
-                categories_dict = {}
+                from events.services import ensure_program_code_letters
+                from events.models import ProgramResult, ChestNumber
+
+                involved_programs = list({a.program for a in assignments if a.program})
+                for prog in involved_programs:
+                    try:
+                        ensure_program_code_letters(prog)
+                    except Exception:
+                        pass
+
+                prog_ids = [p.id for p in involved_programs]
+                results = ProgramResult.objects.filter(program_id__in=prog_ids).only(
+                    'id', 'program_id', 'participant_id', 'team_id', 'sub_team_number', 'is_team_result', 'code_letter'
+                )
+                code_map = {}
+                for r in results:
+                    if r.is_team_result:
+                        code_map[(r.program_id, r.team_id, r.sub_team_number or 1)] = (r.code_letter or '').strip()
+                    else:
+                        code_map[(r.program_id, r.participant_id)] = (r.code_letter or '').strip()
+
+                student_ids = list(set(a.student_id for a in assignments if a.student_id))
+                chest_records = ChestNumber.objects.filter(event=event, student_id__in=student_ids)
+                chest_map = {c.student_id: c.chest_number for c in chest_records}
+
+                students_dict = {}
                 for a in assignments:
-                    cat_name = a.program.get_category_display() if hasattr(a.program, 'get_category_display') and callable(getattr(a.program, 'get_category_display', None)) else str(a.program.category).capitalize()
-                    if cat_name not in categories_dict:
-                        categories_dict[cat_name] = {}
-                    prog_key = (a.program_id, getattr(a, 'sub_team_number', 1) or 1 if a.program.is_team_based else a.id)
-                    if prog_key not in categories_dict[cat_name]:
-                        categories_dict[cat_name][prog_key] = []
-                    categories_dict[cat_name][prog_key].append(a)
+                    student = a.student
+                    if not student:
+                        continue
+                    sid = student.id
+                    if sid not in students_dict:
+                        chest = a.chest_number or chest_map.get(sid) or ''
+                        gender_display = student.get_gender_display() if hasattr(student, 'get_gender_display') and student.gender else (student.gender or '—')
+                        students_dict[sid] = {
+                            'student_id': sid,
+                            'name': student.get_full_name() or student.username,
+                            'chest_no': str(chest) if chest else '—',
+                            'gender': gender_display,
+                            'competitions': []
+                        }
 
-                for cat_name, cat_prog_map in categories_dict.items():
-                    cat_banner = Table([[
-                        Paragraph(f'<font size="9.5" color="#312E81"><b>{escape(cat_name.upper())} ({len(cat_prog_map)} Entries)</b></font>', prog_box_left)
-                    ]], colWidths=[182 * mm])
-                    cat_banner.setStyle(TableStyle([
-                        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#EEF2FF')),
-                        ('TOPPADDING', (0, 0), (-1, -1), 4),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-                        ('LEFTPADDING', (0, 0), (-1, -1), 8),
-                        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
-                        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
-                    ]))
-                    elements.append(cat_banner)
-                    elements.append(Spacer(1, 2 * mm))
+                    prog = a.program
+                    sub_num = getattr(a, 'sub_team_number', 1) or 1
+                    if prog.is_team_based:
+                        code = code_map.get((prog.id, a.team_id, sub_num), '')
+                    else:
+                        code = code_map.get((prog.id, sid), '')
 
-                    table_data = [
-                        [
-                            Paragraph("<b>Competition</b>", table_header_style),
-                            Paragraph("<b>Chest No</b>", table_header_center),
-                            Paragraph("<b>Participant</b>", table_header_style),
-                            Paragraph("<b>Gender</b>", table_header_center)
-                        ]
+                    students_dict[sid]['competitions'].append({
+                        'program_id': prog.id,
+                        'program_name': prog.name,
+                        'is_team_based': prog.is_team_based,
+                        'team_size': getattr(prog, 'team_size', 1),
+                        'sub_team_number': sub_num,
+                        'code_letter': code,
+                    })
+
+                def sort_key(s):
+                    c = str(s['chest_no'])
+                    is_num = c.isdigit()
+                    return (0 if is_num else 1, int(c) if is_num else c, s['name'].lower())
+
+                sorted_students = sorted(students_dict.values(), key=sort_key)
+
+                table_data = [
+                    [
+                        Paragraph("<b>Sl. No</b>", table_header_center),
+                        Paragraph("<b>Chest No</b>", table_header_center),
+                        Paragraph("<b>Participant</b>", table_header_style),
+                        Paragraph("<b>Gender</b>", table_header_center),
+                        Paragraph("<b>Competitions (Code Letter)</b>", table_header_style),
                     ]
+                ]
 
-                    for prog_key, a_list in cat_prog_map.items():
-                        first_a = a_list[0]
-                        program_obj = first_a.program
-                        entries = get_grouped_assignments_for_report(program_obj, ProgramAssignment.objects.filter(id__in=[x.id for x in a_list]), event)
-                        for entry in entries:
-                            prog_display = program_obj.name
-                            if program_obj.is_team_based and program_obj.team_size:
-                                prog_display += f" ({program_obj.team_size} Participants)"
+                for s_idx, s in enumerate(sorted_students, start=1):
+                    comp_lines = []
+                    for comp in s['competitions']:
+                        p_name = escape(comp['program_name'])
+                        if comp['is_team_based'] and comp['team_size']:
+                            p_name += f" ({comp['team_size']} Participants)"
+                        code = comp['code_letter']
+                        if code:
+                            line = f"&bull; {p_name} &nbsp;<font color=\"#312E81\"><b>(Code: {escape(code)})</b></font>"
+                        else:
+                            line = f"&bull; {p_name}"
+                        comp_lines.append(line)
 
-                            table_data.append([
-                                Paragraph(escape(prog_display), table_body_style),
-                                Paragraph(escape(entry['chest_no']), table_body_center),
-                                Paragraph(escape(entry['participant_names']), table_body_style),
-                                Paragraph(escape(entry['gender']), table_body_center)
-                            ])
+                    comp_html = "<br/>".join(comp_lines) if comp_lines else "—"
 
-                    table = Table(table_data, colWidths=[62 * mm, 24 * mm, 72 * mm, 24 * mm], repeatRows=1)
-                    table.setStyle(TableStyle([
-                        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#312E81')),
-                        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-                        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
-                        ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor('#64748B')),
-                        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
-                        ('TOPPADDING', (0, 0), (-1, -1), 5),
-                        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-                        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-                        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-                        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-                    ]))
+                    table_data.append([
+                        Paragraph(str(s_idx), table_body_center),
+                        Paragraph(f"<b>{escape(s['chest_no'])}</b>", table_body_center),
+                        Paragraph(f"<b>{escape(s['name'])}</b>", table_body_style),
+                        Paragraph(escape(s['gender']), table_body_center),
+                        Paragraph(comp_html, table_body_style),
+                    ])
 
-                    elements.append(table)
-                    elements.append(Spacer(1, 4 * mm))
+                table = Table(table_data, colWidths=[12 * mm, 22 * mm, 44 * mm, 18 * mm, 86 * mm], repeatRows=1)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#312E81')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+                    ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor('#64748B')),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+                    ('TOPPADDING', (0, 0), (-1, -1), 4),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 5),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                ]))
+
+                elements.append(table)
+                elements.append(Paragraph(f"Total participants: {len(sorted_students)}", total_part_style))
+                elements.append(Spacer(1, 4 * mm))
 
         else:
             # Format 1: Competition Wise Call List

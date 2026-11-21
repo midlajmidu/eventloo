@@ -455,48 +455,100 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200">
-                    <th className="py-3 px-4 w-12 text-center">#</th>
-                    <th className="py-3 px-4">Competition / Program</th>
-                    <th className="py-3 px-4">Category</th>
-                    <th className="py-3 px-4 text-center">Chest No</th>
-                    <th className="py-3 px-4">Participant(s)</th>
-                    <th className="py-3 px-4 text-center">Type</th>
-                    <th className="py-3 px-4 text-center">Gender</th>
-                  </tr>
+                  {callListMode === 'team' ? (
+                    <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200">
+                      <th className="py-3 px-4 w-12 text-center">#</th>
+                      <th className="py-3 px-4 text-center w-24">Chest No</th>
+                      <th className="py-3 px-4">Participant</th>
+                      <th className="py-3 px-4 text-center w-24">Gender</th>
+                      <th className="py-3 px-4">Competitions & Secret Codes</th>
+                    </tr>
+                  ) : (
+                    <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200">
+                      <th className="py-3 px-4 w-12 text-center">#</th>
+                      <th className="py-3 px-4">Competition / Program</th>
+                      <th className="py-3 px-4">Category</th>
+                      <th className="py-3 px-4 text-center">Chest No</th>
+                      <th className="py-3 px-4">Participant(s)</th>
+                      <th className="py-3 px-4 text-center">Type</th>
+                      <th className="py-3 px-4 text-center">Gender</th>
+                    </tr>
+                  )}
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredItems.map((item, idx) => (
-                    <tr key={`${item.program_id}-${item.chest_no}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="py-3 px-4 text-center text-slate-400 font-semibold">{idx + 1}</td>
-                      <td className="py-3 px-4 font-bold text-slate-800">
-                        {item.program_name}
-                      </td>
-                      <td className="py-3 px-4 text-slate-600 font-medium">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold border border-slate-200">
-                          {item.category}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-center font-extrabold text-indigo-700">
-                        <span className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs tracking-wide">
-                          {item.chest_no}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 font-medium text-slate-900">
-                        {item.participant_names || '—'}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
-                          item.is_team_based
-                            ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                            : 'bg-blue-50 text-blue-700 border border-blue-200'
-                        }`}>
-                          {item.is_team_based ? 'Group' : 'Solo'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-center text-slate-600 font-medium capitalize">
-                        {item.gender || '—'}
-                      </td>
+                    <tr key={`${item.student_id || item.program_id}-${item.chest_no}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
+                      {callListMode === 'team' ? (
+                        <>
+                          <td className="py-3 px-4 text-center text-slate-400 font-semibold align-top">{idx + 1}</td>
+                          <td className="py-3 px-4 text-center font-extrabold text-indigo-700 align-top">
+                            <span className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs tracking-wide">
+                              {item.chest_no}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-900 align-top">
+                            {item.participant_names || item.participant_name || '—'}
+                          </td>
+                          <td className="py-3 px-4 text-center text-slate-600 font-medium capitalize align-top">
+                            {item.gender || '—'}
+                          </td>
+                          <td className="py-3 px-4 align-top">
+                            {item.competitions && item.competitions.length > 0 ? (
+                              <div className="flex flex-col gap-1.5 py-0.5">
+                                {item.competitions.map((comp, cIdx) => (
+                                  <div key={cIdx} className="flex items-center gap-2 flex-wrap">
+                                    <span className="font-semibold text-slate-800 text-[11px]">
+                                      &bull; {comp.program_name}
+                                      {comp.is_team_based && comp.team_size ? ` (${comp.team_size} Participants)` : ''}
+                                    </span>
+                                    {comp.code_letter ? (
+                                      <span className="px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-extrabold text-[10px] tracking-wider border border-indigo-200 shadow-2xs">
+                                        Code: {comp.code_letter}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-slate-700 font-medium">
+                                {item.competitions_display || item.program_name || '—'}
+                              </span>
+                            )}
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="py-3 px-4 text-center text-slate-400 font-semibold">{idx + 1}</td>
+                          <td className="py-3 px-4 font-bold text-slate-800">
+                            {item.program_name}
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 font-medium">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[11px] font-semibold border border-slate-200">
+                              {item.category}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center font-extrabold text-indigo-700">
+                            <span className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs tracking-wide">
+                              {item.chest_no}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-medium text-slate-900">
+                            {item.participant_names || '—'}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${
+                              item.is_team_based
+                                ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                : 'bg-blue-50 text-blue-700 border border-blue-200'
+                            }`}>
+                              {item.is_team_based ? 'Group' : 'Solo'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center text-slate-600 font-medium capitalize">
+                            {item.gender || '—'}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
