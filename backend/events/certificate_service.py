@@ -325,6 +325,44 @@ def _resolve_eventloo_icon_path():
     return None
 
 
+_BADGE_ICON_CACHE = {}
+
+
+def _get_badge_icon_image(name, color='#4338CA'):
+    """
+    Renders official Tabler/Lucide vector SVG icons to 400 DPI transparent PNG ImageReaders
+    for high-fidelity ReportLab badge rendering, caching results in memory.
+    """
+    key = (name, color)
+    if key in _BADGE_ICON_CACHE:
+        return _BADGE_ICON_CACHE[key]
+
+    svg_defs = {
+        'trophy': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /><path d="M7 4h10v5a5 5 0 0 1 -10 0v-5" /><path d="M7 6h-2a2 2 0 0 0 -2 2v1a4 4 0 0 0 4 4" /><path d="M17 6h2a2 2 0 0 1 2 2v1a4 4 0 0 1 -4 4" /></svg>''',
+        'stack': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l-8 4l8 4l8 -4l-8 -4" /><path d="M4 12l8 4l8 -4" /><path d="M4 16l8 4l8 -4" /></svg>''',
+        'award': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6" /><polyline points="9 14.2 9 21 12 19 15 21 15 14.2" /></svg>''',
+        'calendar': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2" /><line x1="16" y1="3" x2="16" y2="7" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="4" y1="11" x2="20" y2="11" /></svg>''',
+        'theater': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1.5" /><path d="M8 4c0 3 -2 6 -3 8c1 3 1 6 -1 8" /><path d="M16 4c0 3 2 6 3 8c-1 3 -1 6 1 8" /><line x1="3" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="21" y2="12" /></svg>''',
+        'run': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="1.2" fill="{color}" /><path d="M4 17l5 1l.75 -1.5" /><path d="M15 21l0 -4l-4 -3l1 -6" /><path d="M7 12l0 -3l5 -1l3 3l3 1" /></svg>'''
+    }
+
+    svg = svg_defs.get(name)
+    if not svg:
+        return None
+    try:
+        import io
+        import fitz
+        from reportlab.lib.utils import ImageReader
+        doc = fitz.open('svg', svg.encode('utf-8'))
+        pix = doc[0].get_pixmap(dpi=400, alpha=True)
+        reader = ImageReader(io.BytesIO(pix.tobytes('png')))
+        _BADGE_ICON_CACHE[key] = reader
+        return reader
+    except Exception as exc:
+        logger.warning(f"Failed to render vector icon {name}: {exc}")
+        return None
+
+
 def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None, base_url=None, event_program_types=None, prefetched_assignments=None, prefetched_chest_number=None):
     """
     Renders a single high-quality participant paper badge (1 of 9 per A4 sheet)
@@ -465,29 +503,46 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         ).first()
     chest_str = str(chest_number) if chest_number else 'N/A'
 
-    y_pill = card_top - 98
-    pill_w = 98.0
+    # 6. Hero Chest Pill: [ CHEST NO | #1000 ] - Perfectly dynamically centered
+    chest_str = str(chest_number) if chest_number else 'N/A'
+
+    y_pill = card_top - 98.0
+    label_text = 'CHEST NO'
+    label_fs = 5.5
+    num_text = f'#{chest_str}'
+    num_fs = 9.0
+
+    label_w = pdf.stringWidth(label_text, 'Helvetica-Bold', label_fs)
+    num_w = pdf.stringWidth(num_text, 'Helvetica-Bold', num_fs)
+    pad_x = 12.0
+    gap = 7.0
+    pill_w = pad_x + label_w + gap + 1.0 + gap + num_w + pad_x
     pill_h = 18.0
     pill_x = card_center_x - pill_w / 2.0
+    cy_pill = y_pill + pill_h / 2.0
+
     pdf.setFillColor(HexColor('#1E1B4B'))
     pdf.roundRect(pill_x, y_pill, pill_w, pill_h, radius=9, stroke=0, fill=1)
 
-    pdf.setFont('Helvetica-Bold', 5.5)
+    label_x = pill_x + pad_x
+    pdf.setFont('Helvetica-Bold', label_fs)
     pdf.setFillColor(HexColor('#C7D2FE'))
-    pdf.drawString(pill_x + 10, y_pill + 5.5, 'CHEST NO')
+    pdf.drawString(label_x, cy_pill - 2.0, label_text)
 
+    div_x = label_x + label_w + gap
     pdf.setStrokeColor(HexColor('#4338CA'))
     pdf.setLineWidth(0.6)
-    pdf.line(pill_x + 47, y_pill + 3.5, pill_x + 47, y_pill + 14.5)
+    pdf.line(div_x, cy_pill - 5.5, div_x, cy_pill + 5.5)
 
-    pdf.setFont('Helvetica-Bold', 9)
+    num_x = div_x + gap + 1.0
+    pdf.setFont('Helvetica-Bold', num_fs)
     pdf.setFillColor(HexColor('#FFFFFF'))
-    pdf.drawString(pill_x + 54, y_pill + 5, f'#{chest_str}')
+    pdf.drawString(num_x, cy_pill - 3.2, num_text)
 
     # 7. Metadata Badges Row: [ TEAM ] [ CATEGORY ] [ GRADE / SECTION ]
-    y_badges = card_top - 124
-    badge_item_w = 50.0
-    badge_item_h = 15.0
+    y_badges = card_top - 124.0
+    pill_w = 52.0
+    pill_h = 16.0
 
     # Team
     team_name = assignment.team.name if assignment and assignment.team else (
@@ -525,15 +580,12 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         grade_sec = getattr(student, 'gender', 'Student').title()
 
     pills_data = [
-        (card_x + 8.0, team_name.upper(), 'team'),
-        (card_x + 64.0, category_display, 'category'),
-        (card_x + 120.0, grade_sec, 'class')
+        (card_x + 8.0, team_name.upper(), 'trophy'),
+        (card_x + 64.0, category_display, 'stack'),
+        (card_x + 120.0, grade_sec, 'award')
     ]
-    pill_w = 52.0
-    pill_h = 16.0
-    y_badges = card_top - 124.0
 
-    for px, ptext, ptype in pills_data:
+    for px, ptext, icon_key in pills_data:
         # Background pill with soft light tint and subtle border
         pdf.setFillColor(HexColor('#F8FAFC'))
         pdf.setStrokeColor(HexColor('#DDE2F8'))
@@ -541,93 +593,33 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         pdf.roundRect(px, y_badges, pill_w, pill_h, radius=5, stroke=1, fill=1)
 
         cy = y_badges + pill_h / 2.0
-
-        # Calculate text width and center icon + text group
         clean_text = str(ptext).strip()
-        max_t_w = pill_w - 18.0
+        icon_sz = 9.5
+        gap_it = 3.5
+        avail_tw = pill_w - (icon_sz + gap_it + 8.0)
 
-        t_size = 5.2
-        while t_size > 4.2 and stringWidth(clean_text, 'Helvetica-Bold', t_size) > max_t_w:
-            t_size -= 0.3
-        if stringWidth(clean_text, 'Helvetica-Bold', t_size) > max_t_w:
-            while clean_text and stringWidth(clean_text + '…', 'Helvetica-Bold', t_size) > max_t_w:
+        fs = 5.2
+        while fs > 4.0 and stringWidth(clean_text, 'Helvetica-Bold', fs) > avail_tw:
+            fs -= 0.3
+        if stringWidth(clean_text, 'Helvetica-Bold', fs) > avail_tw:
+            while clean_text and stringWidth(clean_text + '…', 'Helvetica-Bold', fs) > avail_tw:
                 clean_text = clean_text[:-1]
             clean_text += '…'
 
-        t_w = stringWidth(clean_text, 'Helvetica-Bold', t_size)
-        total_w = 7.0 + 3.0 + t_w
-        if total_w < pill_w - 4.0:
-            start_x = px + (pill_w - total_w) / 2.0
-            icon_cx = start_x + 3.5
-            text_x = start_x + 9.5
-        else:
-            icon_cx = px + 6.5
-            text_x = px + 13.5
+        tw = stringWidth(clean_text, 'Helvetica-Bold', fs)
+        group_w = icon_sz + gap_it + tw
+        start_x = px + (pill_w - group_w) / 2.0
 
-        # Vector icons matching reference model
-        if ptype == 'team':
-            # Trophy icon
-            pdf.setStrokeColor(HexColor('#4338CA'))
-            pdf.setFillColor(HexColor('#4338CA'))
-            pdf.setLineWidth(0.6)
-            p_cup = pdf.beginPath()
-            p_cup.moveTo(icon_cx - 2.6, cy + 3.0)
-            p_cup.lineTo(icon_cx + 2.6, cy + 3.0)
-            p_cup.lineTo(icon_cx + 2.0, cy + 0.4)
-            p_cup.curveTo(icon_cx + 1.6, cy - 1.4, icon_cx - 1.6, cy - 1.4, icon_cx - 2.0, cy + 0.4)
-            p_cup.close()
-            pdf.drawPath(p_cup, stroke=1, fill=0)
-            p_h1 = pdf.beginPath()
-            p_h1.moveTo(icon_cx - 2.4, cy + 2.6)
-            p_h1.curveTo(icon_cx - 4.0, cy + 2.6, icon_cx - 4.0, cy + 0.6, icon_cx - 1.8, cy + 0.4)
-            pdf.drawPath(p_h1, stroke=1, fill=0)
-            p_h2 = pdf.beginPath()
-            p_h2.moveTo(icon_cx + 2.4, cy + 2.6)
-            p_h2.curveTo(icon_cx + 4.0, cy + 2.6, icon_cx + 4.0, cy + 0.6, icon_cx + 1.8, cy + 0.4)
-            pdf.drawPath(p_h2, stroke=1, fill=0)
-            pdf.line(icon_cx, cy - 1.4, icon_cx, cy - 3.2)
-            pdf.line(icon_cx - 2.0, cy - 3.2, icon_cx + 2.0, cy - 3.2)
-        elif ptype == 'category':
-            # 3-layer stacked diamonds icon
-            pdf.setStrokeColor(HexColor('#4338CA'))
-            pdf.setLineWidth(0.6)
-            p_d1 = pdf.beginPath()
-            p_d1.moveTo(icon_cx, cy + 3.2)
-            p_d1.lineTo(icon_cx + 3.0, cy + 1.6)
-            p_d1.lineTo(icon_cx, cy + 0.0)
-            p_d1.lineTo(icon_cx - 3.0, cy + 1.6)
-            p_d1.close()
-            pdf.drawPath(p_d1, stroke=1, fill=0)
-            p_d2 = pdf.beginPath()
-            p_d2.moveTo(icon_cx - 3.0, cy - 0.4)
-            p_d2.lineTo(icon_cx, cy - 2.0)
-            p_d2.lineTo(icon_cx + 3.0, cy - 0.4)
-            pdf.drawPath(p_d2, stroke=1, fill=0)
-            p_d3 = pdf.beginPath()
-            p_d3.moveTo(icon_cx - 3.0, cy - 2.2)
-            p_d3.lineTo(icon_cx, cy - 3.8)
-            p_d3.lineTo(icon_cx + 3.0, cy - 2.2)
-            pdf.drawPath(p_d3, stroke=1, fill=0)
-        else:
-            # Medal rosette with ribbon tails icon
-            pdf.setStrokeColor(HexColor('#4338CA'))
-            pdf.setLineWidth(0.6)
-            pdf.circle(icon_cx, cy + 0.8, 2.6, stroke=1, fill=0)
-            p_r1 = pdf.beginPath()
-            p_r1.moveTo(icon_cx - 1.0, cy - 1.6)
-            p_r1.lineTo(icon_cx - 2.4, cy - 3.8)
-            p_r1.lineTo(icon_cx - 0.6, cy - 3.0)
-            pdf.drawPath(p_r1, stroke=1, fill=0)
-            p_r2 = pdf.beginPath()
-            p_r2.moveTo(icon_cx + 1.0, cy - 1.6)
-            p_r2.lineTo(icon_cx + 2.4, cy - 3.8)
-            p_r2.lineTo(icon_cx + 0.6, cy - 3.0)
-            pdf.drawPath(p_r2, stroke=1, fill=0)
+        # Draw real vector icon
+        icon_img = _get_badge_icon_image(icon_key, '#4338CA')
+        if icon_img:
+            pdf.drawImage(icon_img, start_x, cy - icon_sz / 2.0, icon_sz, icon_sz, mask='auto')
 
-        # Text in clear dark slate next to icon
-        pdf.setFont('Helvetica-Bold', t_size)
+        # Draw text optically centered
+        text_x = start_x + icon_sz + gap_it
+        pdf.setFont('Helvetica-Bold', fs)
         pdf.setFillColor(HexColor('#0F172A'))
-        pdf.drawString(text_x, cy - (t_size * 0.35), clean_text)
+        pdf.drawString(text_x, cy - (fs * 0.35), clean_text)
 
     # 8. Subtle Divider Line below Metadata Pills
     y_div = y_badges - 7.5
@@ -714,10 +706,19 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     stats_left = card_x + 8.0
     col_w = stats_w / float(num_cols)
 
-    sh_w = 14.5
-    sh_h = 14.5
+    sh_w = 15.0
+    sh_h = 15.0
     sh_y = stats_top - sh_h
+    sh_cy = sh_y + sh_h / 2.0
     num_y = sh_y - 13.0
+
+    icon_map = {
+        'total': 'calendar',
+        'stage': 'theater',
+        'off_stage': 'stack',
+        'sports': 'run',
+        'general': 'award'
+    }
 
     for i, (col_label, count_val, kind) in enumerate(cols_to_show):
         cx = stats_left + i * col_w + col_w / 2.0
@@ -726,96 +727,15 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         sh_x = cx - sh_w / 2.0
         pdf.setFillColor(HexColor('#EEF2FF'))
         pdf.setStrokeColor(HexColor('#E0E7FF'))
-        pdf.setLineWidth(0.5)
+        pdf.setLineWidth(0.6)
         pdf.roundRect(sh_x, sh_y, sh_w, sh_h, radius=3.5, stroke=1, fill=1)
 
-        # 2. Vector icon inside shaded square
-        icon_cy = sh_y + sh_h / 2.0
-        pdf.setStrokeColor(HexColor('#312E81'))
-        pdf.setFillColor(HexColor('#312E81'))
-
-        if kind == 'total':
-            # Calendar icon
-            pdf.setLineWidth(0.6)
-            pdf.roundRect(cx - 3.2, icon_cy - 3.2, 6.4, 6.0, radius=0.8, stroke=1, fill=0)
-            pdf.line(cx - 3.2, icon_cy + 1.2, cx + 3.2, icon_cy + 1.2)
-            pdf.line(cx - 1.8, icon_cy + 2.8, cx - 1.8, icon_cy + 4.0)
-            pdf.line(cx + 1.8, icon_cy + 2.8, cx + 1.8, icon_cy + 4.0)
-        elif kind == 'stage':
-            # Stage curtains icon with valance, draped sides and tie-backs
-            fx, fy, fw, fh = cx - 3.4, icon_cy - 3.2, 6.8, 6.4
-            pdf.setLineWidth(0.6)
-            pdf.roundRect(fx, fy, fw, fh, radius=0.6, stroke=1, fill=0)
-            # valance top bar
-            pdf.line(fx, icon_cy + 2.0, fx + fw, icon_cy + 2.0)
-            # left curtain
-            p1 = pdf.beginPath()
-            p1.moveTo(cx - 0.4, icon_cy + 2.0)
-            p1.curveTo(cx - 1.1, icon_cy + 0.7, fx + 1.4, icon_cy + 0.1, fx + 1.3, icon_cy - 0.6)
-            p1.curveTo(fx + 1.3, icon_cy - 1.3, fx + 0.9, icon_cy - 2.5, fx + 0.6, fy)
-            pdf.drawPath(p1, stroke=1, fill=0)
-            # left tieback
-            pdf.line(fx, icon_cy - 0.6, fx + 1.3, icon_cy - 0.6)
-            # right curtain
-            p2 = pdf.beginPath()
-            p2.moveTo(cx + 0.4, icon_cy + 2.0)
-            p2.curveTo(cx + 1.1, icon_cy + 0.7, fx + fw - 1.4, icon_cy + 0.1, fx + fw - 1.3, icon_cy - 0.6)
-            p2.curveTo(fx + fw - 1.3, icon_cy - 1.3, fx + fw - 0.9, icon_cy - 2.5, fx + fw - 0.6, fy)
-            pdf.drawPath(p2, stroke=1, fill=0)
-            # right tieback
-            pdf.line(fx + fw - 1.3, icon_cy - 0.6, fx + fw, icon_cy - 0.6)
-        elif kind == 'off_stage':
-            # 3-layer stacked diamond icon
-            pdf.setLineWidth(0.6)
-            p_d1 = pdf.beginPath()
-            p_d1.moveTo(cx, icon_cy + 3.2)
-            p_d1.lineTo(cx + 3.2, icon_cy + 1.6)
-            p_d1.lineTo(cx, icon_cy + 0.0)
-            p_d1.lineTo(cx - 3.2, icon_cy + 1.6)
-            p_d1.close()
-            pdf.drawPath(p_d1, stroke=1, fill=0)
-            p_d2 = pdf.beginPath()
-            p_d2.moveTo(cx - 3.2, icon_cy - 0.4)
-            p_d2.lineTo(cx, icon_cy - 2.0)
-            p_d2.lineTo(cx + 3.2, icon_cy - 0.4)
-            pdf.drawPath(p_d2, stroke=1, fill=0)
-            p_d3 = pdf.beginPath()
-            p_d3.moveTo(cx - 3.2, icon_cy - 2.2)
-            p_d3.lineTo(cx, icon_cy - 3.8)
-            p_d3.lineTo(cx + 3.2, icon_cy - 2.2)
-            pdf.drawPath(p_d3, stroke=1, fill=0)
-        elif kind == 'sports':
-            # Running athlete icon
-            pdf.setLineWidth(0.6)
-            pdf.circle(cx + 1.5, icon_cy + 2.6, 0.9, stroke=0, fill=1)
-            pdf.line(cx + 0.8, icon_cy + 1.8, cx - 0.6, icon_cy - 0.5)
-            p_arm = pdf.beginPath()
-            p_arm.moveTo(cx + 0.6, icon_cy + 1.2)
-            p_arm.lineTo(cx + 2.4, icon_cy + 1.2)
-            p_arm.lineTo(cx + 3.2, icon_cy + 2.2)
-            pdf.drawPath(p_arm, stroke=1, fill=0)
-            pdf.line(cx + 0.6, icon_cy + 1.2, cx - 1.6, icon_cy + 0.2)
-            p_leg1 = pdf.beginPath()
-            p_leg1.moveTo(cx - 0.6, icon_cy - 0.5)
-            p_leg1.lineTo(cx + 1.2, icon_cy - 1.6)
-            p_leg1.lineTo(cx + 0.6, icon_cy - 3.6)
-            pdf.drawPath(p_leg1, stroke=1, fill=0)
-            p_leg2 = pdf.beginPath()
-            p_leg2.moveTo(cx - 0.6, icon_cy - 0.5)
-            p_leg2.lineTo(cx - 2.0, icon_cy - 1.8)
-            p_leg2.lineTo(cx - 1.2, icon_cy - 3.4)
-            pdf.drawPath(p_leg2, stroke=1, fill=0)
-        else:
-            pdf.setLineWidth(0.6)
-            p_cup = pdf.beginPath()
-            p_cup.moveTo(cx - 2.6, icon_cy + 3.0)
-            p_cup.lineTo(cx + 2.6, icon_cy + 3.0)
-            p_cup.lineTo(cx + 2.0, icon_cy + 0.2)
-            p_cup.curveTo(cx + 1.6, icon_cy - 1.5, cx - 1.6, icon_cy - 1.5, cx - 2.0, icon_cy + 0.2)
-            p_cup.close()
-            pdf.drawPath(p_cup, stroke=1, fill=0)
-            pdf.line(cx, icon_cy - 1.5, cx, icon_cy - 3.0)
-            pdf.line(cx - 1.8, icon_cy - 3.0, cx + 1.8, icon_cy - 3.0)
+        # 2. Real vector icon inside shaded square
+        icon_key = icon_map.get(kind, 'award')
+        icon_img = _get_badge_icon_image(icon_key, '#4338CA')
+        icon_sz = 9.5
+        if icon_img:
+            pdf.drawImage(icon_img, cx - icon_sz / 2.0, sh_cy - icon_sz / 2.0, icon_sz, icon_sz, mask='auto')
 
         # 3. Big bold count
         pdf.setFont('Helvetica-Bold', 13.0)
