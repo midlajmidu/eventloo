@@ -320,3 +320,14 @@ class ExportSectionDeepAuditTests(APITestCase):
         self.assertIn("Judge 2", pdf_2['text'])
         self.assertNotIn("Judge 3", pdf_2['text'])
         self.assertNotIn("Judge 4", pdf_2['text'])
+
+    def test_badge_export_layout_and_branding(self):
+        res = self.client.get(f'/api/events/{self.event.id}/certificates/?cert_types=badge&quality=standard')
+        self.assertEqual(res.status_code, 200)
+        pdf = self.extract_pdf_text(res.content)
+        self.assertIn("Powered by", pdf['text'])
+        self.assertIn("Eventloo", pdf['text'])
+        self.assertIn("Participant", pdf['text'])
+        self.assertIn("SCAN TO VERIFY", pdf['text'])
+        # Verify Programs section is removed from badge
+        self.assertNotIn("PROGRAMS", pdf['text'])
