@@ -831,6 +831,373 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pdf.restoreState()
 
 
+def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None, base_url=None, event_program_types=None, prefetched_assignments=None, prefetched_chest_number=None):
+    """
+    Renders the backside of a participant paper badge matching the official Eventloo design:
+      - Top: Event Logo + Event Name
+      - Subheader: [Student Name] • CHEST NO #[number]
+      - Header: REGISTERED PROGRAMS (N)
+      - Program Cards: Program name, type (On-Stage, Off-Stage, Sports), venue/stage, and start time
+      - Bottom: Dual-tone wave graphic
+      - Bottom Center: Powered by Eventloo branding
+    """
+    student = recipient.student
+    assignment = recipient.assignment
+    category_names = category_names or {}
+
+    card_x = cell_x + 3.0
+    card_y = cell_y + 3.0
+    card_w = badge_width - 6.0    # 180.0 pt
+    card_h = badge_height - 6.0   # 260.0 pt
+    card_top = card_y + card_h
+    card_center_x = card_x + card_w / 2.0
+
+    pdf.saveState()
+
+    # 1. Base Card White Background & subtle border
+    pdf.setFillColor(HexColor('#FFFFFF'))
+    pdf.setStrokeColor(HexColor('#E2E8F0'))
+    pdf.setLineWidth(0.6)
+    pdf.roundRect(card_x, card_y, card_w, card_h, radius=8, stroke=1, fill=1)
+
+    # Decorative soft lavender curve in top left corner (mirrored from front's top right)
+    pdf.saveState()
+    p_top_corner = pdf.beginPath()
+    p_top_corner.moveTo(card_x + 40, card_top)
+    p_top_corner.curveTo(card_x + 20, card_top - 20, card_x, card_top - 35, card_x, card_top - 50)
+    p_top_corner.lineTo(card_x, card_top)
+    p_top_corner.close()
+    pdf.setFillColor(HexColor('#EEF2FF'))
+    pdf.drawPath(p_top_corner, stroke=0, fill=1)
+    pdf.restoreState()
+
+    # 2. Dual-Tone Bottom Waves
+    pdf.saveState()
+    # Light wave (Lavender/Indigo-200)
+    p_wave1 = pdf.beginPath()
+    p_wave1.moveTo(card_x, card_y)
+    p_wave1.lineTo(card_x, card_y + 14)
+    p_wave1.curveTo(card_x + 50, card_y + 24, card_x + 110, card_y + 10, card_x + card_w, card_y + 22)
+    p_wave1.lineTo(card_x + card_w, card_y)
+    p_wave1.close()
+    pdf.setFillColor(HexColor('#C7D2FE'))
+    pdf.drawPath(p_wave1, stroke=0, fill=1)
+
+    # Foreground Dark Wave (Deep Indigo / #1E1B4B)
+    p_wave2 = pdf.beginPath()
+    p_wave2.moveTo(card_x, card_y)
+    p_wave2.lineTo(card_x, card_y + 6)
+    p_wave2.curveTo(card_x + 60, card_y + 18, card_x + 120, card_y + 4, card_x + card_w, card_y + 24)
+    p_wave2.lineTo(card_x + card_w, card_y)
+    p_wave2.close()
+    pdf.setFillColor(HexColor('#1E1B4B'))
+    pdf.drawPath(p_wave2, stroke=0, fill=1)
+    pdf.restoreState()
+
+    # Card border redraw to clip cleanly over bottom waves
+    pdf.setStrokeColor(HexColor('#CBD5E1'))
+    pdf.setLineWidth(0.5)
+    pdf.roundRect(card_x, card_y, card_w, card_h, radius=8, stroke=1, fill=0)
+
+    # 3. Top Header: Event Logo + Event Name
+    event_logo_path = _resolve_event_logo_path(event)
+    event_title = (event.title or 'EVENT').strip().upper()
+
+    if event_logo_path:
+        try:
+            with Image.open(event_logo_path) as im:
+                orig_w, orig_h = im.size
+            box_w, box_h = 32.0, 18.0
+            scale = min(box_w / float(orig_w), box_h / float(orig_h))
+            logo_w = orig_w * scale
+            logo_h = orig_h * scale
+            logo_cy = card_top - 20.0
+            logo_x = card_center_x - logo_w / 2.0
+            logo_y = logo_cy - logo_h / 2.0
+            pdf.drawImage(event_logo_path, logo_x, logo_y, width=logo_w, height=logo_h, mask='auto', preserveAspectRatio=True)
+
+            pdf.setStrokeColor(HexColor('#CBD5E1'))
+            pdf.setLineWidth(0.5)
+            pdf.line(card_x + 16, logo_cy, logo_x - 6, logo_cy)
+            pdf.line(logo_x + logo_w + 6, logo_cy, card_x + card_w - 16, logo_cy)
+        except Exception as err:
+            logger.warning("Failed to render event logo on badge backside: %s", err)
+            event_logo_path = None
+
+    if not event_logo_path:
+        y_title = card_top - 28.0
+        t_size = 9.5 if len(event_title) <= 20 else 8.0
+        max_title_w = card_w - 48.0
+        while t_size > 6.0 and stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
+            t_size -= 0.5
+        if stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
+            while event_title and stringWidth(event_title + '…', 'Helvetica-Bold', t_size) > max_title_w:
+                event_title = event_title[:-1]
+            event_title += '…'
+        t_w = stringWidth(event_title, 'Helvetica-Bold', t_size)
+        pdf.setStrokeColor(HexColor('#CBD5E1'))
+        pdf.setLineWidth(0.5)
+        pdf.line(card_x + 16, y_title + 3, card_center_x - t_w / 2.0 - 6, y_title + 3)
+        pdf.line(card_center_x + t_w / 2.0 + 6, y_title + 3, card_x + card_w - 16, y_title + 3)
+        pdf.setFont('Helvetica-Bold', t_size)
+        pdf.setFillColor(HexColor('#0F172A'))
+        pdf.drawCentredString(card_center_x, y_title, event_title)
+    else:
+        y_title = card_top - 40.0
+        t_size = 8.5 if len(event_title) <= 20 else (7.5 if len(event_title) <= 30 else 6.5)
+        max_title_w = card_w - 24.0
+        while t_size > 5.5 and stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
+            t_size -= 0.5
+        if stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
+            while event_title and stringWidth(event_title + '…', 'Helvetica-Bold', t_size) > max_title_w:
+                event_title = event_title[:-1]
+            event_title += '…'
+        pdf.setFont('Helvetica-Bold', t_size)
+        pdf.setFillColor(HexColor('#0F172A'))
+        pdf.drawCentredString(card_center_x, y_title, event_title)
+
+    # 4. Student Name & Chest No Banner
+    chest_number = prefetched_chest_number if prefetched_chest_number is not None else (assignment.chest_number if assignment else None)
+    if not chest_number:
+        chest_number = ChestNumber.objects.filter(event=event, student=student).values_list(
+            'chest_number', flat=True
+        ).first()
+    chest_str = str(chest_number) if chest_number else 'N/A'
+    name = (student.get_full_name() or student.display_name or 'Participant').strip().upper()
+
+    y_sub = y_title - 14.0
+    sub_text = f"{name}  •  CHEST NO #{chest_str}"
+    max_sw = card_w - 20.0
+    sub_fs = 7.5
+    while sub_fs > 5.5 and stringWidth(sub_text, 'Helvetica-Bold', sub_fs) > max_sw:
+        sub_fs -= 0.3
+    if stringWidth(sub_text, 'Helvetica-Bold', sub_fs) > max_sw:
+        while sub_text and stringWidth(sub_text + '…', 'Helvetica-Bold', sub_fs) > max_sw:
+            sub_text = sub_text[:-1]
+        sub_text += '…'
+
+    pdf.setFont('Helvetica-Bold', sub_fs)
+    pdf.setFillColor(HexColor('#312E81'))
+    pdf.drawCentredString(card_center_x, y_sub, sub_text)
+
+    # 5. Retrieve Student's Assigned Programs
+    if prefetched_assignments is not None:
+        student_assignments = prefetched_assignments
+    else:
+        student_assignments = ProgramAssignment.objects.filter(
+            student=student, program__event=event
+        ).select_related('program', 'program__stage').order_by('program__start_time', 'program__name')
+
+    programs_list = []
+    seen_progs = set()
+    for pa in student_assignments:
+        p = pa.program
+        if p and p.id not in seen_progs:
+            seen_progs.add(p.id)
+            programs_list.append((p.name, p))
+
+    if not programs_list and assignment and getattr(assignment, 'program', None):
+        p = assignment.program
+        programs_list = [(p.name, p)]
+
+    num_progs = len(programs_list)
+
+    # 6. Section Divider: REGISTERED PROGRAMS
+    y_sec = y_sub - 14.0
+    hdr_text = f"REGISTERED PROGRAMS ({num_progs})" if num_progs > 0 else "REGISTERED PROGRAMS"
+    hdr_w = stringWidth(hdr_text, 'Helvetica-Bold', 6.0)
+    pdf.setStrokeColor(HexColor('#EEF2F6'))
+    pdf.setLineWidth(0.6)
+    pdf.line(card_x + 12.0, y_sec + 2.0, card_center_x - hdr_w / 2.0 - 6.0, y_sec + 2.0)
+    pdf.line(card_center_x + hdr_w / 2.0 + 6.0, y_sec + 2.0, card_x + card_w - 12.0, y_sec + 2.0)
+    pdf.setFont('Helvetica-Bold', 6.0)
+    pdf.setFillColor(HexColor('#64748B'))
+    pdf.drawCentredString(card_center_x, y_sec, hdr_text)
+
+    # 7. Render Programs List
+    available_top = y_sec - 7.0
+    available_bottom = card_y + 30.0
+    total_avail = available_top - available_bottom
+    item_w = card_w - 20.0
+    left_x = card_x + 10.0
+
+    if num_progs == 0:
+        empty_box_h = 44.0
+        empty_y = (available_top + available_bottom - empty_box_h) / 2.0
+        pdf.setFillColor(HexColor('#F8FAFC'))
+        pdf.setStrokeColor(HexColor('#E2E8F0'))
+        pdf.setLineWidth(0.5)
+        pdf.roundRect(left_x, empty_y, item_w, empty_box_h, radius=4.0, stroke=1, fill=1)
+
+        pdf.setFont('Helvetica-Bold', 6.5)
+        pdf.setFillColor(HexColor('#64748B'))
+        pdf.drawCentredString(card_center_x, empty_y + 24.0, 'No Registered Programs')
+        pdf.setFont('Helvetica', 5.0)
+        pdf.setFillColor(HexColor('#94A3B8'))
+        pdf.drawCentredString(card_center_x, empty_y + 12.0, 'Contact event desk for program schedule')
+
+    elif num_progs <= 5:
+        # Roomy 2-line cards
+        box_h = min(24.0, (total_avail - (num_progs - 1) * 5.0) / float(num_progs))
+        gap_y = 5.0
+
+        for i, (p_name, p) in enumerate(programs_list):
+            cur_y = available_top - i * (box_h + gap_y) - box_h
+
+            pdf.setFillColor(HexColor('#F8FAFC'))
+            pdf.setStrokeColor(HexColor('#E2E8F0'))
+            pdf.setLineWidth(0.5)
+            pdf.roundRect(left_x, cur_y, item_w, box_h, radius=4.0, stroke=1, fill=1)
+
+            # Program Type classification & accent stripe
+            p_type_val = getattr(p, 'program_type', None) or ('stage' if getattr(p, 'is_stage', False) else 'off_stage')
+            norm_t = (p_type_val or '').lower()
+            if 'on' in norm_t and 'stage' in norm_t or norm_t == 'stage':
+                type_label = 'On-Stage'
+                accent_color = HexColor('#4F46E5')
+            elif 'sport' in norm_t:
+                type_label = 'Sports'
+                accent_color = HexColor('#059669')
+            elif 'off' in norm_t:
+                type_label = 'Off-Stage'
+                accent_color = HexColor('#D97706')
+            else:
+                type_label = str(p_type_val).title()
+                accent_color = HexColor('#4F46E5')
+
+            pdf.setFillColor(accent_color)
+            pdf.roundRect(left_x, cur_y + 3.0, 2.5, box_h - 6.0, radius=1.0, stroke=0, fill=1)
+
+            # Index
+            pdf.setFont('Helvetica-Bold', 5.5)
+            pdf.setFillColor(HexColor('#64748B'))
+            pdf.drawString(left_x + 8.0, cur_y + box_h - 8.5, f'{i+1:02d}.')
+
+            # Program name
+            clean_n = str(p_name).strip().upper()
+            max_nw = item_w - 32.0
+            fs = 6.5
+            while fs > 4.8 and stringWidth(clean_n, 'Helvetica-Bold', fs) > max_nw:
+                fs -= 0.3
+            if stringWidth(clean_n, 'Helvetica-Bold', fs) > max_nw:
+                while clean_n and stringWidth(clean_n + '…', 'Helvetica-Bold', fs) > max_nw:
+                    clean_n = clean_n[:-1]
+                clean_n += '…'
+            pdf.setFont('Helvetica-Bold', fs)
+            pdf.setFillColor(HexColor('#0F172A'))
+            pdf.drawString(left_x + 22.0, cur_y + box_h - 8.5, clean_n)
+
+            # Details: Type • Stage • Time
+            p_stage = (p.stage.name if getattr(p, 'stage', None) else (getattr(p, 'venue', '') or '')).strip()
+            p_time = p.start_time.strftime('%I:%M %p') if getattr(p, 'start_time', None) else ''
+            details_parts = [type_label]
+            if p_stage:
+                details_parts.append(p_stage)
+            if p_time:
+                details_parts.append(p_time)
+            details_str = '  •  '.join(details_parts)
+
+            max_dw = item_w - 32.0
+            dfs = 5.0
+            while dfs > 4.0 and stringWidth(details_str, 'Helvetica', dfs) > max_dw:
+                dfs -= 0.2
+            pdf.setFont('Helvetica', dfs)
+            pdf.setFillColor(HexColor('#64748B'))
+            pdf.drawString(left_x + 22.0, cur_y + 4.5, details_str)
+
+    else:
+        # Compact single-line cards for 6+ programs
+        gap_y = max(2.5, min(4.0, 18.0 / float(num_progs)))
+        box_h = min(17.0, (total_avail - (num_progs - 1) * gap_y) / float(num_progs))
+
+        for i, (p_name, p) in enumerate(programs_list):
+            cur_y = available_top - i * (box_h + gap_y) - box_h
+
+            pdf.setFillColor(HexColor('#F8FAFC'))
+            pdf.setStrokeColor(HexColor('#E2E8F0'))
+            pdf.setLineWidth(0.5)
+            pdf.roundRect(left_x, cur_y, item_w, box_h, radius=3.5, stroke=1, fill=1)
+
+            # Program Type classification & accent stripe
+            p_type_val = getattr(p, 'program_type', None) or ('stage' if getattr(p, 'is_stage', False) else 'off_stage')
+            norm_t = (p_type_val or '').lower()
+            if 'on' in norm_t and 'stage' in norm_t or norm_t == 'stage':
+                type_label = 'On-Stage'
+                accent_color = HexColor('#4F46E5')
+            elif 'sport' in norm_t:
+                type_label = 'Sports'
+                accent_color = HexColor('#059669')
+            elif 'off' in norm_t:
+                type_label = 'Off-Stage'
+                accent_color = HexColor('#D97706')
+            else:
+                type_label = str(p_type_val).title()
+                accent_color = HexColor('#4F46E5')
+
+            pdf.setFillColor(accent_color)
+            pdf.roundRect(left_x, cur_y + 2.5, 2.0, box_h - 5.0, radius=1.0, stroke=0, fill=1)
+
+            # Index
+            pdf.setFont('Helvetica-Bold', 5.2)
+            pdf.setFillColor(HexColor('#64748B'))
+            pdf.drawString(left_x + 6.0, cur_y + (box_h - 5.2) / 2.0, f'{i+1:02d}.')
+
+            # Stage / Type Tag on the right
+            p_stage = (p.stage.name if getattr(p, 'stage', None) else (getattr(p, 'venue', '') or '')).strip()
+            tag_text = f"{type_label} • {p_stage}" if p_stage else type_label
+            tag_w = stringWidth(tag_text, 'Helvetica-Bold', 4.5)
+            tag_box_w = tag_w + 6.0
+            tag_x = left_x + item_w - tag_box_w - 4.0
+            tag_h = min(10.5, box_h - 4.0)
+            tag_y = cur_y + (box_h - tag_h) / 2.0
+            pdf.setFillColor(HexColor('#EEF2FF'))
+            pdf.roundRect(tag_x, tag_y, tag_box_w, tag_h, radius=2.5, stroke=0, fill=1)
+            pdf.setFont('Helvetica-Bold', 4.5)
+            pdf.setFillColor(HexColor('#312E81'))
+            pdf.drawCentredString(tag_x + tag_box_w / 2.0, tag_y + 2.5, tag_text)
+
+            # Program Name
+            clean_n = str(p_name).strip().upper()
+            max_nw = (tag_x - (left_x + 18.0)) - 4.0
+            fs = 6.0
+            while fs > 4.5 and stringWidth(clean_n, 'Helvetica-Bold', fs) > max_nw:
+                fs -= 0.3
+            if stringWidth(clean_n, 'Helvetica-Bold', fs) > max_nw:
+                while clean_n and stringWidth(clean_n + '…', 'Helvetica-Bold', fs) > max_nw:
+                    clean_n = clean_n[:-1]
+                clean_n += '…'
+
+            pdf.setFont('Helvetica-Bold', fs)
+            pdf.setFillColor(HexColor('#0F172A'))
+            pdf.drawString(left_x + 18.0, cur_y + (box_h - fs) / 2.0, clean_n)
+
+    # 8. "Powered by Eventloo" at bottom center
+    eventloo_icon_path = _resolve_eventloo_icon_path()
+    f_y = card_y + 14.0
+    icon_w = 8.5
+    gap = 4.0
+    p_w = stringWidth('Powered by ', 'Helvetica', 5.2)
+    e_w = stringWidth('Eventloo', 'Helvetica-Bold', 5.5)
+    total_brand_w = (icon_w + gap if eventloo_icon_path else 0.0) + p_w + e_w
+    brand_start_x = card_center_x - total_brand_w / 2.0
+
+    if eventloo_icon_path:
+        try:
+            pdf.drawImage(eventloo_icon_path, brand_start_x, f_y - 1.0, width=icon_w, height=icon_w, mask='auto', preserveAspectRatio=True)
+            brand_start_x += icon_w + gap
+        except Exception as err:
+            logger.warning("Eventloo back badge icon draw failed: %s", err)
+
+    pdf.setFont('Helvetica', 5.2)
+    pdf.setFillColor(HexColor('#64748B'))
+    pdf.drawString(brand_start_x, f_y + 0.8, 'Powered by ')
+    pdf.setFont('Helvetica-Bold', 5.5)
+    pdf.setFillColor(HexColor('#0F172A'))
+    pdf.drawString(brand_start_x + p_w, f_y + 0.8, 'Eventloo')
+
+    pdf.restoreState()
+
+
 def render_certificates_pdf(event, templates_by_type, recipients, quality='standard', base_url=None):
     if quality not in ('screen', 'standard', 'print'):
         raise ValidationError('Unsupported certificate quality.')
@@ -908,17 +1275,36 @@ def render_certificates_pdf(event, templates_by_type, recipients, quality='stand
                 logger.warning("Batch chest numbers prefetch failed: %s", e)
 
         for recipient in badge_recipients:
+            rec_student_id = getattr(recipient.student, 'id', None)
+            student_assignments_list = assignments_by_student.get(rec_student_id)
+            student_chest_num = chest_numbers_by_student.get(rec_student_id)
+
+            # 1. Front Side Badge
             pdf.setPageSize((page_width, page_height))
             pdf.saveState()
             pdf.translate(offset_x, offset_y)
             pdf.scale(scale, scale)
-            rec_student_id = getattr(recipient.student, 'id', None)
             _draw_paper_badge(
                 pdf, 0, 0, badge_ref_w, badge_ref_h,
                 recipient, event, category_names, base_url=base_url,
                 event_program_types=event_program_types,
-                prefetched_assignments=assignments_by_student.get(rec_student_id),
-                prefetched_chest_number=chest_numbers_by_student.get(rec_student_id),
+                prefetched_assignments=student_assignments_list,
+                prefetched_chest_number=student_chest_num,
+            )
+            pdf.restoreState()
+            pdf.showPage()
+
+            # 2. Back Side Badge (Programs list & event info)
+            pdf.setPageSize((page_width, page_height))
+            pdf.saveState()
+            pdf.translate(offset_x, offset_y)
+            pdf.scale(scale, scale)
+            _draw_paper_badge_back(
+                pdf, 0, 0, badge_ref_w, badge_ref_h,
+                recipient, event, category_names, base_url=base_url,
+                event_program_types=event_program_types,
+                prefetched_assignments=student_assignments_list,
+                prefetched_chest_number=student_chest_num,
             )
             pdf.restoreState()
             pdf.showPage()

@@ -509,7 +509,7 @@ class EventBusinessLogicTests(TestCase):
         import io
         from pypdf import PdfReader
         reader = PdfReader(io.BytesIO(export_res.content))
-        self.assertEqual(len(reader.pages), 2)  # Full A4 high-res badge per participant (2 pages for 2 participants)
+        self.assertEqual(len(reader.pages), 4)  # Front + back sides per participant (4 pages for 2 participants)
         page = reader.pages[0]
         self.assertAlmostEqual(float(page.mediabox.width), 595.28, delta=1.0)
         self.assertAlmostEqual(float(page.mediabox.height), 841.89, delta=1.0)
@@ -551,8 +551,8 @@ class EventBusinessLogicTests(TestCase):
         self.assertEqual(multi_page_res.status_code, 200)
         self.assertEqual(multi_page_res['X-Certificate-Count'], '10')
         reader_10 = PdfReader(io.BytesIO(multi_page_res.content))
-        # 10 badges with 1 full A4 page per student = 10 A4 pages
-        self.assertEqual(len(reader_10.pages), 10)
+        # 10 badges with front + back sides per student = 20 A4 pages
+        self.assertEqual(len(reader_10.pages), 20)
         for pg in reader_10.pages:
             self.assertAlmostEqual(float(pg.mediabox.width), 595.28, delta=1.0)
             self.assertAlmostEqual(float(pg.mediabox.height), 841.89, delta=1.0)

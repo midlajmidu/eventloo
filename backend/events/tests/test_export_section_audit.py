@@ -328,5 +328,5 @@ class ExportSectionDeepAuditTests(APITestCase):
         self.assertIn("Powered by", pdf['text'])
         self.assertIn("Eventloo", pdf['text'])
         self.assertIn("SCAN TO VERIFY", pdf['text'])
-        self.assertNotIn("PROGRAMS", pdf['text'])
+        self.assertIn("REGISTERED PROGRAMS", pdf['text'])
 

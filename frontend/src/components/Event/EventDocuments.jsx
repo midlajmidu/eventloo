@@ -1820,7 +1820,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                     {selectedExportType === 'badge' && (
                       <div className="p-3.5 bg-indigo-50/80 border border-indigo-100 rounded-xl text-xs text-indigo-900 flex items-center space-x-2.5">
                         <BadgeCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                        <span>Exports official participant badges (1 full A4 page per participant in high quality with QR verification, chest numbers, and verified event counts).</span>
+                        <span>Exports official participant badges (front & back sides with QR verification, chest numbers, and registered programs list).</span>
                       </div>
                     )}
 
