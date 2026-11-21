@@ -790,25 +790,26 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
             effective_base = ''
     qr_target_url = f"{effective_base.rstrip('/')}/events/{event.id}/badge/{student.id}" if effective_base else f"/events/{event.id}/badge/{student.id}"
 
-    qr_sz = 33.0
+    qr_sz = 37.0
     try:
         qr = QrCodeWidget(qr_target_url)
+        qr.barBorder = 1
         bounds = qr.getBounds()
         d = Drawing(bounds[2], bounds[3], transform=[qr_sz / bounds[2], 0, 0, qr_sz / bounds[3], 0, 0])
         d.add(qr)
         qr_draw_x = qr_box_x + (qr_box_w - qr_sz) / 2.0
-        qr_draw_y = qr_box_y + 11.5
+        qr_draw_y = qr_box_y + 9.5
         renderPDF.draw(d, pdf, qr_draw_x, qr_draw_y)
     except Exception as qr_err:
         logger.warning("Badge QR generation failed: %s", qr_err)
 
     pdf.setFont('Helvetica-Bold', 4.5)
     pdf.setFillColor(HexColor('#312E81'))
-    pdf.drawCentredString(qr_box_x + qr_box_w / 2.0, qr_box_y + 4.2, 'SCAN TO VERIFY')
+    pdf.drawCentredString(qr_box_x + qr_box_w / 2.0, qr_box_y + 3.5, 'SCAN TO VERIFY')
 
     # 10. "Powered by Eventloo" on bottom-left white card area
     eventloo_icon_path = _resolve_eventloo_icon_path()
-    pow_y = qr_box_y + (qr_box_h / 2.0) - 4.0
+    pow_y = card_y + 21.0
     f_x = card_x + 12.0
     icon_offset = 0.0
 
@@ -1005,8 +1006,8 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
     # 6. List the Programs normally
     start_y = y_prog_hdr - 16.0
     # Available vertical space down to Powered by Eventloo footer
-    # Front page pow_y = card_y + 8.0 + 25.0 - 4.0 = card_y + 29.0
-    avail_bottom = card_y + 44.0
+    # Front page pow_y = card_y + 21.0
+    avail_bottom = card_y + 36.0
     total_avail = max(40.0, start_y - avail_bottom)
 
     if num_progs == 0:
@@ -1061,7 +1062,7 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
 
     # 7. "Powered by Eventloo" - EXACT SAME PLACE AS FRONT PAGE
     eventloo_icon_path = _resolve_eventloo_icon_path()
-    pow_y = card_y + 8.0 + (50.0 / 2.0) - 4.0
+    pow_y = card_y + 21.0
     f_x = card_x + 12.0
     icon_offset = 0.0
 
