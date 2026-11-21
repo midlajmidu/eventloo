@@ -810,13 +810,13 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     # 10. "Powered by Eventloo" on bottom-left white card area
     eventloo_icon_path = _resolve_eventloo_icon_path()
     pow_y = card_y + 21.0
-    f_x = card_x + 12.0
+    f_x = card_x + 8.0
     icon_offset = 0.0
 
     if eventloo_icon_path:
         try:
             pdf.drawImage(eventloo_icon_path, f_x, pow_y - 1.0, width=8.5, height=8.5, mask='auto', preserveAspectRatio=True)
-            icon_offset = 12.0
+            icon_offset = 9.5
         except Exception as icon_err:
             logger.warning("Eventloo badge icon draw failed: %s", icon_err)
             icon_offset = 0.0
@@ -1063,13 +1063,13 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
     # 7. "Powered by Eventloo" - EXACT SAME PLACE AS FRONT PAGE
     eventloo_icon_path = _resolve_eventloo_icon_path()
     pow_y = card_y + 21.0
-    f_x = card_x + 12.0
+    f_x = card_x + 8.0
     icon_offset = 0.0
 
     if eventloo_icon_path:
         try:
             pdf.drawImage(eventloo_icon_path, f_x, pow_y - 1.0, width=8.5, height=8.5, mask='auto', preserveAspectRatio=True)
-            icon_offset = 12.0
+            icon_offset = 9.5
         except Exception as icon_err:
             logger.warning("Eventloo back badge icon draw failed: %s", icon_err)
             icon_offset = 0.0
