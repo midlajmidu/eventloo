@@ -143,7 +143,8 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
       link.href = url;
       const cleanTeam = teamName.replace(/\s+/g, '_');
       const cleanEvent = (event?.title || 'Event').replace(/\s+/g, '_');
-      link.download = `Call_List_${cleanTeam}_${cleanEvent}.pdf`;
+      const filePrefix = callListMode === 'participant' ? 'Participant_List' : 'Call_List';
+      link.download = `${filePrefix}_${cleanTeam}_${cleanEvent}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -170,9 +171,11 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
     const term = searchTerm.toLowerCase();
     const chestNo = String(item.chest_no || '').toLowerCase();
     const prog = String(item.program_name || '').toLowerCase();
-    const part = String(item.participant_names || '').toLowerCase();
+    const part = String(item.participant_names || item.participant_name || item.student_name || '').toLowerCase();
     const cat = String(item.category || '').toLowerCase();
-    return chestNo.includes(term) || prog.includes(term) || part.includes(term) || cat.includes(term);
+    const cls = String(item.class || '').toLowerCase();
+    const team = String(item.team || item.team_name || '').toLowerCase();
+    return chestNo.includes(term) || prog.includes(term) || part.includes(term) || cat.includes(term) || cls.includes(term) || team.includes(term);
   });
 
   // Calculate stats
@@ -201,7 +204,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
                 </span>
               </div>
               <h1 className="text-lg sm:text-xl font-bold text-slate-900 tracking-tight mt-0.5">
-                Calling Sheet & Verified Roster
+                {callListMode === 'participant' ? 'Participant List & Official Roster' : 'Calling Sheet & Verified Roster'}
               </h1>
               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
                 View verified chest numbers, stage call lists, and printable PDF documents for <strong>{event?.title}</strong>.
@@ -218,7 +221,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
               title="Download official PDF to your device"
             >
               <Download className={`h-3.5 w-3.5 ${downloadingPdf ? 'animate-bounce' : ''}`} />
-              <span>{downloadingPdf ? 'Downloading PDF...' : 'Download Call List (PDF)'}</span>
+              <span>{downloadingPdf ? 'Downloading PDF...' : (callListMode === 'participant' ? 'Download Participant List (PDF)' : 'Download Call List (PDF)')}</span>
             </button>
 
             {pdfBlobUrl && (
@@ -264,17 +267,38 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
         {/* Quick Summary Metrics */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-100">
           <div className="bg-slate-50/80 rounded-xl p-2.5 sm:p-3 border border-slate-200/70">
-            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Total Call Entries</span>
+            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">
+              {callListMode === 'participant' ? 'Total Participants' : 'Total Call Entries'}
+            </span>
             <span className="text-base sm:text-lg font-bold text-slate-900 mt-0.5 block">{totalEntries}</span>
           </div>
-          <div className="bg-indigo-50/50 rounded-xl p-2.5 sm:p-3 border border-indigo-100/70">
-            <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider block">Solo Entries</span>
-            <span className="text-base sm:text-lg font-bold text-indigo-900 mt-0.5 block">{soloCount}</span>
-          </div>
-          <div className="bg-emerald-50/50 rounded-xl p-2.5 sm:p-3 border border-emerald-100/70">
-            <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider block">Group Entries</span>
-            <span className="text-base sm:text-lg font-bold text-emerald-900 mt-0.5 block">{groupCount}</span>
-          </div>
+          {callListMode === 'participant' ? (
+            <>
+              <div className="bg-indigo-50/50 rounded-xl p-2.5 sm:p-3 border border-indigo-100/70">
+                <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider block">Male</span>
+                <span className="text-base sm:text-lg font-bold text-indigo-900 mt-0.5 block">
+                  {callListData.filter(i => String(i.gender || '').toLowerCase().startsWith('m')).length}
+                </span>
+              </div>
+              <div className="bg-emerald-50/50 rounded-xl p-2.5 sm:p-3 border border-emerald-100/70">
+                <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider block">Female</span>
+                <span className="text-base sm:text-lg font-bold text-emerald-900 mt-0.5 block">
+                  {callListData.filter(i => String(i.gender || '').toLowerCase().startsWith('f')).length}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="bg-indigo-50/50 rounded-xl p-2.5 sm:p-3 border border-indigo-100/70">
+                <span className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider block">Solo Entries</span>
+                <span className="text-base sm:text-lg font-bold text-indigo-900 mt-0.5 block">{soloCount}</span>
+              </div>
+              <div className="bg-emerald-50/50 rounded-xl p-2.5 sm:p-3 border border-emerald-100/70">
+                <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider block">Group Entries</span>
+                <span className="text-base sm:text-lg font-bold text-emerald-900 mt-0.5 block">{groupCount}</span>
+              </div>
+            </>
+          )}
           <div className="bg-amber-50/50 rounded-xl p-2.5 sm:p-3 border border-amber-100/70">
             <span className="text-[10px] font-semibold text-amber-700 uppercase tracking-wider block">Categories</span>
             <span className="text-base sm:text-lg font-bold text-amber-900 mt-0.5 block">{uniqueCategories.length}</span>
@@ -297,7 +321,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              Category Wise
+              Team Wise
             </button>
             <button
               type="button"
@@ -309,6 +333,17 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
               }`}
             >
               Competition Wise
+            </button>
+            <button
+              type="button"
+              onClick={() => setCallListMode('participant')}
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                callListMode === 'participant'
+                  ? 'bg-white text-indigo-600 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Participant List
             </button>
           </div>
 
@@ -428,7 +463,7 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
             <div className="flex items-center space-x-2">
               <UserCheck className="h-4 w-4 text-indigo-600" />
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-800">
-                Team Participant Call List
+                {callListMode === 'participant' ? 'Official Participant List' : 'Team Participant Call List'}
               </h3>
             </div>
             <span className="text-[11px] font-semibold text-slate-500">
@@ -455,7 +490,17 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  {callListMode === 'team' ? (
+                  {callListMode === 'participant' ? (
+                    <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200">
+                      <th className="py-3 px-4 w-12 text-center">NO.</th>
+                      <th className="py-3 px-4 text-center w-24">CHEST NO</th>
+                      <th className="py-3 px-4">STUDENT NAME</th>
+                      <th className="py-3 px-4 text-center w-20">GENDER</th>
+                      <th className="py-3 px-4 text-center w-24">CLASS</th>
+                      <th className="py-3 px-4 text-center w-28">CATEGORY</th>
+                      <th className="py-3 px-4 w-32">TEAM</th>
+                    </tr>
+                  ) : callListMode === 'team' ? (
                     <tr className="bg-slate-100/80 text-slate-700 font-bold border-b border-slate-200">
                       <th className="py-3 px-4 w-12 text-center">#</th>
                       <th className="py-3 px-4 text-center w-24">Chest No</th>
@@ -478,8 +523,36 @@ const TeamDocuments = ({ eventId, event, teamData, categories = [] }) => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredItems.map((item, idx) => (
-                    <tr key={`${item.student_id || item.program_id}-${item.chest_no}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
-                      {callListMode === 'team' ? (
+                    <tr key={`${item.student_id || item.program_id || idx}-${item.chest_no || idx}-${idx}`} className="hover:bg-slate-50/80 transition-colors">
+                      {callListMode === 'participant' ? (
+                        <>
+                          <td className="py-3 px-4 text-center text-slate-400 font-semibold">{idx + 1}</td>
+                          <td className="py-3 px-4 text-center font-extrabold text-indigo-700">
+                            <span className="px-2.5 py-1 bg-indigo-50 border border-indigo-200 rounded-lg text-xs tracking-wide">
+                              {item.chest_no || '—'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-bold text-slate-900">
+                            {item.student_name || item.participant_names || '—'}
+                          </td>
+                          <td className="py-3 px-4 text-center text-slate-600 font-medium capitalize">
+                            {item.gender || '—'}
+                          </td>
+                          <td className="py-3 px-4 text-center font-semibold text-slate-700">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-700 text-[11px] font-semibold border border-slate-200">
+                              {item.class || '—'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-[11px] font-bold border border-indigo-100">
+                              {item.category || 'General'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-slate-800">
+                            {item.team || item.team_name || teamName || '—'}
+                          </td>
+                        </>
+                      ) : callListMode === 'team' ? (
                         <>
                           <td className="py-3 px-4 text-center text-slate-400 font-semibold align-top">{idx + 1}</td>
                           <td className="py-3 px-4 text-center font-extrabold text-indigo-700 align-top">

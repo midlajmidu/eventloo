@@ -188,7 +188,10 @@ const ExportSummaryCell = ({ item, programs = [], teams = [] }) => {
     detailsList.push('Layout: Single page per competition');
     detailsList.push('Code Letter Column: Blank for manual entry');
   } else if (item.type === 'call_list') {
-    detailsList.push(`Mode: ${item.callListMode === 'team' ? 'Team Wise' : 'Competition Wise'}`);
+    const modeLabel = item.callListMode === 'participant'
+      ? 'Participant List'
+      : (item.callListMode === 'team' ? 'Team Wise' : 'Competition Wise');
+    detailsList.push(`Mode: ${modeLabel}`);
     if (item.selectedTeamId && item.selectedTeamId !== 'all') {
       const tm = teams.find(t => t.id === parseInt(item.selectedTeamId, 10));
       detailsList.push(`Team: ${tm ? tm.name : 'Selected Team'}`);
@@ -635,6 +638,99 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
             </div>
           `;
         }
+
+      } else if (mode === 'participant') {
+        pageCount++;
+        const pageBreak = pageCount > 1 ? 'style="page-break-before: always;"' : '';
+        const partMap = {};
+        for (const program of targetPrograms) {
+          let assignments = [];
+          try {
+            const response = await eventCallingSheetAPI.getProgramParticipants(program.id);
+            assignments = response.data?.results || response.data || [];
+          } catch (error) {
+            console.error(`Error fetching participants for program ${program.id}:`, error);
+          }
+          if (targetTeamId !== 'all') {
+            assignments = assignments.filter(a => Number(a.team_id || a.team) === Number(targetTeamId));
+          }
+
+          for (const a of assignments) {
+            const sid = a.student_id || a.student?.id || a.id;
+            if (!partMap[sid]) {
+              const sName = a.student_name || (a.student?.first_name 
+                ? `${a.student.first_name || ''} ${a.student.last_name || ''}`.trim()
+                : (a.participant_names || 'Participant'));
+              const tm = teams.find(t => t.id === Number(a.team_id || a.team));
+              partMap[sid] = {
+                chestNo: a.chest_number || a.student?.chest_number || '—',
+                name: sName,
+                gender: a.gender || a.student?.gender || '—',
+                className: a.student?.grade ? `${a.student.grade} ${a.student.section || ''}`.trim() : (a.class_name || '—'),
+                category: a.category || a.student?.category || program.category || 'General',
+                teamName: tm?.name || a.team_name || '—'
+              };
+            }
+          }
+        }
+
+        const sortedParts = Object.values(partMap).sort((a, b) => {
+          const aNum = parseInt(a.chestNo, 10);
+          const bNum = parseInt(b.chestNo, 10);
+          if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+          return String(a.name).localeCompare(String(b.name));
+        });
+
+        let rows = '';
+        sortedParts.forEach((p, idx) => {
+          rows += `
+            <tr>
+              <td class="center font-semibold" style="width: 7%; color: #64748b;">${idx + 1}</td>
+              <td class="center font-bold" style="width: 14%; color: #4338ca;">${escapeHtml(p.chestNo)}</td>
+              <td class="font-bold" style="width: 25%;">${escapeHtml(p.name)}</td>
+              <td class="center" style="width: 12%; text-transform: capitalize;">${escapeHtml(p.gender)}</td>
+              <td class="center" style="width: 14%;">${escapeHtml(p.className)}</td>
+              <td class="center font-medium" style="width: 14%;">${escapeHtml(p.category)}</td>
+              <td class="center font-bold" style="width: 14%;">${escapeHtml(p.teamName)}</td>
+            </tr>
+          `;
+        });
+
+        const bannerTitle = targetTeamId !== 'all' 
+          ? `Team: ${teams.find(t => t.id === parseInt(targetTeamId, 10))?.name || 'Selected Team'} (${sortedParts.length} Participants)`
+          : `Official Verified Participant Roster (${sortedParts.length} Total Participants)`;
+
+        pagesHtml += `
+          <div class="program-page" ${pageBreak}>
+            <div class="header">
+              <div>${escapeHtml(event?.title || 'Event')}</div>
+              <div>${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+            </div>
+            <div class="title">Participant List</div>
+            <div class="subtitle">${escapeHtml(bannerTitle)}</div>
+            <div class="hr"></div>
+            <table class="main-table">
+              <thead>
+                <tr>
+                  <th class="center" style="width: 7%;">NO.</th>
+                  <th class="center" style="width: 14%;">CHEST NO</th>
+                  <th style="width: 25%;">STUDENT NAME</th>
+                  <th class="center" style="width: 12%;">GENDER</th>
+                  <th class="center" style="width: 14%;">CLASS</th>
+                  <th class="center" style="width: 14%;">CATEGORY</th>
+                  <th class="center" style="width: 14%;">TEAM</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows || '<tr><td colspan="7" class="center">No participants found.</td></tr>'}
+              </tbody>
+            </table>
+            <div style="text-align: right; font-size: 11px; font-weight: bold; color: #475569; margin-top: 8px;">
+              Total participants: ${sortedParts.length}
+            </div>
+            <div class="doc-footer">Powered by <strong>eventloo.in</strong></div>
+          </div>
+        `;
 
       } else {
         for (let i = 0; i < targetPrograms.length; i++) {
@@ -1237,9 +1333,19 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
     const typeConfig = exportTypes.find(t => t.id === selectedExportType) || exportTypes[0];
     
     let summaryText = `${typeConfig.title}`;
-    if (selectedExportType === 'call_list' && callListMode === 'team') {
-      const tm = teams.find(t => t.id === parseInt(selectedTeamId, 10));
-      summaryText += ` (Team Wise: ${tm ? tm.name : 'All Teams'})`;
+    if (selectedExportType === 'call_list') {
+      if (callListMode === 'team') {
+        const tm = teams.find(t => t.id === parseInt(selectedTeamId, 10));
+        summaryText += ` (Team Wise: ${tm ? tm.name : 'All Teams'})`;
+      } else if (callListMode === 'participant') {
+        const tm = teams.find(t => t.id === parseInt(selectedTeamId, 10));
+        summaryText = `Participant List (${tm ? tm.name : 'All Teams'})`;
+      } else if (selectedProgramId !== 'all') {
+        const prog = programs.find(p => p.id === parseInt(selectedProgramId, 10));
+        if (prog) summaryText += ` for ${prog.name}`;
+      } else {
+        summaryText += ` for ${selectedCategory === 'all' ? 'All categories' : selectedCategory.toUpperCase()}`;
+      }
     } else if (selectedProgramId !== 'all') {
       const prog = programs.find(p => p.id === parseInt(selectedProgramId, 10));
       if (prog) summaryText += ` for ${prog.name}`;
@@ -1249,7 +1355,8 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
 
     const pills = [];
     if (selectedExportType === 'call_list') {
-      pills.push(`Type: ${callListMode === 'team' ? 'Team Wise' : 'Competition Wise'}`);
+      const modeLabel = callListMode === 'participant' ? 'Participant List' : (callListMode === 'team' ? 'Team Wise' : 'Competition Wise');
+      pills.push(`Type: ${modeLabel}`);
     }
     if (selectedExportType === 'certificate') {
       pills.push(`Quality: ${exportQuality.toUpperCase()}`);
@@ -1801,13 +1908,14 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                     >
                       <option value="competition">Competition Wise Call List</option>
                       <option value="team">Team Wise Call List</option>
+                      <option value="participant">Participant List</option>
                     </select>
                     <p className="text-[11px] text-gray-400 mt-1">Select format for call list generation</p>
                   </div>
                 )}
 
-                {/* Select Team Dropdown (When Call List Team Wise OR Badge is selected) */}
-                {((selectedExportType === 'call_list' && callListMode === 'team') || selectedExportType === 'badge') && (
+                {/* Select Team Dropdown (When Call List Team/Participant Wise OR Badge is selected) */}
+                {((selectedExportType === 'call_list' && (callListMode === 'team' || callListMode === 'participant')) || selectedExportType === 'badge') && (
                   <div>
                     <label className="block text-xs font-bold text-gray-900 mb-1">
                       {selectedExportType === 'badge' ? 'Team' : 'Select Team'}
@@ -1823,9 +1931,11 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                       ))}
                     </select>
                     <p className="text-[11px] text-gray-400 mt-1">
-                      {selectedExportType === 'badge'
-                        ? 'Download badges for a specific team or all teams'
-                        : 'Generate team-wise list for selected team or all teams'}
+                      {callListMode === 'participant'
+                        ? 'Generate participant list for selected team or all teams'
+                        : (selectedExportType === 'badge'
+                            ? 'Download badges for a specific team or all teams'
+                            : 'Generate team-wise list for selected team or all teams')}
                     </p>
                   </div>
                 )}
@@ -1846,8 +1956,8 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                   <p className="text-[11px] text-gray-400 mt-1">Leave empty to include all</p>
                 </div>
 
-                {/* Competitions Dropdown (Excluded for Badges as badges are participant-level) */}
-                {selectedExportType !== 'badge' && (
+                {/* Competitions Dropdown (Excluded for Badges and Participant List) */}
+                {selectedExportType !== 'badge' && !(selectedExportType === 'call_list' && callListMode === 'participant') && (
                   <div>
                     <label className="block text-xs font-bold text-gray-900 mb-1">Competitions</label>
                     <select

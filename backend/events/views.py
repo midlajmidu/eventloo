@@ -8525,7 +8525,121 @@ def generate_call_list(request, event_id):
         # JSON preview format support
         if request.GET.get('format') == 'json':
             items = []
-            if mode == 'team':
+            if mode == 'participant':
+                from accounts.models import StudentCategory
+                from events.models import ChestNumber
+
+                cat_map = {c.code.lower(): c.name for c in StudentCategory.objects.filter(school=event.school)}
+
+                chest_qs = ChestNumber.objects.filter(event=event).select_related('student', 'team')
+                if team_id != 'all':
+                    try:
+                        chest_qs = chest_qs.filter(team_id=int(team_id))
+                    except ValueError:
+                        chest_qs = chest_qs.none()
+
+                assg_qs = ProgramAssignment.objects.filter(program__event=event).select_related('student', 'team', 'program')
+                if team_id != 'all':
+                    try:
+                        t_id = int(team_id)
+                        assg_qs = assg_qs.filter(Q(team_id=t_id) | Q(student__team_memberships__id=t_id)).distinct()
+                    except ValueError:
+                        assg_qs = assg_qs.none()
+                if category != 'all':
+                    assg_qs = assg_qs.filter(program__category=category)
+
+                part_map = {}
+                for cr in chest_qs:
+                    s = cr.student
+                    if not s:
+                        continue
+                    sid = s.id
+                    part_map[sid] = {
+                        'student': s,
+                        'student_id': sid,
+                        'name': s.get_full_name() or s.username,
+                        'chest_no': str(cr.chest_number) if cr.chest_number else '',
+                        'team_name': cr.team.name if cr.team else '',
+                        'team_id': cr.team_id,
+                        'gender': s.get_gender_display() if hasattr(s, 'get_gender_display') and s.gender else (s.gender or '—'),
+                        'grade': getattr(s, 'grade', '') or '',
+                        'section': getattr(s, 'section', '') or '',
+                        'category': getattr(s, 'category', '') or '',
+                        'programs': []
+                    }
+
+                for a in assg_qs:
+                    s = a.student
+                    if not s:
+                        continue
+                    sid = s.id
+                    if sid not in part_map:
+                        part_map[sid] = {
+                            'student': s,
+                            'student_id': sid,
+                            'name': s.get_full_name() or s.username,
+                            'chest_no': str(a.chest_number) if a.chest_number else '',
+                            'team_name': a.team.name if a.team else '',
+                            'team_id': a.team_id,
+                            'gender': s.get_gender_display() if hasattr(s, 'get_gender_display') and s.gender else (s.gender or '—'),
+                            'grade': getattr(s, 'grade', '') or '',
+                            'section': getattr(s, 'section', '') or '',
+                            'category': getattr(s, 'category', '') or '',
+                            'programs': []
+                        }
+                    if not part_map[sid]['chest_no'] and a.chest_number:
+                        part_map[sid]['chest_no'] = str(a.chest_number)
+                    if not part_map[sid]['team_name'] and a.team:
+                        part_map[sid]['team_name'] = a.team.name
+                        part_map[sid]['team_id'] = a.team_id
+                    part_map[sid]['programs'].append(a.program.name)
+
+                for p_data in part_map.values():
+                    if not p_data['team_name']:
+                        tm = p_data['student'].team_memberships.filter(school=event.school).first()
+                        if tm:
+                            p_data['team_name'] = tm.name
+                            p_data['team_id'] = tm.id
+
+                    g = p_data['grade']
+                    sec = p_data['section']
+                    if g and sec:
+                        p_data['class_display'] = f"{g} {sec}".strip()
+                    elif g:
+                        p_data['class_display'] = str(g)
+                    elif sec:
+                        p_data['class_display'] = str(sec)
+                    else:
+                        p_data['class_display'] = '—'
+
+                    cat_raw = p_data['category'].strip()
+                    p_data['category_display'] = cat_map.get(cat_raw.lower(), cat_raw.replace('_', ' ').replace('-', ' ').title()) if cat_raw else 'General'
+
+                if category != 'all':
+                    part_map = {k: v for k, v in part_map.items() if v['category'].lower() == category.lower() or v['category_display'].lower() == category.lower()}
+
+                def p_sort_key(p):
+                    c = str(p['chest_no'])
+                    is_num = c.isdigit()
+                    return (0 if is_num else 1, int(c) if is_num else c, p['name'].lower())
+
+                sorted_part = sorted(part_map.values(), key=p_sort_key)
+
+                for idx, p in enumerate(sorted_part, start=1):
+                    items.append({
+                        'sl_no': idx,
+                        'chest_no': p['chest_no'] or '—',
+                        'student_name': p['name'],
+                        'participant_names': p['name'],
+                        'gender': p['gender'],
+                        'class': p['class_display'],
+                        'category': p['category_display'],
+                        'team': p['team_name'] or '—',
+                        'team_name': p['team_name'] or '—',
+                        'team_id': p['team_id'],
+                        'program_name': ', '.join(p['programs']),
+                    })
+            elif mode == 'team':
                 teams = Team.objects.filter(school_id=event.school_id)
                 if team_id != 'all':
                     try:
@@ -8948,6 +9062,188 @@ def generate_call_list(request, event_id):
                 elements.append(Paragraph(f"Total participants: {len(sorted_students)}", total_part_style))
                 elements.append(Spacer(1, 4 * mm))
 
+        elif mode == 'participant':
+            # Format 3: Participant List (NO, CHEST NO, STUDENT NAME, GENDER, CLASS, CATEGORY, TEAM)
+            from accounts.models import StudentCategory
+            from events.models import ChestNumber
+
+            cat_map = {c.code.lower(): c.name for c in StudentCategory.objects.filter(school=event.school)}
+
+            chest_qs = ChestNumber.objects.filter(event=event).select_related('student', 'team')
+            if team_id != 'all':
+                try:
+                    chest_qs = chest_qs.filter(team_id=int(team_id))
+                except ValueError:
+                    chest_qs = chest_qs.none()
+
+            assg_qs = ProgramAssignment.objects.filter(program__event=event).select_related('student', 'team', 'program')
+            if team_id != 'all':
+                try:
+                    t_id = int(team_id)
+                    assg_qs = assg_qs.filter(Q(team_id=t_id) | Q(student__team_memberships__id=t_id)).distinct()
+                except ValueError:
+                    assg_qs = assg_qs.none()
+            if category != 'all':
+                assg_qs = assg_qs.filter(program__category=category)
+
+            part_map = {}
+            for cr in chest_qs:
+                s = cr.student
+                if not s:
+                    continue
+                sid = s.id
+                part_map[sid] = {
+                    'student': s,
+                    'student_id': sid,
+                    'name': s.get_full_name() or s.username,
+                    'chest_no': str(cr.chest_number) if cr.chest_number else '',
+                    'team_name': cr.team.name if cr.team else '',
+                    'team_id': cr.team_id,
+                    'gender': s.get_gender_display() if hasattr(s, 'get_gender_display') and s.gender else (s.gender or '—'),
+                    'grade': getattr(s, 'grade', '') or '',
+                    'section': getattr(s, 'section', '') or '',
+                    'category': getattr(s, 'category', '') or '',
+                    'programs': []
+                }
+
+            for a in assg_qs:
+                s = a.student
+                if not s:
+                    continue
+                sid = s.id
+                if sid not in part_map:
+                    part_map[sid] = {
+                        'student': s,
+                        'student_id': sid,
+                        'name': s.get_full_name() or s.username,
+                        'chest_no': str(a.chest_number) if a.chest_number else '',
+                        'team_name': a.team.name if a.team else '',
+                        'team_id': a.team_id,
+                        'gender': s.get_gender_display() if hasattr(s, 'get_gender_display') and s.gender else (s.gender or '—'),
+                        'grade': getattr(s, 'grade', '') or '',
+                        'section': getattr(s, 'section', '') or '',
+                        'category': getattr(s, 'category', '') or '',
+                        'programs': []
+                    }
+                if not part_map[sid]['chest_no'] and a.chest_number:
+                    part_map[sid]['chest_no'] = str(a.chest_number)
+                if not part_map[sid]['team_name'] and a.team:
+                    part_map[sid]['team_name'] = a.team.name
+                    part_map[sid]['team_id'] = a.team_id
+                part_map[sid]['programs'].append(a.program.name)
+
+            for p_data in part_map.values():
+                if not p_data['team_name']:
+                    tm = p_data['student'].team_memberships.filter(school=event.school).first()
+                    if tm:
+                        p_data['team_name'] = tm.name
+                        p_data['team_id'] = tm.id
+
+                g = p_data['grade']
+                sec = p_data['section']
+                if g and sec:
+                    p_data['class_display'] = f"{g} {sec}".strip()
+                elif g:
+                    p_data['class_display'] = str(g)
+                elif sec:
+                    p_data['class_display'] = str(sec)
+                else:
+                    p_data['class_display'] = '—'
+
+                cat_raw = p_data['category'].strip()
+                p_data['category_display'] = cat_map.get(cat_raw.lower(), cat_raw.replace('_', ' ').replace('-', ' ').title()) if cat_raw else 'General'
+
+            if category != 'all':
+                part_map = {k: v for k, v in part_map.items() if v['category'].lower() == category.lower() or v['category_display'].lower() == category.lower()}
+
+            def p_sort_key(p):
+                c = str(p['chest_no'])
+                is_num = c.isdigit()
+                return (0 if is_num else 1, int(c) if is_num else c, p['name'].lower())
+
+            sorted_part = sorted(part_map.values(), key=p_sort_key)
+
+            if sorted_part:
+                page_counter += 1
+                top_header_table = Table([[
+                    Paragraph(
+                        f'<font size="10" color="#312E81"><b>{school_name}</b></font><br/>'
+                        f'<font size="18" color="#0F172A"><b>Participant List</b></font>',
+                        title_style
+                    ),
+                    Paragraph(
+                        f'<b>{escape(event.title)}</b><br/>'
+                        f'<font size="8" color="#64748B">Generated {current_dt_str}</font>',
+                        datetime_style
+                    )
+                ]], colWidths=[118 * mm, 64 * mm])
+                top_header_table.setStyle(TableStyle([
+                    ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 0),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                    ('TOPPADDING', (0, 0), (-1, -1), 0),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 3 * mm),
+                    ('LINEBELOW', (0, 0), (-1, -1), 1.2, colors.HexColor('#4F46E5')),
+                ]))
+                elements.append(top_header_table)
+                elements.append(Spacer(1, 4 * mm))
+
+                team_obj = Team.objects.filter(id=int(team_id)).first() if team_id != 'all' else None
+                banner_text = f"Team: {team_obj.name} ({len(sorted_part)} Participants)" if team_obj else f"Official Verified Participant Roster ({len(sorted_part)} Total Participants)"
+                sub_banner = Table([[
+                    Paragraph(f'<font size="9.5" color="#ffffff"><b>{escape(banner_text)}</b></font>', table_header_style)
+                ]], colWidths=[182 * mm])
+                sub_banner.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#312E81')),
+                    ('TOPPADDING', (0, 0), (-1, -1), 5),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 8),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+                ]))
+                elements.append(sub_banner)
+                elements.append(Spacer(1, 3 * mm))
+
+                table_data = [
+                    [
+                        Paragraph("<b>NO.</b>", table_header_center),
+                        Paragraph("<b>CHEST NO</b>", table_header_center),
+                        Paragraph("<b>STUDENT NAME</b>", table_header_style),
+                        Paragraph("<b>GENDER</b>", table_header_center),
+                        Paragraph("<b>CLASS</b>", table_header_center),
+                        Paragraph("<b>CATEGORY</b>", table_header_center),
+                        Paragraph("<b>TEAM</b>", table_header_center),
+                    ]
+                ]
+
+                for idx, p in enumerate(sorted_part, start=1):
+                    table_data.append([
+                        Paragraph(str(idx), table_body_center),
+                        Paragraph(f"<b>{escape(p['chest_no'] or '—')}</b>", table_body_center),
+                        Paragraph(f"<b>{escape(p['name'])}</b>", table_body_style),
+                        Paragraph(escape(p['gender']), table_body_center),
+                        Paragraph(escape(p['class_display']), table_body_center),
+                        Paragraph(escape(p['category_display']), table_body_center),
+                        Paragraph(f"<b>{escape(p['team_name'] or '—')}</b>", table_body_center),
+                    ])
+
+                p_table = Table(table_data, colWidths=[9 * mm, 20 * mm, 48 * mm, 18 * mm, 22 * mm, 30 * mm, 35 * mm], repeatRows=1)
+                p_table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#312E81')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
+                    ('BOX', (0, 0), (-1, -1), 1.0, colors.HexColor('#64748B')),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F8FAFC')]),
+                    ('TOPPADDING', (0, 0), (-1, -1), 4.5),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4.5),
+                    ('LEFTPADDING', (0, 0), (-1, -1), 3),
+                    ('RIGHTPADDING', (0, 0), (-1, -1), 3),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ]))
+
+                elements.append(p_table)
+                elements.append(Paragraph(f"Total participants: {len(sorted_part)}", total_part_style))
+                elements.append(Spacer(1, 4 * mm))
+
         else:
             # Format 1: Competition Wise Call List
             programs = Program.objects.filter(event=event).order_by('category', 'name')
@@ -9115,11 +9411,12 @@ def generate_call_list(request, event_id):
             except (ValueError, TypeError):
                 pass
 
+        prefix = "Participant_List" if mode == 'participant' else "Call_List"
         if team_obj:
             team_slug = team_obj.name.replace(' ', '_')
-            filename = f"Call_List_{team_slug}_{event.title.replace(' ', '_')}.pdf"
+            filename = f"{prefix}_{team_slug}_{event.title.replace(' ', '_')}.pdf"
         else:
-            filename = f"Call_List_{event.title.replace(' ', '_')}.pdf"
+            filename = f"{prefix}_{event.title.replace(' ', '_')}.pdf"
         response['Content-Disposition'] = f'inline; filename="{filename}"'
         return response
 
