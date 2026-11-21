@@ -510,7 +510,12 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     # Grade / Section
     grade = getattr(student, 'grade', '') or ''
     section = getattr(student, 'section', '') or ''
-    if grade and section:
+    classroom = getattr(student, 'classroom', None)
+    if classroom:
+        c_name = getattr(classroom, 'name', '') or ''
+        c_sec = getattr(classroom, 'section', '') or ''
+        grade_sec = f"{c_name} {c_sec}".strip()
+    elif grade and section:
         grade_sec = f"Grade {grade} - {section}"
     elif grade:
         grade_sec = f"Grade {grade}"
@@ -520,31 +525,117 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         grade_sec = getattr(student, 'gender', 'Student').title()
 
     pills_data = [
-        (card_x + 10.0, team_name.upper()),
-        (card_x + 65.0, category_display),
-        (card_x + 120.0, grade_sec)
+        (card_x + 8.0, team_name.upper(), 'team'),
+        (card_x + 64.0, category_display, 'category'),
+        (card_x + 120.0, grade_sec, 'class')
     ]
+    pill_w = 52.0
+    pill_h = 16.0
+    y_badges = card_top - 124.0
 
-    for px, ptext in pills_data:
-        # 1. Background pill with crisp light background and border
+    for px, ptext, ptype in pills_data:
+        # Background pill with soft light tint and subtle border
         pdf.setFillColor(HexColor('#F8FAFC'))
-        pdf.setStrokeColor(HexColor('#CBD5E1'))
-        pdf.setLineWidth(0.5)
-        pdf.roundRect(px, y_badges, badge_item_w, badge_item_h, radius=4, stroke=1, fill=1)
+        pdf.setStrokeColor(HexColor('#DDE2F8'))
+        pdf.setLineWidth(0.6)
+        pdf.roundRect(px, y_badges, pill_w, pill_h, radius=5, stroke=1, fill=1)
 
-        # 2. Text in clear dark slate
-        pdf.setFont('Helvetica-Bold', 5.5)
-        pdf.setFillColor(HexColor('#0F172A'))
+        cy = y_badges + pill_h / 2.0
 
+        # Calculate text width and center icon + text group
         clean_text = str(ptext).strip()
-        t_w = stringWidth(clean_text, 'Helvetica-Bold', 5.5)
-        if t_w > badge_item_w - 4:
-            while clean_text and stringWidth(clean_text + '…', 'Helvetica-Bold', 5.5) > badge_item_w - 4:
-                clean_text = clean_text[:-1]
-            clean_text = clean_text + '…'
-        pdf.drawCentredString(px + badge_item_w / 2.0, y_badges + 4.5, clean_text)
+        max_t_w = pill_w - 18.0
 
-    # 8. Full-Width Stats Container Box (No Programs Section)
+        t_size = 5.2
+        while t_size > 4.2 and stringWidth(clean_text, 'Helvetica-Bold', t_size) > max_t_w:
+            t_size -= 0.3
+        if stringWidth(clean_text, 'Helvetica-Bold', t_size) > max_t_w:
+            while clean_text and stringWidth(clean_text + '…', 'Helvetica-Bold', t_size) > max_t_w:
+                clean_text = clean_text[:-1]
+            clean_text += '…'
+
+        t_w = stringWidth(clean_text, 'Helvetica-Bold', t_size)
+        total_w = 7.0 + 3.0 + t_w
+        if total_w < pill_w - 4.0:
+            start_x = px + (pill_w - total_w) / 2.0
+            icon_cx = start_x + 3.5
+            text_x = start_x + 9.5
+        else:
+            icon_cx = px + 6.5
+            text_x = px + 13.5
+
+        # Vector icons matching reference model
+        if ptype == 'team':
+            # Trophy icon
+            pdf.setStrokeColor(HexColor('#4338CA'))
+            pdf.setFillColor(HexColor('#4338CA'))
+            pdf.setLineWidth(0.6)
+            p_cup = pdf.beginPath()
+            p_cup.moveTo(icon_cx - 2.6, cy + 3.0)
+            p_cup.lineTo(icon_cx + 2.6, cy + 3.0)
+            p_cup.lineTo(icon_cx + 2.0, cy + 0.4)
+            p_cup.curveTo(icon_cx + 1.6, cy - 1.4, icon_cx - 1.6, cy - 1.4, icon_cx - 2.0, cy + 0.4)
+            p_cup.close()
+            pdf.drawPath(p_cup, stroke=1, fill=0)
+            p_h1 = pdf.beginPath()
+            p_h1.moveTo(icon_cx - 2.4, cy + 2.6)
+            p_h1.curveTo(icon_cx - 4.0, cy + 2.6, icon_cx - 4.0, cy + 0.6, icon_cx - 1.8, cy + 0.4)
+            pdf.drawPath(p_h1, stroke=1, fill=0)
+            p_h2 = pdf.beginPath()
+            p_h2.moveTo(icon_cx + 2.4, cy + 2.6)
+            p_h2.curveTo(icon_cx + 4.0, cy + 2.6, icon_cx + 4.0, cy + 0.6, icon_cx + 1.8, cy + 0.4)
+            pdf.drawPath(p_h2, stroke=1, fill=0)
+            pdf.line(icon_cx, cy - 1.4, icon_cx, cy - 3.2)
+            pdf.line(icon_cx - 2.0, cy - 3.2, icon_cx + 2.0, cy - 3.2)
+        elif ptype == 'category':
+            # 3-layer stacked diamonds icon
+            pdf.setStrokeColor(HexColor('#4338CA'))
+            pdf.setLineWidth(0.6)
+            p_d1 = pdf.beginPath()
+            p_d1.moveTo(icon_cx, cy + 3.2)
+            p_d1.lineTo(icon_cx + 3.0, cy + 1.6)
+            p_d1.lineTo(icon_cx, cy + 0.0)
+            p_d1.lineTo(icon_cx - 3.0, cy + 1.6)
+            p_d1.close()
+            pdf.drawPath(p_d1, stroke=1, fill=0)
+            p_d2 = pdf.beginPath()
+            p_d2.moveTo(icon_cx - 3.0, cy - 0.4)
+            p_d2.lineTo(icon_cx, cy - 2.0)
+            p_d2.lineTo(icon_cx + 3.0, cy - 0.4)
+            pdf.drawPath(p_d2, stroke=1, fill=0)
+            p_d3 = pdf.beginPath()
+            p_d3.moveTo(icon_cx - 3.0, cy - 2.2)
+            p_d3.lineTo(icon_cx, cy - 3.8)
+            p_d3.lineTo(icon_cx + 3.0, cy - 2.2)
+            pdf.drawPath(p_d3, stroke=1, fill=0)
+        else:
+            # Medal rosette with ribbon tails icon
+            pdf.setStrokeColor(HexColor('#4338CA'))
+            pdf.setLineWidth(0.6)
+            pdf.circle(icon_cx, cy + 0.8, 2.6, stroke=1, fill=0)
+            p_r1 = pdf.beginPath()
+            p_r1.moveTo(icon_cx - 1.0, cy - 1.6)
+            p_r1.lineTo(icon_cx - 2.4, cy - 3.8)
+            p_r1.lineTo(icon_cx - 0.6, cy - 3.0)
+            pdf.drawPath(p_r1, stroke=1, fill=0)
+            p_r2 = pdf.beginPath()
+            p_r2.moveTo(icon_cx + 1.0, cy - 1.6)
+            p_r2.lineTo(icon_cx + 2.4, cy - 3.8)
+            p_r2.lineTo(icon_cx + 0.6, cy - 3.0)
+            pdf.drawPath(p_r2, stroke=1, fill=0)
+
+        # Text in clear dark slate next to icon
+        pdf.setFont('Helvetica-Bold', t_size)
+        pdf.setFillColor(HexColor('#0F172A'))
+        pdf.drawString(text_x, cy - (t_size * 0.35), clean_text)
+
+    # 8. Subtle Divider Line below Metadata Pills
+    y_div = y_badges - 7.5
+    pdf.setStrokeColor(HexColor('#F1F5F9'))
+    pdf.setLineWidth(0.6)
+    pdf.line(card_x + 8.0, y_div, card_x + card_w - 8.0, y_div)
+
+    # 9. Stats Section with Shaded Icon Badges (No Outer Box, matching UI reference)
     if event_program_types is None:
         event_program_types = list(event.get_program_types())
 
@@ -618,101 +709,154 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
 
     num_cols = max(1, len(cols_to_show))
 
-    stats_box_x = card_x + 7.0
-    stats_box_w = card_w - 14.0   # 166.0 pt
-    stats_box_h = 42.0
-    stats_box_y = card_top - 174.0
+    stats_top = y_div - 7.0
+    stats_w = card_w - 16.0
+    stats_left = card_x + 8.0
+    col_w = stats_w / float(num_cols)
 
-    pdf.setFillColor(HexColor('#F8FAFC'))
-    pdf.setStrokeColor(HexColor('#E2E8F0'))
-    pdf.setLineWidth(0.6)
-    pdf.roundRect(stats_box_x, stats_box_y, stats_box_w, stats_box_h, radius=6, stroke=1, fill=1)
-
-    col_w = stats_box_w / float(num_cols)
-    icon_y = stats_box_y + 31.0
-    num_y = stats_box_y + 16.5
+    sh_w = 14.5
+    sh_h = 14.5
+    sh_y = stats_top - sh_h
+    num_y = sh_y - 13.0
 
     for i, (col_label, count_val, kind) in enumerate(cols_to_show):
-        cx = stats_box_x + i * col_w + col_w / 2.0
+        cx = stats_left + i * col_w + col_w / 2.0
 
-        # Draw mini vector icon
+        # 1. Small shading background square for icon
+        sh_x = cx - sh_w / 2.0
+        pdf.setFillColor(HexColor('#EEF2FF'))
+        pdf.setStrokeColor(HexColor('#E0E7FF'))
+        pdf.setLineWidth(0.5)
+        pdf.roundRect(sh_x, sh_y, sh_w, sh_h, radius=3.5, stroke=1, fill=1)
+
+        # 2. Vector icon inside shaded square
+        icon_cy = sh_y + sh_h / 2.0
+        pdf.setStrokeColor(HexColor('#312E81'))
+        pdf.setFillColor(HexColor('#312E81'))
+
         if kind == 'total':
-            pdf.setStrokeColor(HexColor('#4F46E5'))
+            # Calendar icon
             pdf.setLineWidth(0.6)
-            pdf.roundRect(cx - 3.2, icon_y - 3.0, 6.4, 5.8, radius=0.8, stroke=1, fill=0)
-            pdf.line(cx - 3.2, icon_y + 1.0, cx + 3.2, icon_y + 1.0)
-            pdf.line(cx - 1.8, icon_y + 2.8, cx - 1.8, icon_y + 4.0)
-            pdf.line(cx + 1.8, icon_y + 2.8, cx + 1.8, icon_y + 4.0)
+            pdf.roundRect(cx - 3.2, icon_cy - 3.2, 6.4, 6.0, radius=0.8, stroke=1, fill=0)
+            pdf.line(cx - 3.2, icon_cy + 1.2, cx + 3.2, icon_cy + 1.2)
+            pdf.line(cx - 1.8, icon_cy + 2.8, cx - 1.8, icon_cy + 4.0)
+            pdf.line(cx + 1.8, icon_cy + 2.8, cx + 1.8, icon_cy + 4.0)
         elif kind == 'stage':
-            pdf.setFillColor(HexColor('#6366F1'))
-            p_bolt = pdf.beginPath()
-            p_bolt.moveTo(cx + 0.5, icon_y + 4.0)
-            p_bolt.lineTo(cx - 2.4, icon_y - 0.2)
-            p_bolt.lineTo(cx - 0.2, icon_y - 0.2)
-            p_bolt.lineTo(cx - 0.8, icon_y - 4.0)
-            p_bolt.lineTo(cx + 2.4, icon_y + 0.2)
-            p_bolt.lineTo(cx + 0.2, icon_y + 0.2)
-            p_bolt.close()
-            pdf.drawPath(p_bolt, stroke=0, fill=1)
+            # Stage curtains icon with valance, draped sides and tie-backs
+            fx, fy, fw, fh = cx - 3.4, icon_cy - 3.2, 6.8, 6.4
+            pdf.setLineWidth(0.6)
+            pdf.roundRect(fx, fy, fw, fh, radius=0.6, stroke=1, fill=0)
+            # valance top bar
+            pdf.line(fx, icon_cy + 2.0, fx + fw, icon_cy + 2.0)
+            # left curtain
+            p1 = pdf.beginPath()
+            p1.moveTo(cx - 0.4, icon_cy + 2.0)
+            p1.curveTo(cx - 1.1, icon_cy + 0.7, fx + 1.4, icon_cy + 0.1, fx + 1.3, icon_cy - 0.6)
+            p1.curveTo(fx + 1.3, icon_cy - 1.3, fx + 0.9, icon_cy - 2.5, fx + 0.6, fy)
+            pdf.drawPath(p1, stroke=1, fill=0)
+            # left tieback
+            pdf.line(fx, icon_cy - 0.6, fx + 1.3, icon_cy - 0.6)
+            # right curtain
+            p2 = pdf.beginPath()
+            p2.moveTo(cx + 0.4, icon_cy + 2.0)
+            p2.curveTo(cx + 1.1, icon_cy + 0.7, fx + fw - 1.4, icon_cy + 0.1, fx + fw - 1.3, icon_cy - 0.6)
+            p2.curveTo(fx + fw - 1.3, icon_cy - 1.3, fx + fw - 0.9, icon_cy - 2.5, fx + fw - 0.6, fy)
+            pdf.drawPath(p2, stroke=1, fill=0)
+            # right tieback
+            pdf.line(fx + fw - 1.3, icon_cy - 0.6, fx + fw, icon_cy - 0.6)
         elif kind == 'off_stage':
-            pdf.setStrokeColor(HexColor('#6366F1'))
+            # 3-layer stacked diamond icon
             pdf.setLineWidth(0.6)
             p_d1 = pdf.beginPath()
-            p_d1.moveTo(cx, icon_y + 3.4)
-            p_d1.lineTo(cx + 3.2, icon_y + 1.8)
-            p_d1.lineTo(cx, icon_y + 0.2)
-            p_d1.lineTo(cx - 3.2, icon_y + 1.8)
+            p_d1.moveTo(cx, icon_cy + 3.2)
+            p_d1.lineTo(cx + 3.2, icon_cy + 1.6)
+            p_d1.lineTo(cx, icon_cy + 0.0)
+            p_d1.lineTo(cx - 3.2, icon_cy + 1.6)
             p_d1.close()
             pdf.drawPath(p_d1, stroke=1, fill=0)
             p_d2 = pdf.beginPath()
-            p_d2.moveTo(cx - 3.2, icon_y - 0.6)
-            p_d2.lineTo(cx, icon_y - 2.2)
-            p_d2.lineTo(cx + 3.2, icon_y - 0.6)
+            p_d2.moveTo(cx - 3.2, icon_cy - 0.4)
+            p_d2.lineTo(cx, icon_cy - 2.0)
+            p_d2.lineTo(cx + 3.2, icon_cy - 0.4)
             pdf.drawPath(p_d2, stroke=1, fill=0)
+            p_d3 = pdf.beginPath()
+            p_d3.moveTo(cx - 3.2, icon_cy - 2.2)
+            p_d3.lineTo(cx, icon_cy - 3.8)
+            p_d3.lineTo(cx + 3.2, icon_cy - 2.2)
+            pdf.drawPath(p_d3, stroke=1, fill=0)
         elif kind == 'sports':
-            pdf.setStrokeColor(HexColor('#D97706'))
+            # Running athlete icon
+            pdf.setLineWidth(0.6)
+            pdf.circle(cx + 1.5, icon_cy + 2.6, 0.9, stroke=0, fill=1)
+            pdf.line(cx + 0.8, icon_cy + 1.8, cx - 0.6, icon_cy - 0.5)
+            p_arm = pdf.beginPath()
+            p_arm.moveTo(cx + 0.6, icon_cy + 1.2)
+            p_arm.lineTo(cx + 2.4, icon_cy + 1.2)
+            p_arm.lineTo(cx + 3.2, icon_cy + 2.2)
+            pdf.drawPath(p_arm, stroke=1, fill=0)
+            pdf.line(cx + 0.6, icon_cy + 1.2, cx - 1.6, icon_cy + 0.2)
+            p_leg1 = pdf.beginPath()
+            p_leg1.moveTo(cx - 0.6, icon_cy - 0.5)
+            p_leg1.lineTo(cx + 1.2, icon_cy - 1.6)
+            p_leg1.lineTo(cx + 0.6, icon_cy - 3.6)
+            pdf.drawPath(p_leg1, stroke=1, fill=0)
+            p_leg2 = pdf.beginPath()
+            p_leg2.moveTo(cx - 0.6, icon_cy - 0.5)
+            p_leg2.lineTo(cx - 2.0, icon_cy - 1.8)
+            p_leg2.lineTo(cx - 1.2, icon_cy - 3.4)
+            pdf.drawPath(p_leg2, stroke=1, fill=0)
+        else:
             pdf.setLineWidth(0.6)
             p_cup = pdf.beginPath()
-            p_cup.moveTo(cx - 2.6, icon_y + 3.2)
-            p_cup.lineTo(cx + 2.6, icon_y + 3.2)
-            p_cup.lineTo(cx + 2.0, icon_y + 0.2)
-            p_cup.curveTo(cx + 1.6, icon_y - 1.5, cx - 1.6, icon_y - 1.5, cx - 2.0, icon_y + 0.2)
+            p_cup.moveTo(cx - 2.6, icon_cy + 3.0)
+            p_cup.lineTo(cx + 2.6, icon_cy + 3.0)
+            p_cup.lineTo(cx + 2.0, icon_cy + 0.2)
+            p_cup.curveTo(cx + 1.6, icon_cy - 1.5, cx - 1.6, icon_cy - 1.5, cx - 2.0, icon_cy + 0.2)
             p_cup.close()
             pdf.drawPath(p_cup, stroke=1, fill=0)
-            pdf.line(cx, icon_y - 1.5, cx, icon_y - 3.0)
-            pdf.line(cx - 1.8, icon_y - 3.0, cx + 1.8, icon_y - 3.0)
-        else:
-            pdf.setFillColor(HexColor('#4F46E5'))
-            pdf.circle(cx, icon_y, 2.0, stroke=0, fill=1)
+            pdf.line(cx, icon_cy - 1.5, cx, icon_cy - 3.0)
+            pdf.line(cx - 1.8, icon_cy - 3.0, cx + 1.8, icon_cy - 3.0)
 
-        # Number
-        pdf.setFont('Helvetica-Bold', 12.0)
+        # 3. Big bold count
+        pdf.setFont('Helvetica-Bold', 13.0)
         pdf.setFillColor(HexColor('#0F172A'))
         pdf.drawCentredString(cx, num_y, str(count_val))
 
-        # Two-line label
-        pdf.setFont('Helvetica', 4.5)
-        pdf.setFillColor(HexColor('#64748B'))
-
+        # 4. Two-line label
         clean_lbl = col_label.strip()
-        if clean_lbl.lower().endswith('events') or clean_lbl.lower().endswith('programs'):
+        norm_l = clean_lbl.lower()
+        if 'on' in norm_l and 'stage' in norm_l:
+            l1 = 'On-Stage'
+            l2 = 'Events'
+        elif 'off' in norm_l and 'stage' in norm_l:
+            l1 = 'Off-Stage'
+            l2 = 'Events'
+        elif 'total' in norm_l:
+            l1 = 'Total'
+            l2 = 'Events'
+        elif 'sport' in norm_l:
+            l1 = 'Sports'
+            l2 = 'Events'
+        elif norm_l.endswith('events') or norm_l.endswith('programs'):
             words = clean_lbl.split()
             l1 = words[0]
-            l2 = ' '.join(words[1:]) if len(words) > 1 else ''
+            l2 = ' '.join(words[1:]) if len(words) > 1 else 'Events'
         else:
             l1 = clean_lbl
             l2 = 'Events'
 
-        pdf.drawCentredString(cx, stats_box_y + 8.5, l1)
+        pdf.setFont('Helvetica-Bold', 4.5)
+        pdf.setFillColor(HexColor('#64748B'))
+        pdf.drawCentredString(cx, num_y - 7.5, l1)
         if l2:
-            pdf.drawCentredString(cx, stats_box_y + 3.5, l2)
+            pdf.drawCentredString(cx, num_y - 12.5, l2)
 
-        # Hairline divider between columns
+        # 5. Hairline vertical divider between columns (between number & labels)
         if i > 0:
-            div_x = stats_box_x + i * col_w
-            pdf.setStrokeColor(HexColor('#E2E8F0'))
-            pdf.setLineWidth(0.5)
-            pdf.line(div_x, stats_box_y + 5.0, div_x, stats_box_y + stats_box_h - 5.0)
+            div_x = stats_left + i * col_w
+            pdf.setStrokeColor(HexColor('#F1F5F9'))
+            pdf.setLineWidth(0.6)
+            pdf.line(div_x, num_y - 13.0, div_x, num_y + 10.0)
 
     # 9. Middle Left: Participant Role & Event / School Subtitle
     pdf.setFillColor(HexColor('#4F46E5'))
