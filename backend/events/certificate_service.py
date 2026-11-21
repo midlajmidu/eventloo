@@ -831,7 +831,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pdf.restoreState()
 
 
-def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None, base_url=None, event_program_types=None, prefetched_assignments=None, prefetched_chest_number=None):
+def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None, base_url=None, event_program_types=None, prefetched_assignments=None, prefetched_chest_number=None, prefetched_mixing_categories=None):
     """
     Renders the backside of a participant paper badge matching the official Eventloo design:
       - Top: Event Logo + Event Name
@@ -844,6 +844,18 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
     student = recipient.student
     assignment = recipient.assignment
     category_names = category_names or {}
+
+    # Resolve mixing/general categories mapping (code/name -> display name)
+    if prefetched_mixing_categories is not None:
+        mixing_categories = prefetched_mixing_categories
+    else:
+        mixing_categories = {}
+        try:
+            for sc in StudentCategory.objects.filter(school=event.school, is_mixing=True):
+                mixing_categories[sc.code.lower()] = sc.name
+                mixing_categories[sc.name.lower()] = sc.name
+        except Exception as err:
+            logger.warning("Error fetching mixing categories: %s", err)
 
     card_x = cell_x + 3.0
     card_y = cell_y + 3.0
@@ -1016,6 +1028,25 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
 
             # Program name
             clean_name = str(p_name).strip().upper()
+
+            # If program belongs to a mixed/general category, append the category name in brackets
+            p_cat = (getattr(p, 'category', None) or '').strip()
+            p_cat_lower = p_cat.lower()
+            is_mixed = False
+            cat_display_name = 'GENERAL'
+
+            if p_cat_lower in mixing_categories:
+                is_mixed = True
+                cat_display_name = mixing_categories[p_cat_lower]
+            elif p_cat_lower in ('general', 'gen', 'gn', 'open', 'mixed'):
+                is_mixed = True
+                cat_display_name = category_names.get(p_cat, 'General') if category_names else 'General'
+
+            if is_mixed:
+                bracket_text = f"({cat_display_name.upper()})"
+                if bracket_text not in clean_name:
+                    clean_name = f"{clean_name} {bracket_text}"
+
             cur_fs = fs
             while cur_fs > 4.5 and stringWidth(clean_name, 'Helvetica-Bold', cur_fs) > max_item_w:
                 cur_fs -= 0.3
@@ -1129,6 +1160,15 @@ def render_certificates_pdf(event, templates_by_type, recipients, quality='stand
             except Exception as e:
                 logger.warning("Batch chest numbers prefetch failed: %s", e)
 
+        # Prefetch mixing categories once for all badges in the event
+        mixing_categories = {}
+        try:
+            for sc in StudentCategory.objects.filter(school=event.school, is_mixing=True):
+                mixing_categories[sc.code.lower()] = sc.name
+                mixing_categories[sc.name.lower()] = sc.name
+        except Exception as e:
+            logger.warning("Error prefetching mixing categories: %s", e)
+
         for recipient in badge_recipients:
             rec_student_id = getattr(recipient.student, 'id', None)
             student_assignments_list = assignments_by_student.get(rec_student_id)
@@ -1160,6 +1200,7 @@ def render_certificates_pdf(event, templates_by_type, recipients, quality='stand
                 event_program_types=event_program_types,
                 prefetched_assignments=student_assignments_list,
                 prefetched_chest_number=student_chest_num,
+                prefetched_mixing_categories=mixing_categories,
             )
             pdf.restoreState()
             pdf.showPage()

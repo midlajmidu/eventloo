@@ -330,3 +330,20 @@ class ExportSectionDeepAuditTests(APITestCase):
         self.assertIn("SCAN TO VERIFY", pdf['text'])
         self.assertIn("PROGRAMS", pdf['text'])
 
+    def test_badge_back_shows_general_in_bracket_for_mixed_program(self):
+        p_gen = Program.objects.create(
+            event=self.event,
+            name="Open Quiz Championship",
+            category="general",
+            is_team_based=False,
+            num_judges=3,
+        )
+        ProgramAssignment.objects.create(
+            program=p_gen, student=self.participants[0], team=self.team_red, chest_number=201
+        )
+        res = self.client.get(f'/api/events/{self.event.id}/certificates/?cert_types=badge&quality=standard')
+        self.assertEqual(res.status_code, 200)
+        pdf = self.extract_pdf_text(res.content)
+        self.assertIn("OPEN QUIZ CHAMPIONSHIP (GENERAL)", pdf['text'])
+
+
