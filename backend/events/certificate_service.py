@@ -330,13 +330,33 @@ _BADGE_ICON_CACHE = {}
 
 def _get_badge_icon_image(name, color='#4338CA'):
     """
-    Renders official Tabler/Lucide vector SVG icons to 400 DPI transparent PNG ImageReaders
+    Renders or loads official vector badge icon as transparent PNG ImageReader
     for high-fidelity ReportLab badge rendering, caching results in memory.
+    Prioritizes pre-rendered assets from assets/badge_icons/ so it NEVER fails
+    on servers without fitz/PyMuPDF installed.
     """
     key = (name, color)
     if key in _BADGE_ICON_CACHE:
         return _BADGE_ICON_CACHE[key]
 
+    # 1. Primary: Load pre-rendered high-res PNG asset from disk
+    from django.conf import settings
+    asset_candidates = [
+        os.path.join(settings.BASE_DIR, 'assets', 'badge_icons', f'{name}.png'),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'assets', 'badge_icons', f'{name}.png')),
+        os.path.abspath(os.path.join(os.getcwd(), 'backend', 'assets', 'badge_icons', f'{name}.png')),
+        os.path.abspath(os.path.join(os.getcwd(), 'assets', 'badge_icons', f'{name}.png')),
+    ]
+    for asset_path in asset_candidates:
+        if os.path.exists(asset_path):
+            try:
+                reader = ImageReader(asset_path)
+                _BADGE_ICON_CACHE[key] = reader
+                return reader
+            except Exception as e:
+                logger.warning("Failed loading badge icon asset %s: %s", asset_path, e)
+
+    # 2. Fallback: Dynamic SVG rendering if fitz is available
     svg_defs = {
         'trophy': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /><path d="M7 4h10v5a5 5 0 0 1 -10 0v-5" /><path d="M7 6h-2a2 2 0 0 0 -2 2v1a4 4 0 0 0 4 4" /><path d="M17 6h2a2 2 0 0 1 2 2v1a4 4 0 0 1 -4 4" /></svg>""",
         'stack': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l-8 4l8 4l8 -4l-8 -4" /><path d="M4 12l8 4l8 -4" /><path d="M4 16l8 4l8 -4" /></svg>""",
