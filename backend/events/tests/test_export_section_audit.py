@@ -327,7 +327,6 @@ class ExportSectionDeepAuditTests(APITestCase):
         pdf = self.extract_pdf_text(res.content)
         self.assertIn("Powered by", pdf['text'])
         self.assertIn("Eventloo", pdf['text'])
-        self.assertIn("Participant", pdf['text'])
         self.assertIn("SCAN TO VERIFY", pdf['text'])
-        # Verify Programs section is removed from badge
         self.assertNotIn("PROGRAMS", pdf['text'])
+

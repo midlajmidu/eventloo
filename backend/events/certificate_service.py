@@ -338,45 +338,41 @@ def _get_badge_icon_image(name, color='#4338CA'):
         return _BADGE_ICON_CACHE[key]
 
     svg_defs = {
-        'trophy': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /><path d="M7 4h10v5a5 5 0 0 1 -10 0v-5" /><path d="M7 6h-2a2 2 0 0 0 -2 2v1a4 4 0 0 0 4 4" /><path d="M17 6h2a2 2 0 0 1 2 2v1a4 4 0 0 1 -4 4" /></svg>''',
-        'stack': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l-8 4l8 4l8 -4l-8 -4" /><path d="M4 12l8 4l8 -4" /><path d="M4 16l8 4l8 -4" /></svg>''',
-        'award': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6" /><polyline points="9 14.2 9 21 12 19 15 21 15 14.2" /></svg>''',
-        'calendar': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2" /><line x1="16" y1="3" x2="16" y2="7" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="4" y1="11" x2="20" y2="11" /></svg>''',
-        'theater': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1.5" /><path d="M8 4c0 3 -2 6 -3 8c1 3 1 6 -1 8" /><path d="M16 4c0 3 2 6 3 8c-1 3 -1 6 1 8" /><line x1="3" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="21" y2="12" /></svg>''',
-        'run': f'''<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="1.2" fill="{color}" /><path d="M4 17l5 1l.75 -1.5" /><path d="M15 21l0 -4l-4 -3l1 -6" /><path d="M7 12l0 -3l5 -1l3 3l3 1" /></svg>'''
+        'trophy': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /><path d="M7 4h10v5a5 5 0 0 1 -10 0v-5" /><path d="M7 6h-2a2 2 0 0 0 -2 2v1a4 4 0 0 0 4 4" /><path d="M17 6h2a2 2 0 0 1 2 2v1a4 4 0 0 1 -4 4" /></svg>""",
+        'stack': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4l-8 4l8 4l8 -4l-8 -4" /><path d="M4 12l8 4l8 -4" /><path d="M4 16l8 4l8 -4" /></svg>""",
+        'award': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6" /><polyline points="9 14.2 9 21 12 19 15 21 15 14.2" /></svg>""",
+        'calendar': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2" /><line x1="16" y1="3" x2="16" y2="7" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="4" y1="11" x2="20" y2="11" /></svg>""",
+        'theater': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1.5" /><path d="M8 4c0 3 -2 6 -3 8c1 3 1 6 -1 8" /><path d="M16 4c0 3 2 6 3 8c-1 3 -1 6 1 8" /><line x1="3" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="21" y2="12" /></svg>""",
+        'run': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="1.2" fill="{color}" /><path d="M4 17l5 1l.75 -1.5" /><path d="M15 21l0 -4l-4 -3l1 -6" /><path d="M7 12l0 -3l5 -1l3 3l3 1" /></svg>"""
     }
 
     svg = svg_defs.get(name)
     if not svg:
         return None
     try:
-        import io
         import fitz
-        from reportlab.lib.utils import ImageReader
         doc = fitz.open('svg', svg.encode('utf-8'))
         pix = doc[0].get_pixmap(dpi=400, alpha=True)
-        reader = ImageReader(io.BytesIO(pix.tobytes('png')))
+        reader = ImageReader(BytesIO(pix.tobytes('png')))
         _BADGE_ICON_CACHE[key] = reader
         return reader
     except Exception as exc:
-        logger.warning(f"Failed to render vector icon {name}: {exc}")
+        logger.warning("Failed to render vector badge icon %s: %s", name, exc)
         return None
 
 
 def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient, event, category_names=None, base_url=None, event_program_types=None, prefetched_assignments=None, prefetched_chest_number=None):
     """
-    Renders a single high-quality participant paper badge (1 of 9 per A4 sheet)
-    matching the official Eventloo physical credential model reference:
-      - Top: —— Eventloo ——
-      - Festival: FESTIVAL : [EVENT NAME]
-      - Participant Name: [NAME]
-      - Hero Chest Pill: [ CHEST NO | #1000 ]
-      - Metadata: [ TEAM ] [ CATEGORY ] [ GRADE / SECTION ]
+    Renders a single high-quality participant paper badge matching the official Eventloo
+    physical credential model reference:
+      - Top: Event Logo + Event Name
+      - Participant Name: Upper-case bold
+      - Hero Chest Pill: Centered [ CHEST NO | #1000 ]
+      - Metadata: [ Team ] [ Category ] [ Class / Grade ] with vector icons
       - Divider
-      - Left: PROGRAMS bullet list
-      - Right: Dynamic Stats columns (Total Events, Stage, Off-Stage, Sports, etc.)
-      - Bottom Right: Official verification QR code to participant digital badge
-      - Bottom: Smooth dual-tone wave graphic in Eventloo Indigo
+      - Minimal Stats Columns: Total Events, On-Stage, Off-Stage, Sports with shaded icon boxes
+      - Bottom Right: SCAN TO VERIFY QR Card blending into footer wave
+      - Bottom Left: Powered by Eventloo branding
     """
     student = recipient.student
     assignment = recipient.assignment
@@ -391,39 +387,52 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
 
     pdf.saveState()
 
-    # 1. White Card Background
+    # 1. Base Card White Background & subtle border
     pdf.setFillColor(HexColor('#FFFFFF'))
     pdf.setStrokeColor(HexColor('#E2E8F0'))
     pdf.setLineWidth(0.6)
     pdf.roundRect(card_x, card_y, card_w, card_h, radius=8, stroke=1, fill=1)
 
-    # 2. Dual-Tone Vector Wave Graphic at Bottom
-    # Light Wave (Indigo-200 / #C7D2FE)
+    # Decorative soft lavender curve in top right corner
+    pdf.saveState()
+    p_top_corner = pdf.beginPath()
+    p_top_corner.moveTo(card_x + card_w - 40, card_top)
+    p_top_corner.curveTo(card_x + card_w - 20, card_top - 20, card_x + card_w, card_top - 35, card_x + card_w, card_top - 50)
+    p_top_corner.lineTo(card_x + card_w, card_top)
+    p_top_corner.close()
+    pdf.setFillColor(HexColor('#EEF2FF'))
+    pdf.drawPath(p_top_corner, stroke=0, fill=1)
+    pdf.restoreState()
+
+    # 2. Dual-Tone Bottom Waves
+    pdf.saveState()
+    # Light wave (Lavender/Indigo-200)
     p_wave1 = pdf.beginPath()
-    p_wave1.moveTo(card_x, card_y + 24)
-    p_wave1.curveTo(card_x + 50, card_y + 34, card_x + 110, card_y + 12, card_x + card_w, card_y + 26)
+    p_wave1.moveTo(card_x, card_y)
+    p_wave1.lineTo(card_x, card_y + 14)
+    p_wave1.curveTo(card_x + 50, card_y + 24, card_x + 110, card_y + 10, card_x + card_w, card_y + 22)
     p_wave1.lineTo(card_x + card_w, card_y)
-    p_wave1.lineTo(card_x, card_y)
     p_wave1.close()
     pdf.setFillColor(HexColor('#C7D2FE'))
     pdf.drawPath(p_wave1, stroke=0, fill=1)
 
-    # Foreground Dark Wave (Deep Indigo / #312E81)
+    # Foreground Dark Wave (Deep Indigo / #1E1B4B)
     p_wave2 = pdf.beginPath()
-    p_wave2.moveTo(card_x, card_y + 20)
-    p_wave2.curveTo(card_x + 60, card_y + 26, card_x + 115, card_y + 8, card_x + card_w, card_y + 30)
+    p_wave2.moveTo(card_x, card_y)
+    p_wave2.lineTo(card_x, card_y + 6)
+    p_wave2.curveTo(card_x + 60, card_y + 18, card_x + 120, card_y + 4, card_x + card_w, card_y + 24)
     p_wave2.lineTo(card_x + card_w, card_y)
-    p_wave2.lineTo(card_x, card_y)
     p_wave2.close()
-    pdf.setFillColor(HexColor('#312E81'))
+    pdf.setFillColor(HexColor('#1E1B4B'))
     pdf.drawPath(p_wave2, stroke=0, fill=1)
+    pdf.restoreState()
 
-    # Card border redraw to keep corners crisp over waves
+    # Card border redraw to clip cleanly over bottom waves
     pdf.setStrokeColor(HexColor('#CBD5E1'))
     pdf.setLineWidth(0.5)
     pdf.roundRect(card_x, card_y, card_w, card_h, radius=8, stroke=1, fill=0)
 
-    # 3. Top Header: Event Logo + Event Name (Clean Title, No "FESTIVAL : ")
+    # 3. Top Header: Event Logo + Event Name
     event_logo_path = _resolve_event_logo_path(event)
     event_title = (event.title or 'EVENT').strip().upper()
 
@@ -431,7 +440,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         try:
             with Image.open(event_logo_path) as im:
                 orig_w, orig_h = im.size
-            box_w, box_h = 34.0, 20.0
+            box_w, box_h = 32.0, 18.0
             scale = min(box_w / float(orig_w), box_h / float(orig_h))
             logo_w = orig_w * scale
             logo_h = orig_h * scale
@@ -468,7 +477,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         pdf.setFillColor(HexColor('#0F172A'))
         pdf.drawCentredString(card_center_x, y_title, event_title)
     else:
-        y_title = card_top - 36.0
+        y_title = card_top - 34.0
         t_size = 8.5 if len(event_title) <= 20 else (7.5 if len(event_title) <= 30 else 6.5)
         max_title_w = card_w - 24.0
         while t_size > 5.5 and stringWidth(event_title, 'Helvetica-Bold', t_size) > max_title_w:
@@ -482,20 +491,20 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         pdf.drawCentredString(card_center_x, y_title, event_title)
 
     # 4. Participant Name
-    y_name = card_top - 66
+    y_name = y_title - 24.0
     name = (student.get_full_name() or student.display_name or 'Participant').strip()
     name_len = len(name)
     if name_len > 24:
         f_size = 9.0
     elif name_len > 18:
-        f_size = 10.5
+        f_size = 11.0
     else:
-        f_size = 13.0
+        f_size = 13.5
     pdf.setFont('Helvetica-Bold', f_size)
     pdf.setFillColor(HexColor('#0F172A'))
     pdf.drawCentredString(card_center_x, y_name, name.upper())
 
-    # 6. Hero Chest Number Pill: [ CHEST NO | #1000 ]
+    # 5. Hero Chest Number Pill: [ CHEST NO | #1000 ] - Perfectly dynamically centered
     chest_number = prefetched_chest_number if prefetched_chest_number is not None else (assignment.chest_number if assignment else None)
     if not chest_number:
         chest_number = ChestNumber.objects.filter(event=event, student=student).values_list(
@@ -503,26 +512,23 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         ).first()
     chest_str = str(chest_number) if chest_number else 'N/A'
 
-    # 6. Hero Chest Pill: [ CHEST NO | #1000 ] - Perfectly dynamically centered
-    chest_str = str(chest_number) if chest_number else 'N/A'
-
-    y_pill = card_top - 98.0
+    y_pill = y_name - 22.0
     label_text = 'CHEST NO'
     label_fs = 5.5
     num_text = f'#{chest_str}'
     num_fs = 9.0
 
-    label_w = pdf.stringWidth(label_text, 'Helvetica-Bold', label_fs)
-    num_w = pdf.stringWidth(num_text, 'Helvetica-Bold', num_fs)
+    label_w = stringWidth(label_text, 'Helvetica-Bold', label_fs)
+    num_w = stringWidth(num_text, 'Helvetica-Bold', num_fs)
     pad_x = 12.0
-    gap = 7.0
+    gap = 6.5
     pill_w = pad_x + label_w + gap + 1.0 + gap + num_w + pad_x
-    pill_h = 18.0
+    pill_h = 17.0
     pill_x = card_center_x - pill_w / 2.0
     cy_pill = y_pill + pill_h / 2.0
 
     pdf.setFillColor(HexColor('#1E1B4B'))
-    pdf.roundRect(pill_x, y_pill, pill_w, pill_h, radius=9, stroke=0, fill=1)
+    pdf.roundRect(pill_x, y_pill, pill_w, pill_h, radius=8.5, stroke=0, fill=1)
 
     label_x = pill_x + pad_x
     pdf.setFont('Helvetica-Bold', label_fs)
@@ -532,30 +538,29 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     div_x = label_x + label_w + gap
     pdf.setStrokeColor(HexColor('#4338CA'))
     pdf.setLineWidth(0.6)
-    pdf.line(div_x, cy_pill - 5.5, div_x, cy_pill + 5.5)
+    pdf.line(div_x, cy_pill - 5.0, div_x, cy_pill + 5.0)
 
     num_x = div_x + gap + 1.0
     pdf.setFont('Helvetica-Bold', num_fs)
     pdf.setFillColor(HexColor('#FFFFFF'))
     pdf.drawString(num_x, cy_pill - 3.2, num_text)
 
-    # 7. Metadata Badges Row: [ TEAM ] [ CATEGORY ] [ GRADE / SECTION ]
-    y_badges = card_top - 124.0
-    pill_w = 52.0
-    pill_h = 16.0
+    # 6. Metadata Pills Row: [ Team ] [ Category ] [ Class / Grade ]
+    # Generous spacing after chest pill
+    y_badges = y_pill - 22.0
 
     # Team
     team_name = assignment.team.name if assignment and assignment.team else (
         student.team_memberships.first().name if hasattr(student, 'team_memberships') and student.team_memberships.exists() else 'INDIVIDUAL'
     )
 
-    # Category (prefer clean category code e.g. LP, UP, HS matching reference model)
+    # Category
     cat_code = (student.category or (assignment.program.category if assignment and assignment.program else '') or '').strip()
     if cat_code and len(cat_code) <= 5:
         category_display = cat_code.upper()
     else:
         cat_name = category_names.get(cat_code) or category_names.get(cat_code.lower()) or category_names.get(cat_code.upper()) or cat_code
-        if cat_name and len(cat_name) <= 10:
+        if cat_name and len(cat_name) <= 12:
             category_display = cat_name.upper()
         elif cat_code:
             category_display = cat_code.upper()
@@ -584,25 +589,25 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         (card_x + 64.0, category_display, 'stack'),
         (card_x + 120.0, grade_sec, 'award')
     ]
+    pill_w = 52.0
+    pill_h = 14.5
 
     for px, ptext, icon_key in pills_data:
-        # Background pill with soft light tint and subtle border
         pdf.setFillColor(HexColor('#F8FAFC'))
         pdf.setStrokeColor(HexColor('#DDE2F8'))
         pdf.setLineWidth(0.6)
-        pdf.roundRect(px, y_badges, pill_w, pill_h, radius=5, stroke=1, fill=1)
+        pdf.roundRect(px, y_badges, pill_w, pill_h, radius=4.5, stroke=1, fill=1)
 
         cy = y_badges + pill_h / 2.0
         clean_text = str(ptext).strip()
-        icon_sz = 9.5
-        gap_it = 3.5
-        avail_tw = pill_w - (icon_sz + gap_it + 8.0)
-
-        fs = 5.2
-        while fs > 4.0 and stringWidth(clean_text, 'Helvetica-Bold', fs) > avail_tw:
+        icon_sz = 8.5
+        gap_it = 3.0
+        fs = 4.8
+        max_t_w = pill_w - (icon_sz + gap_it + 6.0)
+        while fs > 3.8 and stringWidth(clean_text, 'Helvetica-Bold', fs) > max_t_w:
             fs -= 0.3
-        if stringWidth(clean_text, 'Helvetica-Bold', fs) > avail_tw:
-            while clean_text and stringWidth(clean_text + '…', 'Helvetica-Bold', fs) > avail_tw:
+        if stringWidth(clean_text, 'Helvetica-Bold', fs) > max_t_w:
+            while clean_text and stringWidth(clean_text + '…', 'Helvetica-Bold', fs) > max_t_w:
                 clean_text = clean_text[:-1]
             clean_text += '…'
 
@@ -610,24 +615,21 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         group_w = icon_sz + gap_it + tw
         start_x = px + (pill_w - group_w) / 2.0
 
-        # Draw real vector icon
         icon_img = _get_badge_icon_image(icon_key, '#4338CA')
         if icon_img:
             pdf.drawImage(icon_img, start_x, cy - icon_sz / 2.0, icon_sz, icon_sz, mask='auto')
 
-        # Draw text optically centered
-        text_x = start_x + icon_sz + gap_it
         pdf.setFont('Helvetica-Bold', fs)
         pdf.setFillColor(HexColor('#0F172A'))
-        pdf.drawString(text_x, cy - (fs * 0.35), clean_text)
+        pdf.drawString(start_x + icon_sz + gap_it, cy - (fs * 0.35), clean_text)
 
-    # 8. Subtle Divider Line below Metadata Pills
+    # 7. Subtle Divider Line below Metadata Pills
     y_div = y_badges - 7.5
-    pdf.setStrokeColor(HexColor('#F1F5F9'))
-    pdf.setLineWidth(0.6)
+    pdf.setStrokeColor(HexColor('#EEF2F6'))
+    pdf.setLineWidth(0.5)
     pdf.line(card_x + 8.0, y_div, card_x + card_w - 8.0, y_div)
 
-    # 9. Stats Section with Shaded Icon Badges (No Outer Box, matching UI reference)
+    # 8. Reduced Minimal Stats Section with generous spacing
     if event_program_types is None:
         event_program_types = list(event.get_program_types())
 
@@ -681,12 +683,12 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     total_count = len(programs_list)
 
     # Determine dynamic stats columns to show
-    cols_to_show = [('Total', total_count, 'total')]
+    cols_to_show = [('Total', total_count, 'calendar')]
     if len(event_program_types) <= 3:
         for pt in event_program_types:
             c = type_counts.get(pt.code, 0)
             norm_code = (pt.code or '').lower()
-            kind = 'stage' if 'stage' in norm_code and 'off' not in norm_code else ('off_stage' if 'off' in norm_code else ('sports' if 'sport' in norm_code else 'general'))
+            kind = 'theater' if 'stage' in norm_code and 'off' not in norm_code else ('stack' if 'off' in norm_code else ('run' if 'sport' in norm_code else 'award'))
             cols_to_show.append((pt.name.title(), c, kind))
     else:
         active_pts = [pt for pt in event_program_types if type_counts.get(pt.code, 0) > 0]
@@ -696,49 +698,39 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         for pt in selected_pts:
             c = type_counts.get(pt.code, 0)
             norm_code = (pt.code or '').lower()
-            kind = 'stage' if 'stage' in norm_code and 'off' not in norm_code else ('off_stage' if 'off' in norm_code else ('sports' if 'sport' in norm_code else 'general'))
+            kind = 'theater' if 'stage' in norm_code and 'off' not in norm_code else ('stack' if 'off' in norm_code else ('run' if 'sport' in norm_code else 'award'))
             cols_to_show.append((pt.name.title(), c, kind))
 
     num_cols = max(1, len(cols_to_show))
 
-    stats_top = y_div - 7.0
+    stats_top = y_div - 9.0
     stats_w = card_w - 16.0
     stats_left = card_x + 8.0
     col_w = stats_w / float(num_cols)
 
-    sh_w = 15.0
-    sh_h = 15.0
+    sh_w = 12.5
+    sh_h = 12.5
     sh_y = stats_top - sh_h
     sh_cy = sh_y + sh_h / 2.0
-    num_y = sh_y - 13.0
+    num_y = sh_y - 11.0
 
-    icon_map = {
-        'total': 'calendar',
-        'stage': 'theater',
-        'off_stage': 'stack',
-        'sports': 'run',
-        'general': 'award'
-    }
+    for i, (col_label, count_val, icon_key) in enumerate(cols_to_show):
+        cx = stats_left + (i + 0.5) * col_w
 
-    for i, (col_label, count_val, kind) in enumerate(cols_to_show):
-        cx = stats_left + i * col_w + col_w / 2.0
-
-        # 1. Small shading background square for icon
-        sh_x = cx - sh_w / 2.0
+        # 1. Shaded icon box
         pdf.setFillColor(HexColor('#EEF2FF'))
         pdf.setStrokeColor(HexColor('#E0E7FF'))
-        pdf.setLineWidth(0.6)
-        pdf.roundRect(sh_x, sh_y, sh_w, sh_h, radius=3.5, stroke=1, fill=1)
+        pdf.setLineWidth(0.5)
+        pdf.roundRect(cx - sh_w / 2.0, sh_y, sh_w, sh_h, radius=3.0, stroke=1, fill=1)
 
-        # 2. Real vector icon inside shaded square
-        icon_key = icon_map.get(kind, 'award')
+        # 2. Real vector icon inside
         icon_img = _get_badge_icon_image(icon_key, '#4338CA')
-        icon_sz = 9.5
+        icon_sz = 8.0
         if icon_img:
             pdf.drawImage(icon_img, cx - icon_sz / 2.0, sh_cy - icon_sz / 2.0, icon_sz, icon_sz, mask='auto')
 
-        # 3. Big bold count
-        pdf.setFont('Helvetica-Bold', 13.0)
+        # 3. Number
+        pdf.setFont('Helvetica-Bold', 11.0)
         pdf.setFillColor(HexColor('#0F172A'))
         pdf.drawCentredString(cx, num_y, str(count_val))
 
@@ -746,17 +738,13 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         clean_lbl = col_label.strip()
         norm_l = clean_lbl.lower()
         if 'on' in norm_l and 'stage' in norm_l:
-            l1 = 'On-Stage'
-            l2 = 'Events'
+            l1, l2 = 'On-Stage', 'Events'
         elif 'off' in norm_l and 'stage' in norm_l:
-            l1 = 'Off-Stage'
-            l2 = 'Events'
+            l1, l2 = 'Off-Stage', 'Events'
         elif 'total' in norm_l:
-            l1 = 'Total'
-            l2 = 'Events'
+            l1, l2 = 'Total', 'Events'
         elif 'sport' in norm_l:
-            l1 = 'Sports'
-            l2 = 'Events'
+            l1, l2 = 'Sports', 'Events'
         elif norm_l.endswith('events') or norm_l.endswith('programs'):
             words = clean_lbl.split()
             l1 = words[0]
@@ -765,54 +753,29 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
             l1 = clean_lbl
             l2 = 'Events'
 
-        pdf.setFont('Helvetica-Bold', 4.5)
+        pdf.setFont('Helvetica-Bold', 3.8)
         pdf.setFillColor(HexColor('#64748B'))
-        pdf.drawCentredString(cx, num_y - 7.5, l1)
+        pdf.drawCentredString(cx, num_y - 6.5, l1)
         if l2:
-            pdf.drawCentredString(cx, num_y - 12.5, l2)
+            pdf.drawCentredString(cx, num_y - 10.8, l2)
 
-        # 5. Hairline vertical divider between columns (between number & labels)
+        # 5. Hairline vertical divider between columns
         if i > 0:
             div_x = stats_left + i * col_w
             pdf.setStrokeColor(HexColor('#F1F5F9'))
-            pdf.setLineWidth(0.6)
-            pdf.line(div_x, num_y - 13.0, div_x, num_y + 10.0)
+            pdf.setLineWidth(0.5)
+            pdf.line(div_x, num_y - 11.0, div_x, num_y + 8.0)
 
-    # 9. Middle Left: Participant Role & Event / School Subtitle
-    pdf.setFillColor(HexColor('#4F46E5'))
-    pdf.roundRect(card_x + 10.0, card_y + 68.0, 16.0, 2.2, radius=1.0, stroke=0, fill=1)
-
-    pdf.setFont('Helvetica-Bold', 12.0)
-    pdf.setFillColor(HexColor('#0F172A'))
-    pdf.drawString(card_x + 10.0, card_y + 51.0, 'Participant')
-
-    # Subtitle: EVENT • SCHOOL
-    school_name = (event.school.name if event.school else '').strip().upper()
-    event_sub_title = (event.title or 'EVENT').strip().upper()
-    full_sub = f"{event_sub_title}  •  {school_name}" if school_name else event_sub_title
-    max_sub_w = card_w - 75.0   # room to the left of the QR code box
-    sub_size = 5.2
-    while sub_size > 4.2 and stringWidth(full_sub, 'Helvetica-Bold', sub_size) > max_sub_w:
-        sub_size -= 0.3
-    if stringWidth(full_sub, 'Helvetica-Bold', sub_size) > max_sub_w:
-        while full_sub and stringWidth(full_sub + '…', 'Helvetica-Bold', sub_size) > max_sub_w:
-            full_sub = full_sub[:-1]
-        full_sub += '…'
-
-    pdf.setFont('Helvetica-Bold', sub_size)
-    pdf.setFillColor(HexColor('#64748B'))
-    pdf.drawString(card_x + 10.0, card_y + 40.0, full_sub)
-
-    # 10. Middle Right: Official Verification QR Code Container
+    # 9. Lower Footer Area: QR Code Container blending into footer wave
     qr_box_w = 44.0
-    qr_box_h = 49.0
-    qr_box_x = card_x + card_w - qr_box_w - 8.0
-    qr_box_y = card_y + 30.0
+    qr_box_h = 52.0
+    qr_box_x = card_x + card_w - qr_box_w - 9.0
+    qr_box_y = card_y + 8.0
 
     pdf.setFillColor(HexColor('#FFFFFF'))
-    pdf.setStrokeColor(HexColor('#CBD5E1'))
+    pdf.setStrokeColor(HexColor('#DDE2F8'))
     pdf.setLineWidth(0.6)
-    pdf.roundRect(qr_box_x, qr_box_y, qr_box_w, qr_box_h, radius=5, stroke=1, fill=1)
+    pdf.roundRect(qr_box_x, qr_box_y, qr_box_w, qr_box_h, radius=6.0, stroke=1, fill=1)
 
     effective_base = base_url
     if not effective_base:
@@ -827,44 +790,43 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
             effective_base = ''
     qr_target_url = f"{effective_base.rstrip('/')}/events/{event.id}/badge/{student.id}" if effective_base else f"/events/{event.id}/badge/{student.id}"
 
-    qr_size = 33.0
+    qr_sz = 34.0
     try:
         qr = QrCodeWidget(qr_target_url)
-        qr.barWidth = qr_size
-        qr.barHeight = qr_size
-        qr.barBorder = 0
-        d = Drawing(qr_size, qr_size)
+        bounds = qr.getBounds()
+        d = Drawing(bounds[2], bounds[3], transform=[qr_sz / bounds[2], 0, 0, qr_sz / bounds[3], 0, 0])
         d.add(qr)
-        qr_draw_x = qr_box_x + (qr_box_w - qr_size) / 2.0
-        qr_draw_y = qr_box_y + 11.0
+        qr_draw_x = qr_box_x + (qr_box_w - qr_sz) / 2.0
+        qr_draw_y = qr_box_y + 12.0
         renderPDF.draw(d, pdf, qr_draw_x, qr_draw_y)
     except Exception as qr_err:
         logger.warning("Badge QR generation failed: %s", qr_err)
 
-    pdf.setFont('Helvetica-Bold', 4.2)
+    pdf.setFont('Helvetica-Bold', 4.5)
     pdf.setFillColor(HexColor('#312E81'))
-    pdf.drawCentredString(qr_box_x + qr_box_w / 2.0, qr_box_y + 4.0, 'SCAN TO VERIFY')
+    pdf.drawCentredString(qr_box_x + qr_box_w / 2.0, qr_box_y + 4.2, 'SCAN TO VERIFY')
 
-    # 11. "Powered by Eventloo" inside the bottom dark wave in WHITE color
+    # 10. "Powered by Eventloo" on bottom-left white card area
     eventloo_icon_path = _resolve_eventloo_icon_path()
-    f_x = card_x + 10.0
-    f_y = card_y + 6.0
+    pow_y = qr_box_y + (qr_box_h / 2.0) - 4.0
+    f_x = card_x + 12.0
     icon_offset = 0.0
+
     if eventloo_icon_path:
         try:
-            pdf.drawImage(eventloo_icon_path, f_x, f_y - 1.0, width=8.5, height=8.5, mask='auto', preserveAspectRatio=True)
+            pdf.drawImage(eventloo_icon_path, f_x, pow_y - 1.0, width=8.5, height=8.5, mask='auto', preserveAspectRatio=True)
             icon_offset = 12.0
         except Exception as icon_err:
             logger.warning("Eventloo badge icon draw failed: %s", icon_err)
             icon_offset = 0.0
 
     pdf.setFont('Helvetica', 5.2)
-    pdf.setFillColor(HexColor('#FFFFFF'))
-    pdf.drawString(f_x + icon_offset, f_y + 1.2, 'Powered by ')
+    pdf.setFillColor(HexColor('#64748B'))
+    pdf.drawString(f_x + icon_offset, pow_y + 1.2, 'Powered by ')
     pw = stringWidth('Powered by ', 'Helvetica', 5.2)
-    pdf.setFont('Helvetica-Bold', 5.8)
-    pdf.setFillColor(HexColor('#FFFFFF'))
-    pdf.drawString(f_x + icon_offset + pw, f_y + 1.2, 'Eventloo')
+    pdf.setFont('Helvetica-Bold', 5.5)
+    pdf.setFillColor(HexColor('#0F172A'))
+    pdf.drawString(f_x + icon_offset + pw, pow_y + 1.2, 'Eventloo')
 
     pdf.restoreState()
 
