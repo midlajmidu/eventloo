@@ -1129,8 +1129,8 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
 
     # 11. Footer Branding: "Powered by Eventloo" with Refined Alignment & Modern Typography
     eventloo_icon_path = _resolve_eventloo_icon_path()
-    pow_y = card_y + 20.0
-    f_x = card_x + 8.0
+    pow_y = card_y + 25.0
+    f_x = card_x + 5.5
     icon_offset = 0.0
 
     if eventloo_icon_path:
@@ -1416,8 +1416,8 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
 
     # 7. "Powered by Eventloo" - EXACT SAME PLACE AS FRONT PAGE
     eventloo_icon_path = _resolve_eventloo_icon_path()
-    pow_y = card_y + 20.0
-    f_x = card_x + 8.0
+    pow_y = card_y + 25.0
+    f_x = card_x + 5.5
     icon_offset = 0.0
 
     if eventloo_icon_path:
