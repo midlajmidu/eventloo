@@ -241,8 +241,8 @@ REST_FRAMEWORK = {
         'user': os.environ.get('DRF_USER_RATE', '600/minute'),
         'login': os.environ.get('DRF_LOGIN_RATE', '10/minute'),
         'token_refresh': os.environ.get('DRF_REFRESH_RATE', '60/minute'),
-        'exports': os.environ.get('DRF_EXPORT_RATE', '20/hour'),
-        'uploads': os.environ.get('DRF_UPLOAD_RATE', '10/hour'),
+        'exports': os.environ.get('DRF_EXPORT_RATE', '300/hour'),
+        'uploads': os.environ.get('DRF_UPLOAD_RATE', '60/hour'),
     },
 }
 

@@ -19,14 +19,14 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// Create a separate axios instance for report downloads
+// Create a separate axios instance for report downloads (5 min timeout for large exports)
 const reportApi = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
   },
-  timeout: getApiTimeout(),
+  timeout: 300000,
   withCredentials: true,
 });
 

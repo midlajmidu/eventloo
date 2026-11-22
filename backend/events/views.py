@@ -9795,7 +9795,8 @@ def generate_certificates(request, event_id):
             item.strip() for item in request.GET.get('cert_types', 'participation').split(',')
             if item.strip()
         ))
-        if not cert_types or any(item not in CERTIFICATE_TYPES for item in cert_types):
+        supported_export_types = CERTIFICATE_TYPES | {'alternating', 'shuffled', 'poster_wise'}
+        if not cert_types or any(item not in supported_export_types for item in cert_types):
             return Response({'error': 'Select a supported certificate type.'}, status=400)
 
         quality = request.GET.get('quality', 'standard')
@@ -9827,9 +9828,14 @@ def generate_certificates(request, event_id):
 
         category = request.GET.get('category', 'all')
         program_id = request.GET.get('program_id', 'all')
+        poster_mode_param = request.GET.get('poster_mode', '')
 
-        is_poster_export = any(str(c).startswith('result_poster') for c in cert_types)
-        poster_mode = request.GET.get('poster_mode', 'single')
+        is_poster_export = (
+            any(str(c).startswith('result_poster') for c in cert_types)
+            or any(str(c) in ('alternating', 'shuffled', 'poster_wise') for c in cert_types)
+            or poster_mode_param in ('alternating', 'shuffled', 'poster_wise')
+        )
+        poster_mode = poster_mode_param if poster_mode_param else ('alternating' if is_poster_export else 'single')
 
         if is_poster_export:
             available_poster_templates = {
@@ -9844,11 +9850,13 @@ def generate_certificates(request, event_id):
                     'missing_templates': ['result_poster'],
                 }, status=400)
 
-            if poster_mode in ('alternating', 'shuffled', 'poster_wise') or len(cert_types) > 1:
+            if poster_mode in ('alternating', 'shuffled', 'poster_wise') or len(cert_types) > 1 or any(str(c) in ('alternating', 'shuffled', 'poster_wise') for c in cert_types):
                 valid_types = [c for c in cert_types if c in available_poster_templates]
-                if not valid_types:
+                if not valid_types or any(str(c) in ('alternating', 'shuffled') for c in cert_types):
                     valid_types = sorted(available_poster_templates.keys())
                 cert_types = valid_types
+                if poster_mode not in ('alternating', 'shuffled', 'poster_wise'):
+                    poster_mode = 'alternating'
             else:
                 target_type = cert_types[0]
                 if target_type not in available_poster_templates:
@@ -9939,8 +9947,25 @@ def generate_certificates(request, event_id):
             program_list = list(programs)
 
             if is_poster_export and poster_mode in ('alternating', 'shuffled') and len(cert_types) > 1:
+                published_event_program_ids = None
                 for idx, program in enumerate(program_list):
-                    chosen_cert_type = cert_types[idx % len(cert_types)]
+                    rn = program.results.filter(result_number__isnull=False).values_list('result_number', flat=True).first()
+                    if rn is not None and rn > 0:
+                        seq_idx = rn - 1
+                    else:
+                        if published_event_program_ids is None:
+                            published_event_program_ids = list(
+                                Program.objects.filter(event=event, is_published=True)
+                                .annotate(min_rn=Min('results__result_number'))
+                                .order_by(F('min_rn').asc(nulls_last=True), 'id')
+                                .values_list('id', flat=True).distinct()
+                            )
+                        try:
+                            seq_idx = published_event_program_ids.index(program.id)
+                        except ValueError:
+                            seq_idx = idx
+
+                    chosen_cert_type = cert_types[seq_idx % len(cert_types)]
                     prog_recipients = certificate_recipients(program, chosen_cert_type)
                     if team_id:
                         prog_recipients = [

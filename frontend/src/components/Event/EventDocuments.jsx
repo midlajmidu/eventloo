@@ -625,6 +625,8 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
   const [loading, setLoading] = useState(true);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [downloadingItemId, setDownloadingItemId] = useState(null);
+  const [downloadNotice, setDownloadNotice] = useState(null);
   const [, setTick] = useState(0);
 
   // Live timer to refresh relative time strings (e.g. "Just now" -> "1 min ago" -> "20 mins ago")
@@ -1730,15 +1732,27 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
   };
 
   const handleDownloadClick = async (exportItem) => {
-    if (exportItem.status === 'processing') return;
+    if (exportItem.status === 'processing' || generating) return;
     setGenerating(true);
+    setDownloadingItemId(exportItem.id);
+    setDownloadNotice({
+      status: 'loading',
+      text: `Generating and preparing ${exportItem.typeName || 'document'}... Large exports with multiple pages or high-resolution images may take up to a minute.`
+    });
     try {
       await processAndDownloadExport(exportItem);
+      setDownloadNotice({
+        status: 'success',
+        text: `${exportItem.typeName || 'Document'} downloaded successfully!`
+      });
+      setTimeout(() => setDownloadNotice(null), 4000);
     } catch (err) {
       console.error('Download click error:', err);
+      setDownloadNotice(null);
       window.alert(err?.message || `Unable to generate ${exportItem.typeName || 'document'}.`);
     } finally {
       setGenerating(false);
+      setDownloadingItemId(null);
     }
   };
 
@@ -1965,6 +1979,35 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
         </button>
       </div>
 
+      {/* Download Status Notice Banner */}
+      {downloadNotice && (
+        <div className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-semibold shadow-2xs transition-all ${
+          downloadNotice.status === 'loading'
+            ? 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
+            : 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
+        }`}>
+          <div className="flex items-center space-x-2.5">
+            {downloadNotice.status === 'loading' ? (
+              <Loader2 className="w-4 h-4 text-indigo-600 animate-spin shrink-0" />
+            ) : (
+              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+            )}
+            <span>{downloadNotice.text}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDownloadNotice(null)}
+            className={`p-1 rounded-md transition-colors cursor-pointer ${
+              downloadNotice.status === 'loading'
+                ? 'text-indigo-400 hover:text-indigo-700'
+                : 'text-emerald-500 hover:text-emerald-800'
+            }`}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Main Exports Queue Table */}
       <div className="bg-white border border-slate-200/80 rounded-xl shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -2043,14 +2086,22 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                           onClick={() => handleDownloadClick(item)}
                           disabled={item.status === 'processing' || generating}
                           className={`p-1.5 rounded-lg transition-colors ${
-                            item.status === 'processing'
+                            item.status === 'processing' || downloadingItemId === item.id
+                              ? 'text-indigo-600 bg-indigo-50 cursor-wait'
+                              : generating
                               ? 'text-gray-300 cursor-not-allowed'
                               : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100 cursor-pointer'
                           }`}
-                          title={item.status === 'processing' ? 'Processing export...' : 'Download Document'}
+                          title={
+                            downloadingItemId === item.id
+                              ? 'Generating and preparing download...'
+                              : item.status === 'processing'
+                              ? 'Processing export...'
+                              : 'Download Document'
+                          }
                         >
-                          {item.status === 'processing' ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-indigo-500" />
+                          {downloadingItemId === item.id || item.status === 'processing' ? (
+                            <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
                           ) : (
                             <Download className="w-4 h-4" />
                           )}

@@ -651,34 +651,34 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
 
     pdf.saveState()
 
-    # 1. Base Card White Background & Soft Lavender Outer Border
+    # 1. Base Card White Background & Soft Brand Indigo Outer Border
     pdf.setFillColor(HexColor('#FFFFFF'))
-    pdf.setStrokeColor(HexColor('#DDD6FE'))
+    pdf.setStrokeColor(HexColor('#C7D2FE'))
     pdf.setLineWidth(0.75)
     pdf.roundRect(card_x, card_y, card_w, card_h, radius=card_radius, stroke=1, fill=1)
 
-    # 2. Subtle Lavender Gradient Accent in Top-Right Corner (Layered vector wash)
+    # 2. Subtle Indigo Gradient Accent in Top-Right Corner (Layered vector wash)
     pdf.saveState()
     clip_corner = pdf.beginPath()
     clip_corner.roundRect(card_x, card_y, card_w, card_h, radius=card_radius)
     pdf.clipPath(clip_corner, stroke=0, fill=0)
 
-    # Outer soft lavender wash
+    # Outer soft indigo wash
     p_top1 = pdf.beginPath()
     p_top1.moveTo(card_x + card_w - 65.0, card_top)
     p_top1.curveTo(card_x + card_w - 35.0, card_top - 30.0, card_x + card_w, card_top - 45.0, card_x + card_w, card_top - 70.0)
     p_top1.lineTo(card_x + card_w, card_top)
     p_top1.close()
-    pdf.setFillColor(HexColor('#F5F3FF'))
+    pdf.setFillColor(HexColor('#EEF2FF'))
     pdf.drawPath(p_top1, stroke=0, fill=1)
 
-    # Middle soft lavender curve
+    # Middle soft indigo curve
     p_top2 = pdf.beginPath()
     p_top2.moveTo(card_x + card_w - 45.0, card_top)
     p_top2.curveTo(card_x + card_w - 24.0, card_top - 20.0, card_x + card_w, card_top - 32.0, card_x + card_w, card_top - 50.0)
     p_top2.lineTo(card_x + card_w, card_top)
     p_top2.close()
-    pdf.setFillColor(HexColor('#EDE9FE'))
+    pdf.setFillColor(HexColor('#E0E7FF'))
     pdf.drawPath(p_top2, stroke=0, fill=1)
 
     # Inner soft accent
@@ -687,45 +687,45 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     p_top3.curveTo(card_x + card_w - 14.0, card_top - 12.0, card_x + card_w, card_top - 20.0, card_x + card_w, card_top - 30.0)
     p_top3.lineTo(card_x + card_w, card_top)
     p_top3.close()
-    pdf.setFillColor(HexColor('#DDD6FE'))
+    pdf.setFillColor(HexColor('#C7D2FE'))
     pdf.drawPath(p_top3, stroke=0, fill=1)
     pdf.restoreState()
 
-    # 3. Bottom Decorative Waves: Smooth, overlapping lavender, violet and deep-purple layers
+    # 3. Bottom Decorative Waves: Smooth, overlapping Eventloo indigo brand layers
     pdf.saveState()
-    # Layer 1: Back Light Wave (Soft Lavender / #DDD6FE)
+    # Layer 1: Back Light Wave (Soft Indigo / #C7D2FE)
     p_wave1 = pdf.beginPath()
     p_wave1.moveTo(card_x, card_y)
     p_wave1.lineTo(card_x, card_y + 18.0)
     p_wave1.curveTo(card_x + 48.0, card_y + 28.0, card_x + 108.0, card_y + 13.0, card_x + card_w, card_y + 25.0)
     p_wave1.lineTo(card_x + card_w, card_y)
     p_wave1.close()
-    pdf.setFillColor(HexColor('#DDD6FE'))
+    pdf.setFillColor(HexColor('#C7D2FE'))
     pdf.drawPath(p_wave1, stroke=0, fill=1)
 
-    # Layer 2: Middle Wave (Vibrant Violet / #7C3AED)
+    # Layer 2: Middle Wave (Eventloo Brand Indigo / #4F46E5)
     p_wave2 = pdf.beginPath()
     p_wave2.moveTo(card_x, card_y)
     p_wave2.lineTo(card_x, card_y + 11.0)
     p_wave2.curveTo(card_x + 55.0, card_y + 22.0, card_x + 115.0, card_y + 8.0, card_x + card_w, card_y + 21.0)
     p_wave2.lineTo(card_x + card_w, card_y)
     p_wave2.close()
-    pdf.setFillColor(HexColor('#7C3AED'))
+    pdf.setFillColor(HexColor('#4F46E5'))
     pdf.drawPath(p_wave2, stroke=0, fill=1)
 
-    # Layer 3: Foreground Wave (Deep Purple / #2E1065)
+    # Layer 3: Foreground Wave (Deep Midnight Indigo / #1E1B4B)
     p_wave3 = pdf.beginPath()
     p_wave3.moveTo(card_x, card_y)
     p_wave3.lineTo(card_x, card_y + 5.0)
     p_wave3.curveTo(card_x + 62.0, card_y + 16.0, card_x + 122.0, card_y + 4.0, card_x + card_w, card_y + 17.0)
     p_wave3.lineTo(card_x + card_w, card_y)
     p_wave3.close()
-    pdf.setFillColor(HexColor('#2E1065'))
+    pdf.setFillColor(HexColor('#1E1B4B'))
     pdf.drawPath(p_wave3, stroke=0, fill=1)
     pdf.restoreState()
 
     # Re-draw outer card border to clip cleanly over bottom waves
-    pdf.setStrokeColor(HexColor('#DDD6FE'))
+    pdf.setStrokeColor(HexColor('#C7D2FE'))
     pdf.setLineWidth(0.75)
     pdf.roundRect(card_x, card_y, card_w, card_h, radius=card_radius, stroke=1, fill=0)
 
@@ -746,8 +746,8 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
             logo_y = logo_cy - logo_h / 2.0
             pdf.drawImage(event_logo_path, logo_x, logo_y, width=logo_w, height=logo_h, mask='auto', preserveAspectRatio=True)
 
-            # Flanking light-lavender divider lines
-            pdf.setStrokeColor(HexColor('#EDE9FE'))
+            # Flanking light-indigo divider lines
+            pdf.setStrokeColor(HexColor('#E0E7FF'))
             pdf.setLineWidth(0.5)
             pdf.line(card_x + 16.0, logo_cy, logo_x - 7.0, logo_cy)
             pdf.line(logo_x + logo_w + 7.0, logo_cy, card_x + card_w - 16.0, logo_cy)
@@ -766,7 +766,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
                 event_title = event_title[:-1]
             event_title += '…'
         t_w = stringWidth(event_title, 'Helvetica-Bold', t_size)
-        pdf.setStrokeColor(HexColor('#EDE9FE'))
+        pdf.setStrokeColor(HexColor('#E0E7FF'))
         pdf.setLineWidth(0.5)
         pdf.line(card_x + 16.0, y_title + 3.0, card_center_x - t_w / 2.0 - 6.0, y_title + 3.0)
         pdf.line(card_center_x + t_w / 2.0 + 6.0, y_title + 3.0, card_x + card_w - 16.0, y_title + 3.0)
@@ -828,7 +828,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     cy_pill = y_pill + pill_h / 2.0
     pill_radius = pill_h / 2.0
 
-    # Draw Deep-Purple to Violet smooth vector gradient
+    # Draw Deep Midnight Indigo to Eventloo Vibrant Indigo smooth vector gradient
     pdf.saveState()
     path_pill = pdf.beginPath()
     path_pill.roundRect(pill_x, y_pill, pill_w, pill_h, radius=pill_radius)
@@ -837,26 +837,26 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     slices = int(pill_w) + 1
     for s in range(slices):
         t = s / float(slices - 1) if slices > 1 else 0.0
-        # Gradient: Deep Purple (#2E1065: 46, 16, 101) -> Vibrant Violet (#7C3AED: 124, 58, 237)
-        r = (46 + t * (124 - 46)) / 255.0
-        g = (16 + t * (58 - 16)) / 255.0
-        b = (101 + t * (237 - 101)) / 255.0
+        # Gradient: Deep Midnight Indigo (#1E1B4B: 30, 27, 75) -> Eventloo Brand Indigo (#4F46E5: 79, 70, 229)
+        r = (30 + t * (79 - 30)) / 255.0
+        g = (27 + t * (70 - 27)) / 255.0
+        b = (75 + t * (229 - 75)) / 255.0
         pdf.setFillColorRGB(r, g, b)
         pdf.rect(pill_x + s, y_pill, 1.2, pill_h, stroke=0, fill=1)
     pdf.restoreState()
 
     # Subtle outer stroke for pill edge definition
-    pdf.setStrokeColor(HexColor('#8B5CF6'))
+    pdf.setStrokeColor(HexColor('#6366F1'))
     pdf.setLineWidth(0.5)
     pdf.roundRect(pill_x, y_pill, pill_w, pill_h, radius=pill_radius, stroke=1, fill=0)
 
     label_x = pill_x + pad_x
     pdf.setFont('Helvetica-Bold', label_fs)
-    pdf.setFillColor(HexColor('#E9D5FF'))
+    pdf.setFillColor(HexColor('#C7D2FE'))
     pdf.drawString(label_x, cy_pill - 2.0, label_text)
 
     div_x = label_x + label_w + gap
-    pdf.setStrokeColor(HexColor('#A78BFA'))
+    pdf.setStrokeColor(HexColor('#818CF8'))
     pdf.setLineWidth(0.6)
     pdf.line(div_x, cy_pill - 5.0, div_x, cy_pill + 5.0)
 
@@ -866,7 +866,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pdf.drawString(num_x, cy_pill - 3.4, num_text)
 
     # 7. Information Badges Row: [ Team ] [ Category ] [ Class / Grade ]
-    # Soft lavender backgrounds (#F5F3FF) and subtle purple borders (#DDD6FE)
+    # Soft indigo backgrounds (#EEF2FF) and subtle indigo borders (#C7D2FE)
     y_badges = card_top - 132.5
 
     # Team
@@ -913,8 +913,8 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pill_h = 15.0
 
     for px, ptext, icon_key in pills_data:
-        pdf.setFillColor(HexColor('#F5F3FF'))
-        pdf.setStrokeColor(HexColor('#DDD6FE'))
+        pdf.setFillColor(HexColor('#EEF2FF'))
+        pdf.setStrokeColor(HexColor('#C7D2FE'))
         pdf.setLineWidth(0.65)
         pdf.roundRect(px, y_badges, pill_w, pill_h, radius=5.0, stroke=1, fill=1)
 
@@ -935,17 +935,17 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         group_w = icon_sz + gap_it + tw
         start_x = px + (pill_w - group_w) / 2.0
 
-        icon_img = _get_badge_icon_image(icon_key, '#6D28D9')
+        icon_img = _get_badge_icon_image(icon_key, '#4338CA')
         if icon_img:
             pdf.drawImage(icon_img, start_x, cy - icon_sz / 2.0, icon_sz, icon_sz, mask='auto')
 
         pdf.setFont('Helvetica-Bold', fs)
-        pdf.setFillColor(HexColor('#2E1065'))
+        pdf.setFillColor(HexColor('#1E1B4B'))
         pdf.drawString(start_x + icon_sz + gap_it, cy - (fs * 0.35), clean_text)
 
-    # 8. Thin, Light-Lavender Divider Line below Information Badges
+    # 8. Thin, Light-Indigo Divider Line below Information Badges
     y_div = card_top - 141.5
-    pdf.setStrokeColor(HexColor('#EDE9FE'))
+    pdf.setStrokeColor(HexColor('#E0E7FF'))
     pdf.setLineWidth(0.5)
     pdf.line(card_x + 8.0, y_div, card_x + card_w - 8.0, y_div)
 
@@ -1037,14 +1037,14 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     for i, (col_label, count_val, icon_key) in enumerate(cols_to_show):
         cx = stats_left + (i + 0.5) * col_w
 
-        # 1. Lightly tinted lavender icon box
-        pdf.setFillColor(HexColor('#EDE9FE'))
-        pdf.setStrokeColor(HexColor('#DDD6FE'))
+        # 1. Lightly tinted indigo icon box
+        pdf.setFillColor(HexColor('#EEF2FF'))
+        pdf.setStrokeColor(HexColor('#C7D2FE'))
         pdf.setLineWidth(0.5)
         pdf.roundRect(cx - sh_w / 2.0, sh_y, sh_w, sh_h, radius=3.5, stroke=1, fill=1)
 
         # 2. Vector icon inside
-        icon_img = _get_badge_icon_image(icon_key, '#6D28D9')
+        icon_img = _get_badge_icon_image(icon_key, '#4338CA')
         icon_sz = 8.5
         if icon_img:
             pdf.drawImage(icon_img, cx - icon_sz / 2.0, sh_cy - icon_sz / 2.0, icon_sz, icon_sz, mask='auto')
@@ -1082,18 +1082,18 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         # 5. Hairline vertical divider between columns
         if i > 0:
             div_x = stats_left + i * col_w
-            pdf.setStrokeColor(HexColor('#EDE9FE'))
+            pdf.setStrokeColor(HexColor('#E0E7FF'))
             pdf.setLineWidth(0.5)
             pdf.line(div_x, num_y - 11.0, div_x, num_y + 8.0)
 
-    # 10. QR Code Container: Clean White Background, Thin Lavender Border & Rounded Corners
+    # 10. QR Code Container: Clean White Background, Thin Indigo Border & Rounded Corners
     qr_box_w = 44.0
     qr_box_h = 50.0
     qr_box_x = card_x + card_w - qr_box_w - 9.0
     qr_box_y = card_y + 8.0
 
     pdf.setFillColor(HexColor('#FFFFFF'))
-    pdf.setStrokeColor(HexColor('#DDD6FE'))
+    pdf.setStrokeColor(HexColor('#C7D2FE'))
     pdf.setLineWidth(0.7)
     pdf.roundRect(qr_box_x, qr_box_y, qr_box_w, qr_box_h, radius=7.0, stroke=1, fill=1)
 
@@ -1124,7 +1124,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         logger.warning("Badge QR generation failed: %s", qr_err)
 
     pdf.setFont('Helvetica-Bold', 4.8)
-    pdf.setFillColor(HexColor('#5B21B6'))
+    pdf.setFillColor(HexColor('#4338CA'))
     pdf.drawCentredString(qr_box_x + qr_box_w / 2.0, qr_box_y + 3.8, 'SCAN TO VERIFY')
 
     # 11. Footer Branding: "Powered by Eventloo" with Refined Alignment & Modern Typography
@@ -1146,7 +1146,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     pdf.drawString(f_x + icon_offset, pow_y + 1.2, 'Powered by ')
     pw = stringWidth('Powered by ', 'Helvetica', 5.2)
     pdf.setFont('Helvetica-Bold', 5.8)
-    pdf.setFillColor(HexColor('#2E1065'))
+    pdf.setFillColor(HexColor('#1E1B4B'))
     pdf.drawString(f_x + icon_offset + pw, pow_y + 1.2, 'Eventloo')
 
     pdf.restoreState()
@@ -1188,34 +1188,34 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
 
     pdf.saveState()
 
-    # 1. Base Card White Background & Soft Lavender Outer Border
+    # 1. Base Card White Background & Soft Brand Indigo Outer Border
     pdf.setFillColor(HexColor('#FFFFFF'))
-    pdf.setStrokeColor(HexColor('#DDD6FE'))
+    pdf.setStrokeColor(HexColor('#C7D2FE'))
     pdf.setLineWidth(0.75)
     pdf.roundRect(card_x, card_y, card_w, card_h, radius=card_radius, stroke=1, fill=1)
 
-    # 2. Decorative soft lavender gradient accent in top left corner (mirrored from front's top right)
+    # 2. Decorative soft indigo gradient accent in top left corner (mirrored from front's top right)
     pdf.saveState()
     clip_corner = pdf.beginPath()
     clip_corner.roundRect(card_x, card_y, card_w, card_h, radius=card_radius)
     pdf.clipPath(clip_corner, stroke=0, fill=0)
 
-    # Outer soft lavender wash
+    # Outer soft indigo wash
     p_top1 = pdf.beginPath()
     p_top1.moveTo(card_x + 65.0, card_top)
     p_top1.curveTo(card_x + 35.0, card_top - 30.0, card_x, card_top - 45.0, card_x, card_top - 70.0)
     p_top1.lineTo(card_x, card_top)
     p_top1.close()
-    pdf.setFillColor(HexColor('#F5F3FF'))
+    pdf.setFillColor(HexColor('#EEF2FF'))
     pdf.drawPath(p_top1, stroke=0, fill=1)
 
-    # Middle soft lavender curve
+    # Middle soft indigo curve
     p_top2 = pdf.beginPath()
     p_top2.moveTo(card_x + 45.0, card_top)
     p_top2.curveTo(card_x + 24.0, card_top - 20.0, card_x, card_top - 32.0, card_x, card_top - 50.0)
     p_top2.lineTo(card_x, card_top)
     p_top2.close()
-    pdf.setFillColor(HexColor('#EDE9FE'))
+    pdf.setFillColor(HexColor('#E0E7FF'))
     pdf.drawPath(p_top2, stroke=0, fill=1)
 
     # Inner soft accent
@@ -1224,45 +1224,45 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
     p_top3.curveTo(card_x + 14.0, card_top - 12.0, card_x, card_top - 20.0, card_x, card_top - 30.0)
     p_top3.lineTo(card_x, card_top)
     p_top3.close()
-    pdf.setFillColor(HexColor('#DDD6FE'))
+    pdf.setFillColor(HexColor('#C7D2FE'))
     pdf.drawPath(p_top3, stroke=0, fill=1)
     pdf.restoreState()
 
     # 3. Bottom Decorative Waves: 3-layer matching front page
     pdf.saveState()
-    # Layer 1: Back Light Wave (Soft Lavender / #DDD6FE)
+    # Layer 1: Back Light Wave (Soft Indigo / #C7D2FE)
     p_wave1 = pdf.beginPath()
     p_wave1.moveTo(card_x, card_y)
     p_wave1.lineTo(card_x, card_y + 18.0)
     p_wave1.curveTo(card_x + 48.0, card_y + 28.0, card_x + 108.0, card_y + 13.0, card_x + card_w, card_y + 25.0)
-    p_wave1.lineTo(card_x + card_w, card_y)
+    p_wave1.lineTo(card_x, card_y)
     p_wave1.close()
-    pdf.setFillColor(HexColor('#DDD6FE'))
+    pdf.setFillColor(HexColor('#C7D2FE'))
     pdf.drawPath(p_wave1, stroke=0, fill=1)
 
-    # Layer 2: Middle Wave (Vibrant Violet / #7C3AED)
+    # Layer 2: Middle Wave (Eventloo Brand Indigo / #4F46E5)
     p_wave2 = pdf.beginPath()
     p_wave2.moveTo(card_x, card_y)
     p_wave2.lineTo(card_x, card_y + 11.0)
     p_wave2.curveTo(card_x + 55.0, card_y + 22.0, card_x + 115.0, card_y + 8.0, card_x + card_w, card_y + 21.0)
     p_wave2.lineTo(card_x + card_w, card_y)
     p_wave2.close()
-    pdf.setFillColor(HexColor('#7C3AED'))
+    pdf.setFillColor(HexColor('#4F46E5'))
     pdf.drawPath(p_wave2, stroke=0, fill=1)
 
-    # Layer 3: Foreground Wave (Deep Purple / #2E1065)
+    # Layer 3: Foreground Wave (Deep Midnight Indigo / #1E1B4B)
     p_wave3 = pdf.beginPath()
     p_wave3.moveTo(card_x, card_y)
     p_wave3.lineTo(card_x, card_y + 5.0)
     p_wave3.curveTo(card_x + 62.0, card_y + 16.0, card_x + 122.0, card_y + 4.0, card_x + card_w, card_y + 17.0)
     p_wave3.lineTo(card_x + card_w, card_y)
     p_wave3.close()
-    pdf.setFillColor(HexColor('#2E1065'))
+    pdf.setFillColor(HexColor('#1E1B4B'))
     pdf.drawPath(p_wave3, stroke=0, fill=1)
     pdf.restoreState()
 
     # Re-draw outer card border to clip cleanly over bottom waves
-    pdf.setStrokeColor(HexColor('#DDD6FE'))
+    pdf.setStrokeColor(HexColor('#C7D2FE'))
     pdf.setLineWidth(0.75)
     pdf.roundRect(card_x, card_y, card_w, card_h, radius=card_radius, stroke=1, fill=0)
 
@@ -1283,7 +1283,7 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
             logo_y = logo_cy - logo_h / 2.0
             pdf.drawImage(event_logo_path, logo_x, logo_y, width=logo_w, height=logo_h, mask='auto', preserveAspectRatio=True)
 
-            pdf.setStrokeColor(HexColor('#EDE9FE'))
+            pdf.setStrokeColor(HexColor('#E0E7FF'))
             pdf.setLineWidth(0.5)
             pdf.line(card_x + 16.0, logo_cy, logo_x - 7.0, logo_cy)
             pdf.line(logo_x + logo_w + 7.0, logo_cy, card_x + card_w - 16.0, logo_cy)
@@ -1302,7 +1302,7 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
                 event_title = event_title[:-1]
             event_title += '…'
         t_w = stringWidth(event_title, 'Helvetica-Bold', t_size)
-        pdf.setStrokeColor(HexColor('#EDE9FE'))
+        pdf.setStrokeColor(HexColor('#E0E7FF'))
         pdf.setLineWidth(0.5)
         pdf.line(card_x + 16.0, y_title + 3.0, card_center_x - t_w / 2.0 - 6.0, y_title + 3.0)
         pdf.line(card_center_x + t_w / 2.0 + 6.0, y_title + 3.0, card_x + card_w - 16.0, y_title + 3.0)
@@ -1331,7 +1331,7 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
     pdf.drawString(card_x + 16.0, y_prog_hdr, 'PROGRAMS :')
 
     # Subtle separator line under PROGRAMS :
-    pdf.setStrokeColor(HexColor('#EDE9FE'))
+    pdf.setStrokeColor(HexColor('#E0E7FF'))
     pdf.setLineWidth(0.5)
     pdf.line(card_x + 16.0, y_prog_hdr - 4.5, card_x + card_w - 16.0, y_prog_hdr - 4.5)
 
@@ -1433,7 +1433,7 @@ def _draw_paper_badge_back(pdf, cell_x, cell_y, badge_width, badge_height, recip
     pdf.drawString(f_x + icon_offset, pow_y + 1.2, 'Powered by ')
     pw = stringWidth('Powered by ', 'Helvetica', 5.2)
     pdf.setFont('Helvetica-Bold', 5.8)
-    pdf.setFillColor(HexColor('#2E1065'))
+    pdf.setFillColor(HexColor('#1E1B4B'))
     pdf.drawString(f_x + icon_offset + pw, pow_y + 1.2, 'Eventloo')
 
     pdf.restoreState()

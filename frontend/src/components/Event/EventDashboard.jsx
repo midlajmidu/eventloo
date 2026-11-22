@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { eventsAPI } from '../../services/api';
 import EventOverview from './EventOverview';
 import EventPrograms from './EventPrograms';
@@ -38,20 +38,28 @@ import {
 const EventDashboard = () => {
   const { eventId } = useParams();
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const urlTab = searchParams.get('tab');
+  const getInitialTab = () => {
+    try {
+      const tab = new URLSearchParams(window.location.search).get('tab');
+      return tab || 'dashboard';
+    } catch (_) {
+      return 'dashboard';
+    }
+  };
   const [event, setEvent] = useState(null);
-  const [activeTab, setActiveTab] = useState(urlTab || 'dashboard');
+  const [activeTab, setActiveTab] = useState(getInitialTab);
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState([]);
 
-  // Sync activeTab when query param changes
+  // Sync activeTab when user navigates using browser Back/Forward buttons
   useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab && tab !== activeTab) {
-      setActiveTab(tab);
-    }
-  }, [searchParams]);
+    const handlePopState = () => {
+      const tab = new URLSearchParams(window.location.search).get('tab');
+      setActiveTab(tab || 'dashboard');
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // Set document title dynamically
   useEffect(() => {
@@ -128,7 +136,15 @@ const EventDashboard = () => {
       return;
     }
     setActiveTab(tabId);
-    setSearchParams(tabId === 'dashboard' ? {} : { tab: tabId });
+    try {
+      const url = new URL(window.location.href);
+      if (tabId === 'dashboard') {
+        url.searchParams.delete('tab');
+      } else {
+        url.searchParams.set('tab', tabId);
+      }
+      window.history.replaceState(window.history.state, '', url.pathname + url.search);
+    } catch (_) {}
   };
 
   const renderActiveComponent = () => {
@@ -292,8 +308,12 @@ const EventDashboard = () => {
                 const isExternal = tab.id === 'certificates';
                 return (
                   <button
+                    type="button"
                     key={tab.id}
-                    onClick={() => handleTabSwitch(tab.id)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleTabSwitch(tab.id);
+                    }}
                     title={isExternal ? `${tab.name} (Opens in new browser tab)` : tab.name}
                     className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${isActive
                         ? 'bg-indigo-600 text-white shadow-2xs'
@@ -327,7 +347,11 @@ const EventDashboard = () => {
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-center">
                   <button
-                    onClick={() => handleTabSwitch('programs')}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleTabSwitch('programs');
+                    }}
                     className="bg-slate-50 hover:bg-slate-100 transition-colors rounded-lg p-2 border border-slate-200/60 cursor-pointer text-left"
                   >
                     <span className="text-base font-bold text-slate-900 block leading-tight">
@@ -336,7 +360,11 @@ const EventDashboard = () => {
                     <span className="text-[10px] text-slate-500 font-normal block">Programs</span>
                   </button>
                   <button
-                    onClick={() => handleTabSwitch('participants')}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleTabSwitch('participants');
+                    }}
                     className="bg-slate-50 hover:bg-slate-100 transition-colors rounded-lg p-2 border border-slate-200/60 cursor-pointer text-left"
                   >
                     <span className="text-base font-bold text-slate-900 block leading-tight">
@@ -361,8 +389,12 @@ const EventDashboard = () => {
                     const isExternal = tab.id === 'certificates';
                     return (
                       <button
+                        type="button"
                         key={tab.id}
-                        onClick={() => handleTabSwitch(tab.id)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleTabSwitch(tab.id);
+                        }}
                         title={isExternal ? `${tab.name} (Opens in new browser tab)` : tab.name}
                         className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${isActive
                             ? 'bg-indigo-50 text-indigo-700 font-semibold'
@@ -387,7 +419,7 @@ const EventDashboard = () => {
 
           {/* Main Content */}
           <div className="flex-1 min-w-0 w-full">
-            <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
+            <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden min-h-[640px]">
               {renderActiveComponent()}
             </div>
           </div>
