@@ -626,16 +626,19 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [downloadingItemId, setDownloadingItemId] = useState(null);
-  const [downloadNotice, setDownloadNotice] = useState(null);
   const [, setTick] = useState(0);
 
-  // Live timer to refresh relative time strings (e.g. "Just now" -> "1 min ago" -> "20 mins ago")
+  const hasProcessing = exportsQueue.some(item => item.status === 'processing');
+
+  // Live timer: ticks every 150ms while items are processing (for live 'Completed In' counter),
+  // and every 10s otherwise to update relative times.
   useEffect(() => {
+    const intervalMs = hasProcessing ? 150 : 10000;
     const timer = setInterval(() => {
       setTick(t => t + 1);
-    }, 10000);
+    }, intervalMs);
     return () => clearInterval(timer);
-  }, []);
+  }, [hasProcessing]);
 
   // Form State inside Create Export Drawer
   const [selectedExportType, setSelectedExportType] = useState('valuation');
@@ -1731,24 +1734,21 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
     }
   };
 
+  const getLiveElapsed = (createdAt) => {
+    if (!createdAt) return '0.1s';
+    const ms = Date.now() - new Date(createdAt).getTime();
+    const diffSec = Math.max(0.1, ms / 1000);
+    return `${diffSec.toFixed(1)}s`;
+  };
+
   const handleDownloadClick = async (exportItem) => {
     if (exportItem.status === 'processing' || generating) return;
     setGenerating(true);
     setDownloadingItemId(exportItem.id);
-    setDownloadNotice({
-      status: 'loading',
-      text: `Generating and preparing ${exportItem.typeName || 'document'}... Large exports with multiple pages or high-resolution images may take up to a minute.`
-    });
     try {
       await processAndDownloadExport(exportItem);
-      setDownloadNotice({
-        status: 'success',
-        text: `${exportItem.typeName || 'Document'} downloaded successfully!`
-      });
-      setTimeout(() => setDownloadNotice(null), 4000);
     } catch (err) {
       console.error('Download click error:', err);
-      setDownloadNotice(null);
       window.alert(err?.message || `Unable to generate ${exportItem.typeName || 'document'}.`);
     } finally {
       setGenerating(false);
@@ -1856,7 +1856,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
     saveQueue(updatedQueue);
     setDrawerOpen(false);
 
-    const processDuration = 1000 + Math.floor(Math.random() * 800);
+    const processDuration = 400 + Math.floor(Math.random() * 250);
     setTimeout(() => {
       const finishMs = Date.now();
       const actualDuration = ((finishMs - startMs) / 1000).toFixed(1);
@@ -1979,35 +1979,6 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
         </button>
       </div>
 
-      {/* Download Status Notice Banner */}
-      {downloadNotice && (
-        <div className={`p-3.5 rounded-xl border flex items-center justify-between text-xs font-semibold shadow-2xs transition-all ${
-          downloadNotice.status === 'loading'
-            ? 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
-            : 'bg-emerald-50/90 border-emerald-200 text-emerald-950'
-        }`}>
-          <div className="flex items-center space-x-2.5">
-            {downloadNotice.status === 'loading' ? (
-              <Loader2 className="w-4 h-4 text-indigo-600 animate-spin shrink-0" />
-            ) : (
-              <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-            )}
-            <span>{downloadNotice.text}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setDownloadNotice(null)}
-            className={`p-1 rounded-md transition-colors cursor-pointer ${
-              downloadNotice.status === 'loading'
-                ? 'text-indigo-400 hover:text-indigo-700'
-                : 'text-emerald-500 hover:text-emerald-800'
-            }`}
-          >
-            <X className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
       {/* Main Exports Queue Table */}
       <div className="bg-white border border-slate-200/80 rounded-xl shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
@@ -2069,8 +2040,8 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                     </td>
 
                     {/* Completed In */}
-                    <td className="px-6 py-4 text-center whitespace-nowrap text-xs font-medium text-gray-600">
-                      {item.status === 'processing' ? '-' : (item.completedIn || '1.0s')}
+                    <td className="px-6 py-4 text-center whitespace-nowrap text-xs font-semibold text-gray-700">
+                      {item.status === 'processing' ? getLiveElapsed(item.createdAt) : (item.completedIn || '0.5s')}
                     </td>
 
                     {/* Queued At */}
@@ -2081,31 +2052,29 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                     {/* Actions */}
                     <td className="px-6 py-4 text-right whitespace-nowrap">
                       <div className="inline-flex items-center space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadClick(item)}
-                          disabled={item.status === 'processing' || generating}
-                          className={`p-1.5 rounded-lg transition-colors ${
-                            item.status === 'processing' || downloadingItemId === item.id
-                              ? 'text-indigo-600 bg-indigo-50 cursor-wait'
-                              : generating
-                              ? 'text-gray-300 cursor-not-allowed'
-                              : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100 cursor-pointer'
-                          }`}
-                          title={
-                            downloadingItemId === item.id
-                              ? 'Generating and preparing download...'
-                              : item.status === 'processing'
-                              ? 'Processing export...'
-                              : 'Download Document'
-                          }
-                        >
-                          {downloadingItemId === item.id || item.status === 'processing' ? (
-                            <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
-                          ) : (
-                            <Download className="w-4 h-4" />
-                          )}
-                        </button>
+                        {item.status === 'processing' ? (
+                          <div className="p-1.5 text-gray-300 inline-flex items-center cursor-not-allowed" title="Processing export...">
+                            <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleDownloadClick(item)}
+                            disabled={generating && downloadingItemId === item.id}
+                            className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                              downloadingItemId === item.id
+                                ? 'text-indigo-600 bg-indigo-50 cursor-wait'
+                                : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100'
+                            }`}
+                            title={downloadingItemId === item.id ? 'Downloading...' : 'Download Document'}
+                          >
+                            {downloadingItemId === item.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin text-indigo-600" />
+                            ) : (
+                              <Download className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleDeleteExport(item.id)}
