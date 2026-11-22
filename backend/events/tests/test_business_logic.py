@@ -2360,6 +2360,32 @@ class EventBusinessLogicTests(TestCase):
         self.assertNotIn(p_future.id, fin_ids)
         self.assertNotIn(p_ongoing.id, fin_ids)
 
+    def test_participant_paper_badge_rendering_front_and_back(self):
+        from events.certificate_service import render_certificates_pdf, CertificateRecipient
+        from pypdf import PdfReader
+
+        program = Program.objects.create(
+            event=self.event, name='Badge Test Competition', category=self.category.code,
+            max_participants=5, program_type='stage'
+        )
+        student = self.students[0]
+        self.team.members.add(student)
+        assignment = assign_students(user=self.admin, team=self.team, program=program, student_ids=[student.id])[0]
+
+        recipients = [CertificateRecipient(certificate_type='badge', assignment=assignment)]
+        pdf_buf = render_certificates_pdf(self.event, {}, recipients, quality='standard')
+        pdf_bytes = pdf_buf.getvalue() if hasattr(pdf_buf, 'getvalue') else pdf_buf
+
+        reader = PdfReader(BytesIO(pdf_bytes))
+        self.assertEqual(len(reader.pages), 2)
+        # Verify page 1 (front) and page 2 (back) are valid A4 portrait pages
+        page_front = reader.pages[0]
+        self.assertAlmostEqual(float(page_front.mediabox.width), 595.27, delta=1.0)
+        self.assertAlmostEqual(float(page_front.mediabox.height), 841.89, delta=1.0)
+        page_back = reader.pages[1]
+        self.assertAlmostEqual(float(page_back.mediabox.width), 595.27, delta=1.0)
+        self.assertAlmostEqual(float(page_back.mediabox.height), 841.89, delta=1.0)
+
 
 class MultiSchoolIsolationTests(TestCase):
     def setUp(self):
