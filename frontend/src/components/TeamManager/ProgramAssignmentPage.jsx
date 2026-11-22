@@ -413,7 +413,9 @@ const ProgramAssignmentPage = () => {
   const teamsFromCap = (program.team_size && (program.max_participants_per_team || program.max_participants))
     ? Math.floor((program.max_participants_per_team || program.max_participants) / program.team_size)
     : 1;
-  const totalSubTeams = program.is_team_based ? Math.max(teamsFromField, teamsFromCap, 1) : 1;
+  const existingSubNums = assignedStudents.map(s => Number(s.sub_team_number || 1) || 1);
+  const maxExistingSub = existingSubNums.length > 0 ? Math.max(...existingSubNums) : 1;
+  const totalSubTeams = program.is_team_based ? Math.max(teamsFromField, teamsFromCap, maxExistingSub, 1) : 1;
   const teamSize = program.is_team_based ? (program.team_size || 1) : 1;
 
   return (

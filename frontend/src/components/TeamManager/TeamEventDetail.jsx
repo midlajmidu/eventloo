@@ -93,9 +93,13 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
         const sub = st.sub_team_number || 1;
         subTeamsMap[sub] = (subTeamsMap[sub] || 0) + 1;
       });
+      const existingSubNums = assigned.map((st) => Number(st.sub_team_number || 1) || 1);
+      const maxExistingSub = existingSubNums.length > 0 ? Math.max(...existingSubNums) : 1;
       const maxSubTeams = Math.max(
         1,
-        program.max_teams_per_school || Math.floor((program.per_team_limit || teamSize) / teamSize) || 1
+        program.max_teams_per_school || 1,
+        Math.floor((program.per_team_limit || teamSize) / teamSize) || 1,
+        maxExistingSub
       );
       let targetSubTeam = 1;
       for (let s = 1; s <= maxSubTeams; s++) {
@@ -1386,11 +1390,13 @@ const TeamEventDetail = ({ eventId: propEventId, embedded = false }) => {
         );
         const isTeam = Boolean(activeModalProgram.is_team_based);
         const teamSize = activeModalProgram.team_size || (isTeam ? 4 : 1);
+        const existingSubNums = (activeModalProgram.assigned_students || []).map(s => Number(s.sub_team_number || 1) || 1);
+        const maxExistingSub = existingSubNums.length > 0 ? Math.max(...existingSubNums) : 1;
         const maxSubTeams = Math.max(
           1,
-          activeModalProgram.max_teams_per_school ||
-            Math.floor((activeModalProgram.per_team_limit || teamSize) / teamSize) ||
-            1
+          activeModalProgram.max_teams_per_school || 1,
+          Math.floor((activeModalProgram.per_team_limit || teamSize) / teamSize) || 1,
+          maxExistingSub
         );
         const maxAllowed = activeModalProgram.per_team_limit || (isTeam ? teamSize * maxSubTeams : 1);
         const currentAssignedCount = (activeModalProgram.assigned_students || []).length;

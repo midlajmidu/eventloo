@@ -122,7 +122,7 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
   // Derive counts from event data
   const programs = event?.programs || [];
   const totalPrograms = analytics?.total_programs ?? programs.length;
-  const completedPrograms = analytics?.completed_programs ?? programs.filter(p => p.is_published || p.is_finished).length;
+  const completedPrograms = analytics?.published_programs ?? analytics?.completed_programs ?? programs.filter(p => p.is_published).length;
   const stagePrograms = programs.filter(p => p.stage || p.is_stage).length;
   const offStagePrograms = totalPrograms > stagePrograms ? totalPrograms - stagePrograms : 0;
   
@@ -140,7 +140,21 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
       const catPrograms = programs.filter(p => p.category === catCode || p.category_id === cat.id);
       const progCount = catPrograms.length;
       const analyticsCat = analytics?.category_stats?.[catCode];
-      const partCount = analyticsCat?.participants ?? catPrograms.reduce((acc, p) => acc + (p.participants_count || 0), 0);
+
+      let partCount = 0;
+      if (analyticsCat && analyticsCat.participants !== undefined) {
+        partCount = analyticsCat.participants;
+      } else {
+        const uniqueStudentIds = new Set();
+        catPrograms.forEach(p => {
+          (p.assigned_students || []).forEach(s => {
+            const sId = typeof s === 'object' && s !== null ? (s.id || s.student_id) : s;
+            if (sId) uniqueStudentIds.add(sId);
+          });
+        });
+        partCount = uniqueStudentIds.size;
+      }
+
       return {
         id: cat.id,
         code: catCode,
@@ -324,13 +338,13 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
           </div>
         </div>
 
-        {/* Completed & Scored */}
+        {/* Results Published / Completed */}
         <div
           onClick={() => setActiveTab('results')}
           className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Completed & Scored</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Results Published</p>
             <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-100/80 flex items-center justify-center text-amber-600 shrink-0">
               <Award className="w-4 h-4" />
             </div>
@@ -370,7 +384,7 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
                   Categories Breakdown
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5 font-normal">
-                  {categoryMetric === 'programs' ? 'Total event programs per category' : 'Registered participant entries per category'}
+                  {categoryMetric === 'programs' ? 'Total event programs per category' : 'Unique registered participants per category'}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -432,7 +446,7 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
                       />
                       <Tooltip
                         cursor={{ fill: '#f8fafc' }}
-                        formatter={(value) => [value, categoryMetric === 'programs' ? 'Programs' : 'Participants']}
+                        formatter={(value) => [value, categoryMetric === 'programs' ? 'Programs' : 'Unique Participants']}
                         contentStyle={{ borderRadius: 12, borderColor: '#e2e8f0', boxShadow: '0 8px 24px rgba(15,23,42,.06)', fontSize: 12 }}
                       />
                       <Bar dataKey={categoryMetric} radius={[0, 6, 6, 0]} maxBarSize={24}>

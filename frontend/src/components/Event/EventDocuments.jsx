@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Clipboard, 
   FileSpreadsheet, 
@@ -16,7 +16,10 @@ import {
   Sliders,
   Loader2,
   Copy,
-  Info
+  Info,
+  Sparkles,
+  Search,
+  ChevronDown
 } from 'lucide-react';
 import { 
   eventProgramsAPI, 
@@ -154,109 +157,463 @@ const getRelativeTime = (timestamp) => {
 const ExportSummaryCell = ({ item, programs = [], teams = [] }) => {
   const [hovered, setHovered] = useState(false);
 
-  // Build full details list matching user screenshot
-  const detailsList = [];
+  // Extract structured key-value parameters from the item
+  const details = [];
 
-  detailsList.push('Gender: All genders');
-
-  if (item.category && item.category !== 'all') {
-    detailsList.push(`Categories: ${item.category.toUpperCase()}`);
-  } else {
-    detailsList.push('Categories: All categories');
-  }
-
+  // 1. Scope (Competition / Category / Team)
   if (item.programId && item.programId !== 'all') {
     const prog = programs.find(p => p.id === parseInt(item.programId, 10));
-    detailsList.push(`Competitions: ${prog ? prog.name : 'Selected Competition'}`);
+    details.push({ label: 'Competition', value: prog ? prog.name : `Competition #${item.programId}` });
   } else {
-    detailsList.push('Competitions: All competitions');
+    details.push({ label: 'Competition Scope', value: 'All Competitions' });
   }
 
-  detailsList.push('Schedule: All schedule states');
-  detailsList.push('Scheduled stages: All stages');
-  detailsList.push('Standings: All standings');
-  detailsList.push('Range: Result 1 to All');
+  if (item.category && item.category !== 'all') {
+    details.push({ label: 'Category', value: item.category.toUpperCase() });
+  } else {
+    details.push({ label: 'Category Scope', value: 'All Categories' });
+  }
 
+  if (item.selectedTeamId && item.selectedTeamId !== 'all') {
+    const tm = teams.find(t => t.id === parseInt(item.selectedTeamId, 10));
+    details.push({ label: 'Team', value: tm ? tm.name : `Team #${item.selectedTeamId}` });
+  }
+
+  // 2. Type-specific parameters
   if (item.type === 'results') {
-    detailsList.push('Results: Published only');
-    detailsList.push('Signature Column: Excluded');
+    if (item.resultDocMode === 'posters') {
+      const modeLabel = item.posterSelection === 'alternating' 
+        ? 'Shuffled / Alternating' 
+        : (item.posterSelection === 'poster_wise' ? 'All Posters' : 'Poster Template');
+      details.push({ label: 'Poster Selection', value: modeLabel });
+      details.push({ label: 'File Format', value: item.posterFormat === 'jpg' ? 'JPG (ZIP)' : 'PDF' });
+      details.push({ label: 'Sort Order', value: item.posterOrder === 'result_number' ? 'Result Number' : 'Schedule Order' });
+    } else {
+      details.push({ label: 'Document Type', value: 'Official Result Sheets' });
+      details.push({ label: 'Status Filter', value: 'Published Results Only' });
+    }
   } else if (item.type === 'valuation') {
-    detailsList.push(`Copies: ${item.copiesCount || 3}`);
-    detailsList.push(`Max Mark: ${item.judgeMaxMarks || 100}`);
-    detailsList.push('Signature Column: Excluded');
+    details.push({ label: 'Copies per Judge', value: `${item.copiesCount || 3} Copies` });
+    details.push({ label: 'Max Marks', value: `${item.judgeMaxMarks || 100} Marks` });
   } else if (item.type === 'green_room') {
-    detailsList.push('Layout: Single page per competition');
-    detailsList.push('Code Letter Column: Blank for manual entry');
+    details.push({ label: 'Layout', value: 'Single page per competition' });
+    details.push({ label: 'Code Letters', value: 'Blank for manual entry' });
   } else if (item.type === 'call_list') {
     const modeLabel = item.callListMode === 'participant'
       ? 'Participant List'
       : (item.callListMode === 'team' ? 'Team Wise' : 'Competition Wise');
-    detailsList.push(`Mode: ${modeLabel}`);
-    if (item.selectedTeamId && item.selectedTeamId !== 'all') {
-      const tm = teams.find(t => t.id === parseInt(item.selectedTeamId, 10));
-      detailsList.push(`Team: ${tm ? tm.name : 'Selected Team'}`);
-    }
+    details.push({ label: 'Call List Mode', value: modeLabel });
   } else if (item.type === 'certificate') {
-    detailsList.push(`Quality: ${(item.exportQuality || 'screen').toUpperCase()}`);
-    detailsList.push(`Types: ${(item.certTypes || []).length} selected`);
+    details.push({ label: 'Export Quality', value: `${(item.exportQuality || 'screen').toUpperCase()}` });
+    details.push({ label: 'Selected Types', value: `${(item.certTypes || []).length} selected` });
   } else if (item.type === 'badge') {
-    detailsList.push(`Quality: ${(item.exportQuality || 'screen').toUpperCase()}`);
-    detailsList.push('Participant Badges (9 per A4 sheet)');
-    if (item.selectedTeamId && item.selectedTeamId !== 'all') {
-      const tm = teams.find(t => t.id === parseInt(item.selectedTeamId, 10));
-      detailsList.push(`Team: ${tm ? tm.name : 'Selected Team'}`);
+    details.push({ label: 'Export Quality', value: `${(item.exportQuality || 'screen').toUpperCase()}` });
+    details.push({ label: 'Layout', value: '9 Badges per A4 Sheet' });
+  }
+
+  // Derive visible badges for the badge row
+  // Clean badges without messy hardcoded '+4', '+8', or legacy boilerplate strings
+  const legacyFiller = [
+    'Gender: All genders', 
+    'Schedule: All schedule states', 
+    'Scheduled stages: All stages', 
+    'Standings: All standings', 
+    'Range: Result 1 to All'
+  ];
+  const rawPills = (item.pills || []).filter(
+    p => typeof p === 'string' && !p.startsWith('+') && !legacyFiller.includes(p)
+  );
+
+  let visiblePills = [];
+  if (rawPills.length > 0) {
+    visiblePills = rawPills.slice(0, 2);
+  } else {
+    if (item.resultDocMode === 'posters') {
+      visiblePills.push('E-Posters');
+      visiblePills.push(item.posterFormat === 'jpg' ? 'Format: JPG (ZIP)' : 'Format: PDF');
+    } else if (item.type === 'valuation') {
+      visiblePills.push(`${item.copiesCount || 3} Copies`);
+      if (item.category && item.category !== 'all') {
+        visiblePills.push(`Cat: ${item.category.toUpperCase()}`);
+      }
+    } else if (item.category && item.category !== 'all') {
+      visiblePills.push(`Cat: ${item.category.toUpperCase()}`);
     } else {
-      detailsList.push('Team: All teams');
-    }
-    if (item.category && item.category !== 'all') {
-      detailsList.push(`Category: ${item.category.toUpperCase()}`);
-    } else {
-      detailsList.push('Category: All categories');
+      visiblePills.push('All Categories');
     }
   }
 
-  // Extract visible pills from item.pills (excluding hardcoded '+4' or '+8' strings)
-  const rawPills = (item.pills || []).filter(p => typeof p === 'string' && !p.startsWith('+'));
-  const firstPill = rawPills.length > 0 
-    ? rawPills[0] 
-    : (item.category && item.category !== 'all' ? `Categories: ${item.category.toUpperCase()}` : 'Gender: All genders');
-  
-  const overflowCount = Math.max(1, detailsList.length - 1);
+  const remainingCount = Math.max(0, details.length - visiblePills.length);
+
+  const getBadgeClass = (pillText) => {
+    const lower = String(pillText).toLowerCase();
+    if (lower.includes('poster') || lower.includes('certificate')) {
+      return 'bg-indigo-50 text-indigo-700 border-indigo-200/80 font-semibold';
+    }
+    if (lower.includes('jpg') || lower.includes('zip') || lower.includes('format')) {
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200/80 font-semibold';
+    }
+    if (lower.includes('category') || lower.includes('cat:') || lower.includes('cat ')) {
+      return 'bg-amber-50 text-amber-700 border-amber-200/80 font-medium';
+    }
+    if (lower.includes('copies') || lower.includes('mark') || lower.includes('page')) {
+      return 'bg-sky-50 text-sky-700 border-sky-200/80 font-medium';
+    }
+    return 'bg-gray-100/90 text-gray-700 border-gray-200/80 font-medium';
+  };
 
   return (
-    <div className="flex items-center space-x-2 flex-wrap gap-y-1 relative">
-      <span className="text-xs font-semibold text-gray-900">{item.summary}</span>
+    <div className="flex flex-col gap-1.5 py-0.5 max-w-sm">
+      {/* Top Row: Clean, Bold Title on its own line */}
+      <div className="text-xs font-semibold text-gray-900 leading-snug">
+        {item.summary}
+      </div>
 
-      {/* Main Visible Tag Pill */}
-      <span className="px-2.5 py-0.5 text-[11px] font-semibold bg-gray-100/90 text-gray-700 rounded-full border border-gray-200/80">
-        {firstPill}
-      </span>
+      {/* Bottom Row: Dedicated metadata badges line */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {visiblePills.map((pill, idx) => (
+          <span
+            key={idx}
+            className={`px-2 py-0.5 text-[11px] rounded-md border ${getBadgeClass(pill)} whitespace-nowrap`}
+          >
+            {pill}
+          </span>
+        ))}
 
-      {/* Overflow Badge (+X) with Hover Popover Card */}
-      <div 
-        className="relative inline-block"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
-        <button
-          type="button"
-          className="px-2 py-0.5 text-[11px] font-bold bg-gray-100 text-gray-700 rounded-full border border-gray-200/90 hover:bg-gray-200 transition-colors cursor-pointer"
-        >
-          +{overflowCount}
-        </button>
+        {/* Overflow Badge (+N) with Hover Popover */}
+        {remainingCount > 0 && (
+          <div
+            className="relative inline-flex items-center"
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+          >
+            <button
+              type="button"
+              className="px-1.5 py-0.5 text-[10px] font-bold bg-gray-100 text-gray-700 rounded-md border border-gray-200 hover:bg-gray-200 transition-colors cursor-pointer select-none"
+            >
+              +{remainingCount}
+            </button>
 
-        {/* Hover Popover Box matching user screenshot */}
-        {hovered && (
-          <div className="absolute left-0 top-full mt-1.5 z-50 w-72 p-3.5 bg-white border border-gray-200 rounded-2xl shadow-xl space-y-1.5 text-xs text-gray-700 font-medium leading-relaxed pointer-events-none animate-in fade-in zoom-in-95">
-            {detailsList.map((detail, idx) => (
-              <div key={idx} className="flex items-center space-x-2 text-[11px] text-gray-700 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
-                <span>{detail}</span>
+            {hovered && (
+              <div className="absolute left-0 top-full mt-1.5 z-50 w-72 p-3 bg-white border border-gray-200 rounded-xl shadow-xl space-y-2 pointer-events-none animate-in fade-in zoom-in-95">
+                <div className="flex items-center justify-between pb-1.5 border-b border-gray-100">
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider text-gray-400">
+                    Export Parameters
+                  </span>
+                  <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded border border-indigo-100">
+                    {item.typeName}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {details.map((d, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-[11px]">
+                      <span className="text-gray-500 font-medium">{d.label}:</span>
+                      <span className="font-semibold text-gray-800 text-right ml-2 truncate max-w-[150px]">
+                        {d.value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            ))}
+            )}
           </div>
         )}
       </div>
+    </div>
+  );
+};
+
+const SearchableCompetitionSelect = ({
+  programs = [],
+  selectedProgramId,
+  onChange,
+  selectedCategory = 'all'
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const containerRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  // Close when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  // Focus search input when opened
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => {
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }, 50);
+    } else {
+      setSearchQuery('');
+    }
+  }, [isOpen]);
+
+  // Sort all programs alphabetically by name (A to Z)
+  const sortedPrograms = useMemo(() => {
+    return [...programs].sort((a, b) => 
+      (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+    );
+  }, [programs]);
+
+  // Filter based on selectedCategory and searchQuery
+  const filteredPrograms = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    let list = sortedPrograms;
+
+    if (selectedCategory && selectedCategory !== 'all') {
+      const categoryMatches = list.filter(p => p.category === selectedCategory);
+      if (categoryMatches.length > 0) {
+        list = categoryMatches;
+      }
+    }
+
+    if (!q) {
+      return list;
+    }
+
+    const matches = list.filter(p => {
+      const name = (p.name || '').toLowerCase();
+      const cat = (p.category || '').toLowerCase();
+      const code = String(p.program_code || p.code || p.id || '').toLowerCase();
+      const type = (p.program_type || '').toLowerCase();
+      return name.includes(q) || cat.includes(q) || code.includes(q) || type.includes(q);
+    });
+
+    // If no matches in category, search across all programs so user is never stranded
+    if (matches.length === 0 && selectedCategory !== 'all') {
+      return sortedPrograms.filter(p => {
+        const name = (p.name || '').toLowerCase();
+        const cat = (p.category || '').toLowerCase();
+        const code = String(p.program_code || p.code || p.id || '').toLowerCase();
+        const type = (p.program_type || '').toLowerCase();
+        return name.includes(q) || cat.includes(q) || code.includes(q) || type.includes(q);
+      });
+    }
+
+    return matches;
+  }, [sortedPrograms, selectedCategory, searchQuery]);
+
+  // Currently selected program object
+  const currentProgram = useMemo(() => {
+    if (selectedProgramId === 'all' || !selectedProgramId) return null;
+    return programs.find(p => String(p.id) === String(selectedProgramId)) || null;
+  }, [programs, selectedProgramId]);
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <label className="block text-xs font-bold text-gray-900 mb-1 flex items-center justify-between">
+        <span>Competitions</span>
+        <span className="text-[11px] font-normal text-gray-400">
+          {programs.length} total (A–Z)
+        </span>
+      </label>
+
+      {/* Trigger Button */}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsOpen(!isOpen);
+          }
+        }}
+        className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs font-medium transition-all flex items-center justify-between cursor-pointer select-none ${
+          isOpen ? 'border-indigo-500 ring-2 ring-indigo-100 shadow-xs' : 'border-gray-200 hover:border-gray-300'
+        }`}
+      >
+        <div className="flex items-center space-x-2 min-w-0 flex-1 mr-2">
+          {currentProgram ? (
+            <>
+              <span className="w-2 h-2 rounded-full bg-indigo-600 flex-shrink-0" />
+              <span className="font-semibold text-gray-900 truncate">
+                {currentProgram.name}
+              </span>
+              {currentProgram.category && (
+                <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-indigo-50 text-indigo-700 border border-indigo-200/60 uppercase flex-shrink-0">
+                  {currentProgram.category}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-gray-600 font-medium">All competitions...</span>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-1 flex-shrink-0">
+          {currentProgram && (
+            <span
+              role="button"
+              tabIndex={0}
+              title="Clear selection (show all)"
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange('all');
+              }}
+              className="p-1 hover:bg-gray-100 rounded-md text-gray-400 hover:text-gray-700 transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </span>
+          )}
+          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'rotate-180 text-indigo-600' : ''}`} />
+        </div>
+      </div>
+
+      <p className="text-[11px] text-gray-400 mt-1">Leave empty to include all</p>
+
+      {/* Dropdown Popover */}
+      {isOpen && (
+        <div 
+          onClick={(e) => e.stopPropagation()}
+          className="absolute left-0 right-0 top-full mt-1.5 z-50 bg-white border border-gray-200 rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95"
+        >
+          {/* Search Box Header */}
+          <div className="p-2.5 border-b border-gray-100 bg-gray-50/80">
+            <div className="relative">
+              <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setIsOpen(false);
+                  }
+                }}
+                placeholder="Search from 100+ competitions (A–Z)..."
+                className="w-full pl-9 pr-8 py-2 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 rounded cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+            <div className="flex items-center justify-between mt-1.5 px-1 text-[10px] text-gray-400 font-medium">
+              <span>Sorted Alphabetically (A–Z)</span>
+              <span>{filteredPrograms.length} found</span>
+            </div>
+          </div>
+
+          {/* List Options */}
+          <div className="max-h-60 overflow-y-auto divide-y divide-gray-50">
+            {/* Default "All competitions" item */}
+            {(!searchQuery || 'all competitions'.includes(searchQuery.toLowerCase())) && (
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => {
+                  onChange('all');
+                  setIsOpen(false);
+                }}
+                className={`p-2.5 flex items-center justify-between text-xs transition-colors cursor-pointer ${
+                  selectedProgramId === 'all' || !selectedProgramId
+                    ? 'bg-indigo-50/80 text-indigo-900 font-bold'
+                    : 'hover:bg-gray-50 text-gray-700 font-medium'
+                }`}
+              >
+                <div>
+                  <div className="font-semibold text-gray-900">All competitions...</div>
+                  <div className="text-[10px] text-gray-400">Generate documents for all competitions in category</div>
+                </div>
+                {(selectedProgramId === 'all' || !selectedProgramId) && (
+                  <Check className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                )}
+              </div>
+            )}
+
+            {/* Program Items */}
+            {filteredPrograms.length > 0 ? (
+              filteredPrograms.map((p) => {
+                const isSelected = String(selectedProgramId) === String(p.id);
+                return (
+                  <div
+                    key={p.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      onChange(p.id);
+                      setIsOpen(false);
+                    }}
+                    className={`p-2.5 flex items-center justify-between text-xs transition-colors cursor-pointer ${
+                      isSelected
+                        ? 'bg-indigo-50/80 text-indigo-900 font-bold'
+                        : 'hover:bg-indigo-50/50 text-gray-700'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1 mr-3">
+                      <div className="flex items-center space-x-1.5">
+                        <span className="font-semibold text-gray-900 truncate">
+                          {p.name}
+                        </span>
+                        {p.program_code && (
+                          <span className="text-[10px] text-gray-400 font-mono">
+                            #{p.program_code}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-1.5 mt-0.5">
+                        {p.category && (
+                          <span className="px-1.5 py-0.2 text-[9px] font-bold rounded bg-gray-100 text-gray-600 uppercase">
+                            {p.category}
+                          </span>
+                        )}
+                        {p.is_team_based !== undefined && (
+                          <span className="text-[10px] text-gray-400">
+                            {p.is_team_based ? 'Group' : 'Individual'}
+                          </span>
+                        )}
+                        {p.program_type && (
+                          <span className="text-[10px] text-gray-400">
+                            • {p.program_type}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <Check className="w-4 h-4 text-indigo-600 flex-shrink-0" />
+                    )}
+                  </div>
+                );
+              })
+            ) : (
+              <div className="p-6 text-center text-xs text-gray-500">
+                <p className="font-medium text-gray-700">No competitions found</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  No matching competition for &quot;{searchQuery}&quot;
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                >
+                  Clear search query
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -292,6 +649,12 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
   // Certificate Specific Filter State (Matching Screenshot)
   const [exportQuality, setExportQuality] = useState('screen'); // 'screen', 'standard', 'print'
   const [selectedCertTypes, setSelectedCertTypes] = useState(['participation']); // ['participation', 'first_place', 'second_place', 'third_place', 'common_prize', 'grade_certificate']
+
+  // Result Specific Format & E-Poster State
+  const [resultDocMode, setResultDocMode] = useState('sheet'); // 'sheet' or 'posters'
+  const [resultPosterSelection, setResultPosterSelection] = useState('result_poster');
+  const [resultPosterOrder, setResultPosterOrder] = useState('result_number');
+  const [resultPosterFormat, setResultPosterFormat] = useState('pdf'); // 'pdf' or 'jpg'
 
   const storageKey = `eventloo_exports_queue_${eventId}`;
 
@@ -338,7 +701,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
             typeName: 'Valuation Sheet',
             icon: 'valuation',
             summary: 'Valuation sheets (3 Copies for Judges)',
-            pills: ['Categories: General (GEN)', 'Copies: 3', 'Max Mark: 100', '+4'],
+            pills: ['Categories: General (GEN)', 'Copies: 3', 'Max Mark: 100'],
             status: 'completed',
             completedIn: '1.2s',
             copiesCount: 3,
@@ -351,7 +714,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
             typeName: 'Green Room Sign',
             icon: 'green_room',
             summary: 'Green room signs',
-            pills: ['Categories: General (GEN)', '+4'],
+            pills: ['Categories: General (GEN)', 'Layout: Single Page'],
             status: 'completed',
             completedIn: '0.9s',
             copiesCount: 1,
@@ -364,7 +727,7 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
             typeName: 'Competition Results',
             icon: 'results',
             summary: 'Competition wise results for All teams',
-            pills: ['Gender: All genders', '+8'],
+            pills: ['Published results only', 'All categories'],
             status: 'completed',
             completedIn: '1.8s',
             copiesCount: 1,
@@ -1248,8 +1611,47 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
         });
         success = await triggerBlobDownload(res.data, `Green_Room_Sign_Sheet_${event?.title || 'Event'}.pdf`, 'application/pdf');
       } else if (exportItem.type === 'results') {
-        await generateClientPdfFallback(exportItem);
-        success = true;
+        if (exportItem.resultDocMode === 'posters') {
+          let certTypesParam = 'result_poster';
+          let posterModeParam = 'single';
+          if (exportItem.posterSelection === 'alternating') {
+            certTypesParam = 'result_poster,result_poster_2,result_poster_3,result_poster_4,result_poster_5';
+            posterModeParam = 'alternating';
+          } else if (exportItem.posterSelection === 'poster_wise') {
+            certTypesParam = 'result_poster,result_poster_2,result_poster_3,result_poster_4,result_poster_5';
+            posterModeParam = 'poster_wise';
+          } else if (exportItem.posterSelection) {
+            certTypesParam = exportItem.posterSelection;
+          }
+          const fileFormatParam = exportItem.posterFormat || 'pdf';
+          const res = await eventCertificatesAPI.generateCertificates(targetEventId, {
+            cert_types: certTypesParam,
+            poster_mode: posterModeParam,
+            order_by: exportItem.posterOrder || 'result_number',
+            category: exportItem.category || 'all',
+            program_id: exportItem.programId || 'all',
+            file_format: fileFormatParam,
+            quality: exportItem.exportQuality || 'standard'
+          });
+
+          const disposition = res.headers?.['content-disposition'] || '';
+          const contentType = res.headers?.['content-type'] || '';
+          let downloadFilename = `Result_Posters_${event?.title || 'Event'}.${fileFormatParam === 'jpg' ? 'zip' : 'pdf'}`;
+          const fnMatch = disposition.match(/filename="?([^";]+)"?/i);
+          if (fnMatch && fnMatch[1]) {
+            downloadFilename = fnMatch[1];
+          }
+          let downloadMime = 'application/pdf';
+          if (contentType.includes('zip') || downloadFilename.endsWith('.zip')) {
+            downloadMime = 'application/zip';
+          } else if (contentType.includes('jpeg') || contentType.includes('jpg') || downloadFilename.endsWith('.jpg')) {
+            downloadMime = 'image/jpeg';
+          }
+          success = await triggerBlobDownload(res.data, downloadFilename, downloadMime);
+        } else {
+          await generateClientPdfFallback(exportItem);
+          success = true;
+        }
       } else if (exportItem.type === 'valuation') {
         const res = await eventValuationAPI.generateValuationSheet(targetEventId, {
           only_with_participants: exportItem.onlyWithParticipants !== false,
@@ -1294,7 +1696,18 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
     }
 
     if (!success) {
-      if (exportItem.type === 'results') {
+      if (exportItem.type === 'results' && exportItem.resultDocMode === 'posters') {
+        let serverMessage = failure?.response?.data?.error;
+        if (failure?.response?.data instanceof Blob) {
+          try {
+            const errorPayload = JSON.parse(await failure.response.data.text());
+            serverMessage = errorPayload?.error;
+          } catch (parseError) {
+            console.error('Unable to read poster error response:', parseError);
+          }
+        }
+        throw new Error(serverMessage || 'Unable to generate Result E-Posters. Please ensure Result Poster templates are uploaded in Templates studio.');
+      } else if (exportItem.type === 'results') {
         await generateClientPdfFallback(exportItem);
       } else if (exportItem.type === 'certificate' || exportItem.type === 'badge') {
         let serverMessage = failure?.response?.data?.error;
@@ -1373,7 +1786,22 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
       }
     }
     if (selectedExportType === 'results') {
-      pills.push('Published results only');
+      if (resultDocMode === 'posters') {
+        const modeLabel = resultPosterSelection === 'alternating' 
+          ? 'Shuffled / Alternating' 
+          : (resultPosterSelection === 'poster_wise' ? 'All Posters' : 'Poster Template');
+        summaryText = `Result E-Posters (${modeLabel})`;
+        pills.push('E-Posters');
+        pills.push(resultPosterFormat === 'jpg' ? 'Format: JPG (ZIP)' : 'Format: PDF');
+        pills.push(resultPosterOrder === 'result_number' ? 'Order: Result #' : 'Order: Schedule');
+        pills.push(resultPosterSelection === 'alternating' ? 'Posters: Alternating' : (resultPosterSelection === 'poster_wise' ? 'Posters: All' : 'Single Template'));
+      } else {
+        pills.push('Published results only');
+      }
+    }
+    if (selectedProgramId && selectedProgramId !== 'all') {
+      const prog = programs.find(p => p.id === parseInt(selectedProgramId, 10));
+      if (prog) pills.push(`Competition: ${prog.name}`);
     }
     if (selectedCategory !== 'all') pills.push(`Categories: ${selectedCategory.toUpperCase()}`);
     else pills.push('Categories: General (GEN)');
@@ -1381,7 +1809,6 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
       pills.push(`Copies: ${copiesCount}`);
       pills.push(`Max Mark: ${judgeMaxMarks}`);
     }
-    pills.push('+4');
 
     const startMs = Date.now();
     const newItemId = `exp-${startMs}`;
@@ -1404,6 +1831,10 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
       judgeMaxMarks: judgeMaxMarks,
       exportQuality: exportQuality,
       certTypes: selectedExportType === 'badge' ? ['badge'] : selectedCertTypes,
+      resultDocMode,
+      posterSelection: resultPosterSelection,
+      posterOrder: resultPosterOrder,
+      posterFormat: resultPosterFormat,
       createdAt: new Date(startMs).toISOString()
     };
 
@@ -1857,6 +2288,99 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                   </>
                 )}
 
+                {/* Result Document Mode: Result Sheet vs Result E-Posters */}
+                {selectedExportType === 'results' && (
+                  <div className="space-y-4 p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-900 mb-1 flex items-center space-x-1.5">
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Result Document Format</span>
+                      </label>
+                      <select
+                        value={resultDocMode}
+                        onChange={(e) => setResultDocMode(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-2xs"
+                      >
+                        <option value="sheet">📄 Standard Result Sheet (Tabular Report)</option>
+                        <option value="posters">🖼️ Result E-Posters (Visual Certificate Posters)</option>
+                      </select>
+                      <p className="text-[11px] text-gray-500 mt-1">
+                        {resultDocMode === 'posters'
+                          ? 'Generates graphics-rich e-posters with podium placements, chest numbers, and result numbers'
+                          : 'Generates tabular competition result sheets with scores, rankings and grades'}
+                      </p>
+                    </div>
+
+                    {resultDocMode === 'posters' && (
+                      <div className="space-y-3 pt-2 border-t border-indigo-100">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                          {/* Poster Template Selection */}
+                          <div>
+                            <label className="block text-xs font-bold text-gray-900 mb-1">
+                              Poster Design Template
+                            </label>
+                            <select
+                              value={resultPosterSelection}
+                              onChange={(e) => setResultPosterSelection(e.target.value)}
+                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                            >
+                              <option value="result_poster">Poster 1 (Default Design)</option>
+                              <option value="result_poster_2">Poster 2</option>
+                              <option value="result_poster_3">Poster 3</option>
+                              <option value="result_poster_4">Poster 4</option>
+                              <option value="result_poster_5">Poster 5</option>
+                              <option value="alternating">🔀 Shuffled / Alternating (Posters 1, 2, 3...)</option>
+                              <option value="poster_wise">📑 Poster-wise (All Poster 1, then Poster 2...)</option>
+                            </select>
+                            <p className="text-[10px] text-gray-400 mt-1">
+                              {resultPosterSelection === 'alternating' 
+                                ? 'Consecutive results rotate templates automatically' 
+                                : 'Select specific design or rotate through all active templates'}
+                            </p>
+                          </div>
+
+                          {/* Print / Result Order */}
+                          <div>
+                            <label className="block text-xs font-bold text-gray-900 mb-1">
+                              Print Order
+                            </label>
+                            <select
+                              value={resultPosterOrder}
+                              onChange={(e) => setResultPosterOrder(e.target.value)}
+                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                            >
+                              <option value="result_number">Result Number (Result 01, 02, 03...)</option>
+                              <option value="default">Competition Code / ID Order</option>
+                              <option value="category">Category / Section Order</option>
+                            </select>
+                            <p className="text-[10px] text-gray-400 mt-1">Order pages by published result sequence</p>
+                          </div>
+                        </div>
+
+                        {/* File Format Selection */}
+                        <div>
+                          <label className="block text-xs font-bold text-gray-900 mb-1">
+                            Download File Format
+                          </label>
+                          <select
+                            value={resultPosterFormat}
+                            onChange={(e) => setResultPosterFormat(e.target.value)}
+                            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-xs font-semibold text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                          >
+                            <option value="pdf">📄 PDF Document (Multi-page PDF Document)</option>
+                            <option value="jpg">📦 JPG Format (Single JPG or ZIP bundle named with Result No.)</option>
+                          </select>
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            {resultPosterFormat === 'jpg'
+                              ? 'Outputs high-resolution JPG images. Multiple posters are packaged as a ZIP archive named with Result Numbers.'
+                              : 'Compiles all posters into a single high-resolution PDF document'}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* Copies Per Competition & Max Mark Inputs (Valuation Sheet only) */}
                 {selectedExportType === 'valuation' && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1956,22 +2480,14 @@ const EventDocuments = ({ event, eventId, categories = [] }) => {
                   <p className="text-[11px] text-gray-400 mt-1">Leave empty to include all</p>
                 </div>
 
-                {/* Competitions Dropdown (Excluded for Badges and Participant List) */}
+                {/* Competitions Searchable Dropdown (Excluded for Badges and Participant List) */}
                 {selectedExportType !== 'badge' && !(selectedExportType === 'call_list' && callListMode === 'participant') && (
-                  <div>
-                    <label className="block text-xs font-bold text-gray-900 mb-1">Competitions</label>
-                    <select
-                      value={selectedProgramId}
-                      onChange={(e) => setSelectedProgramId(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-xl text-xs font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
-                    >
-                      <option value="all">All competitions...</option>
-                      {programs.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.category?.toUpperCase()})</option>
-                      ))}
-                    </select>
-                    <p className="text-[11px] text-gray-400 mt-1">Leave empty to include all</p>
-                  </div>
+                  <SearchableCompetitionSelect
+                    programs={programs}
+                    selectedProgramId={selectedProgramId}
+                    onChange={setSelectedProgramId}
+                    selectedCategory={selectedCategory}
+                  />
                 )}
 
               </div>

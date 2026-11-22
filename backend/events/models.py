@@ -926,14 +926,14 @@ class Program(models.Model):
     
     @property
     def status(self):
-        """Get program status based on timing and is_finished flag"""
+        """Get program status based on timing, results, and is_finished flag"""
         from django.utils import timezone
         now = timezone.now()
         
-        if self.is_finished:
+        if self.is_finished or getattr(self, 'is_published', False):
             return 'finished'
         elif not self.start_time:
-            return 'scheduled'
+            return 'upcoming'
         elif now < self.start_time:
             return 'upcoming'
         elif self.end_time and now > self.end_time:
@@ -941,7 +941,7 @@ class Program(models.Model):
         elif now >= self.start_time:
             return 'ongoing'
         else:
-            return 'scheduled'
+            return 'upcoming'
     
     @property
     def duration_minutes(self):
@@ -1217,9 +1217,17 @@ class ProgramResult(models.Model):
         if not self.team and self.participant.team_memberships.exists():
             self.team = self.participant.team_memberships.first()
         
-        # Assign result number if this is the first time marks are being entered
-        if not self.result_number and self.has_marks():
-            self.assign_result_number()
+        # Result numbers are strictly assigned only when a program is published
+        if self.program_id and getattr(self.program, 'is_published', False):
+            if not self.result_number:
+                existing_rn = ProgramResult.objects.filter(
+                    program=self.program,
+                    result_number__isnull=False
+                ).values_list('result_number', flat=True).first()
+                if existing_rn:
+                    self.result_number = existing_rn
+        else:
+            self.result_number = None
         
         # Get event and program settings for judge count and score scaling
         program_num_judges = 3
@@ -1277,27 +1285,18 @@ class ProgramResult(models.Model):
         return any(getattr(self, field) is not None for field in judge_fields[:judge_count])
     
     def assign_result_number(self):
-        """Assign result number to the program when it gets its first result"""
-        # Check if this program already has a result number assigned
+        """Assign sequential result number to the program when published"""
+        if not self.program_id or not getattr(self.program, 'is_published', False):
+            self.result_number = None
+            return
+        from .services import sync_event_result_numbers
+        sync_event_result_numbers(self.program.event)
         existing_result = ProgramResult.objects.filter(
             program=self.program,
             result_number__isnull=False
         ).first()
-        
         if existing_result:
-            # Program already has a result number, use the same one
             self.result_number = existing_result.result_number
-        else:
-            # This is the first result for this program, assign a new result number
-            # Get the highest result number across all programs in this event
-            max_result_number = ProgramResult.objects.filter(
-                program__event=self.program.event,
-                result_number__isnull=False
-            ).aggregate(
-                max_number=models.Max('result_number')
-            )['max_number'] or 0
-            
-            self.result_number = max_result_number + 1
     
     def distribute_points_to_team_and_members(self):
         """Distribute points earned to team and individual student"""
@@ -1481,7 +1480,7 @@ class CertificateTemplate(models.Model):
 
     def clean(self):
         super().clean()
-        self.fields = normalize_certificate_fields(self.fields)
+        self.fields = normalize_certificate_fields(self.fields, certificate_type=self.certificate_type)
         if self.updated_by_id and self.updated_by.school_id != self.event.school_id:
             raise ValidationError('The template editor and event must belong to the same school.')
 

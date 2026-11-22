@@ -716,6 +716,7 @@ class ProgramSerializer(serializers.ModelSerializer):
     limit_description = serializers.SerializerMethodField()
     total_teams = serializers.SerializerMethodField()
     result_status = serializers.SerializerMethodField()
+    result_number = serializers.SerializerMethodField()
     stage = EventStageSerializer(read_only=True)
     stage_id = serializers.PrimaryKeyRelatedField(
         source='stage', queryset=EventStage.objects.all(),
@@ -735,7 +736,7 @@ class ProgramSerializer(serializers.ModelSerializer):
             'stage', 'stage_id', 'venue', 'start_time', 'end_time', 'duration_minutes_per_entry',
             'schedule_end_is_manual',
             'schedule_entry_count', 'schedule_entry_type', 'scheduled_duration_minutes',
-            'is_active', 'is_finished', 'is_published', 'status', 'result_status',
+            'is_active', 'is_finished', 'is_published', 'status', 'result_status', 'result_number',
             'participants_count', 'assigned_students', 'assignments_per_team', 'created_at', 'updated_at',
             'program_type', 'grading_points', 'total_max_participants', 'limit_description', 'total_teams',
             'num_judges', 'effective_num_judges',
@@ -744,7 +745,7 @@ class ProgramSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'created_at', 'updated_at', 'status', 'is_published',
-            'result_status', 'schedule_end_is_manual', 'effective_num_judges',
+            'result_status', 'result_number', 'schedule_end_is_manual', 'effective_num_judges',
         ]
 
     def to_internal_value(self, data):
@@ -783,6 +784,17 @@ class ProgramSerializer(serializers.ModelSerializer):
         if obj.results.filter(average_marks__isnull=False).exists():
             return 'in_progress'
         return 'pending'
+
+    def get_result_number(self, obj):
+        if not getattr(obj, 'is_published', False):
+            return None
+        if hasattr(obj, '_prefetched_objects_cache') and 'results' in obj._prefetched_objects_cache:
+            for r in obj._prefetched_objects_cache['results']:
+                if r.result_number is not None:
+                    return r.result_number
+            return None
+        first_res = obj.results.filter(result_number__isnull=False).first()
+        return first_res.result_number if first_res else None
 
     def get_category_display(self, obj):
         return str(obj.category or 'general').upper()
@@ -981,6 +993,17 @@ class ProgramSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     "Team-based programs must have a positive team_size value"
                 )
+            # Guardrail: prevent lowering max_teams_per_school below already assigned subteams
+            new_max_subteams = data.get('max_teams_per_school', getattr(self.instance, 'max_teams_per_school', 1)) or 1
+            if self.instance and self.instance.pk and getattr(self.instance, 'is_team_based', False):
+                max_assigned = self.instance.assignments.aggregate(m=models.Max('sub_team_number'))['m']
+                if max_assigned and max_assigned > new_max_subteams:
+                    raise serializers.ValidationError({
+                        'max_teams_per_school': (
+                            f'Cannot reduce max sub-teams to {new_max_subteams}. Sub-team {max_assigned} already '
+                            f'has assigned participants. Please remove those assignments before lowering this limit.'
+                        )
+                    })
             # Individual capacity is not used for group programs. Keep the
             # optional per-team cap because assignment validation enforces it.
             data['max_participants'] = None
@@ -1158,12 +1181,29 @@ class ProgramAssignmentSerializer(serializers.ModelSerializer):
     student_gender = serializers.CharField(source='student.gender', read_only=True)
     team_name = serializers.CharField(source='team.name', read_only=True)
     program_name = serializers.CharField(source='program.name', read_only=True)
+    assigned_by_name = serializers.SerializerMethodField()
+    assigned_by_role = serializers.SerializerMethodField()
+
+    def get_assigned_by_name(self, obj):
+        if obj.assigned_by:
+            return obj.assigned_by.display_name or obj.assigned_by.get_full_name() or obj.assigned_by.username
+        if obj.team:
+            return f"Team Manager ({obj.team.name})"
+        return "System"
+
+    def get_assigned_by_role(self, obj):
+        if obj.assigned_by:
+            return 'Admin' if getattr(obj.assigned_by, 'role', '') in ('admin', 'super_admin') else 'Event Manager'
+        if obj.team:
+            return 'Team Manager'
+        return 'System'
     
     class Meta:
         model = ProgramAssignment
         fields = [
             'id', 'program', 'program_name', 'student', 'student_name', 'student_id_number', 'student_gender',
-            'team', 'team_name', 'chest_number', 'sub_team_number', 'is_leader', 'assigned_at'
+            'team', 'team_name', 'chest_number', 'sub_team_number', 'is_leader', 'assigned_at',
+            'assigned_by', 'assigned_by_name', 'assigned_by_role'
         ]
         read_only_fields = ['id', 'assigned_at', 'chest_number']
 

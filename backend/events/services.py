@@ -727,6 +727,42 @@ def rebuild_program_points(program):
 
 
 @transaction.atomic
+def sync_event_result_numbers(event):
+    """
+    Ensure only published programs have result_numbers,
+    and their result_numbers are strictly sequential (1, 2, ..., N) starting from 1.
+    All results in unpublished programs have result_number = None.
+    """
+    from .models import ProgramResult, Program
+    # 1. Clear result_number for any unpublished programs in this event
+    ProgramResult.objects.filter(
+        program__event=event,
+        program__is_published=False,
+    ).exclude(result_number__isnull=True).update(result_number=None)
+
+    # 2. Get all published programs for this event
+    published_programs = list(
+        Program.objects.filter(event=event, is_published=True).order_by('id')
+    )
+    if not published_programs:
+        return
+
+    # Sort them: programs with an existing positive result_number keep their relative order;
+    # newly published programs without a result_number come after, ordered by updated_at, then id
+    def sort_key(p):
+        existing_rn = ProgramResult.objects.filter(
+            program=p, result_number__isnull=False
+        ).values_list('result_number', flat=True).first()
+        return (0 if (existing_rn is not None and existing_rn > 0) else 1, existing_rn or 0, p.updated_at, p.id)
+
+    published_programs.sort(key=sort_key)
+
+    # 3. Assign 1..N sequentially to all results of each published program
+    for index, prog in enumerate(published_programs, start=1):
+        ProgramResult.objects.filter(program=prog).update(result_number=index)
+
+
+@transaction.atomic
 def recalculate_program_results(program):
     """Calculate deterministic competition rankings and then rebuild official points."""
     ProgramResult.objects.filter(program=program, entry_status='draft').update(

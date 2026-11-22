@@ -2291,6 +2291,75 @@ class EventBusinessLogicTests(TestCase):
         self.assertEqual(data['team_standings'][0]['total_points'], 10)
         self.assertIn('qr_code_svg', data)
 
+    def test_program_status_lifecycle_and_filters(self):
+        now = timezone.now()
+        # 1. Unscheduled upcoming program
+        p_unscheduled = Program.objects.create(
+            event=self.event, name='Unscheduled Program', category='junior',
+            start_time=None, end_time=None, is_finished=False, is_published=False,
+        )
+        # 2. Future scheduled upcoming program
+        p_future = Program.objects.create(
+            event=self.event, name='Future Program', category='junior',
+            start_time=now + timedelta(hours=2), end_time=now + timedelta(hours=3),
+            is_finished=False, is_published=False,
+        )
+        # 3. Active ongoing program
+        p_ongoing = Program.objects.create(
+            event=self.event, name='Ongoing Program', category='junior',
+            start_time=now - timedelta(minutes=15), end_time=now + timedelta(minutes=45),
+            is_finished=False, is_published=False,
+        )
+        # 4. Finished program
+        p_finished = Program.objects.create(
+            event=self.event, name='Finished Program', category='junior',
+            start_time=now - timedelta(hours=3), end_time=now - timedelta(hours=2),
+            is_finished=True, is_published=False,
+        )
+        # 5. Published program
+        p_published = Program.objects.create(
+            event=self.event, name='Published Program', category='junior',
+            start_time=now - timedelta(hours=5), end_time=now - timedelta(hours=4),
+            is_finished=False, is_published=True,
+        )
+
+        # Model properties check
+        self.assertEqual(p_unscheduled.status, 'upcoming')
+        self.assertEqual(p_future.status, 'upcoming')
+        self.assertEqual(p_ongoing.status, 'ongoing')
+        self.assertEqual(p_finished.status, 'finished')
+        self.assertEqual(p_published.status, 'finished')
+
+        client = APIClient()
+        client.force_authenticate(self.admin)
+
+        # Filter: upcoming
+        res_up = client.get(f'/api/events/{self.event.id}/programs/?status=upcoming')
+        self.assertEqual(res_up.status_code, 200)
+        up_ids = {p['id'] for p in res_up.json()['results']}
+        self.assertIn(p_unscheduled.id, up_ids)
+        self.assertIn(p_future.id, up_ids)
+        self.assertNotIn(p_ongoing.id, up_ids)
+        self.assertNotIn(p_finished.id, up_ids)
+
+        # Filter: ongoing
+        res_on = client.get(f'/api/events/{self.event.id}/programs/?status=ongoing')
+        self.assertEqual(res_on.status_code, 200)
+        on_ids = {p['id'] for p in res_on.json()['results']}
+        self.assertIn(p_ongoing.id, on_ids)
+        self.assertNotIn(p_unscheduled.id, on_ids)
+        self.assertNotIn(p_future.id, on_ids)
+        self.assertNotIn(p_finished.id, on_ids)
+
+        # Filter: finished
+        res_fin = client.get(f'/api/events/{self.event.id}/programs/?status=finished')
+        self.assertEqual(res_fin.status_code, 200)
+        fin_ids = {p['id'] for p in res_fin.json()['results']}
+        self.assertIn(p_finished.id, fin_ids)
+        self.assertIn(p_published.id, fin_ids)
+        self.assertNotIn(p_future.id, fin_ids)
+        self.assertNotIn(p_ongoing.id, fin_ids)
+
 
 class MultiSchoolIsolationTests(TestCase):
     def setUp(self):
@@ -3341,4 +3410,83 @@ class MultiSchoolIsolationTests(TestCase):
         self.assertIn('P3', entry['name'])
         self.assertIsNotNone(entry['chest_number'])
         self.assertEqual(len(entry['members']), 3)
+
+    def test_sequential_result_numbering_only_for_published_programs(self):
+        """Only published programs get sequential result numbers (1, 2...); drafts have None."""
+        self.event_a.status = 'published'
+        self.event_a.save()
+
+        p1 = Program.objects.create(name='Prog 1', event=self.event_a, category='general', program_type='individual')
+        p2 = Program.objects.create(name='Prog 2', event=self.event_a, category='general', program_type='individual')
+        p3 = Program.objects.create(name='Prog 3', event=self.event_a, category='general', program_type='individual')
+
+        s1 = User.objects.create(username='u1', name='U1', role='student', school=self.school_a)
+        s2 = User.objects.create(username='u2', name='U2', role='student', school=self.school_a)
+        s3 = User.objects.create(username='u3', name='U3', role='student', school=self.school_a)
+
+        ProgramAssignment.objects.create(program=p1, student=s1)
+        ProgramAssignment.objects.create(program=p2, student=s2)
+        ProgramAssignment.objects.create(program=p3, student=s3)
+
+        r1 = ProgramResult.objects.create(program=p1, participant=s1, judge1_marks=80, judge2_marks=80, judge3_marks=80, entry_status='submitted')
+        r2 = ProgramResult.objects.create(program=p2, participant=s2, judge1_marks=85, judge2_marks=85, judge3_marks=85, entry_status='submitted')
+        r3 = ProgramResult.objects.create(program=p3, participant=s3, judge1_marks=90, judge2_marks=90, judge3_marks=90, entry_status='submitted')
+
+        # 1. While unpublished, none should have a result_number
+        self.assertIsNone(r1.result_number)
+        self.assertIsNone(r2.result_number)
+        self.assertIsNone(r3.result_number)
+
+        client = APIClient()
+        client.force_authenticate(self.admin_a)
+
+        # Check API serializer returns None for result_number
+        res = client.get(f'/api/events/{self.event_a.id}/programs/')
+        data_by_id = {item['id']: item for item in res.data['results']}
+        self.assertIsNone(data_by_id[p1.id]['result_number'])
+        self.assertIsNone(data_by_id[p2.id]['result_number'])
+        self.assertIsNone(data_by_id[p3.id]['result_number'])
+
+        # 2. Publish p1 -> becomes Result 1
+        toggle_res1 = client.post(f'/api/events/{self.event_a.id}/toggle_program_publish/', {'program_id': p1.id, 'is_published': True})
+        self.assertEqual(toggle_res1.status_code, 200)
+        p1.refresh_from_db()
+        r1.refresh_from_db()
+        self.assertTrue(p1.is_published)
+        self.assertEqual(r1.result_number, 1)
+
+        # 3. Publish p3 (p2 stays unpublished) -> p3 becomes Result 2
+        toggle_res3 = client.post(f'/api/events/{self.event_a.id}/toggle_program_publish/', {'program_id': p3.id, 'is_published': True})
+        self.assertEqual(toggle_res3.status_code, 200)
+        p3.refresh_from_db()
+        r3.refresh_from_db()
+        self.assertTrue(p3.is_published)
+        self.assertEqual(r3.result_number, 2)
+
+        # p2 is still unpublished -> still None
+        r2.refresh_from_db()
+        self.assertIsNone(r2.result_number)
+
+        # Check API serializer reflects this
+        res2 = client.get(f'/api/events/{self.event_a.id}/programs/')
+        data_by_id = {item['id']: item for item in res2.data['results']}
+        self.assertEqual(data_by_id[p1.id]['result_number'], 1)
+        self.assertEqual(data_by_id[p3.id]['result_number'], 2)
+        self.assertIsNone(data_by_id[p2.id]['result_number'])
+
+        # 4. Unpublish p1 -> p1 becomes None, and p3 re-sequences to 1
+        toggle_unpub1 = client.post(f'/api/events/{self.event_a.id}/toggle_program_publish/', {'program_id': p1.id, 'is_published': False})
+        self.assertEqual(toggle_unpub1.status_code, 200)
+        r1.refresh_from_db()
+        r3.refresh_from_db()
+        self.assertIsNone(r1.result_number)
+        self.assertEqual(r3.result_number, 1)
+
+        # 5. Publish p2 -> p3 stays 1, p2 becomes 2
+        toggle_pub2 = client.post(f'/api/events/{self.event_a.id}/toggle_program_publish/', {'program_id': p2.id, 'is_published': True})
+        self.assertEqual(toggle_pub2.status_code, 200)
+        r2.refresh_from_db()
+        r3.refresh_from_db()
+        self.assertEqual(r3.result_number, 1)
+        self.assertEqual(r2.result_number, 2)
 

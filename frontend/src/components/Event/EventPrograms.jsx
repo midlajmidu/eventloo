@@ -529,7 +529,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
   };
 
   const getStatusDisplay = (program) => {
-    if (program.is_finished) return 'Finished';
+    if (program.is_finished || program.is_published) return 'Finished';
     if (!program.start_time) return 'Upcoming';
     
     const now = new Date();
@@ -542,7 +542,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
       const endTime = new Date(program.end_time);
       if (!isNaN(endTime.getTime())) {
         if (now >= startTime && now <= endTime) return 'Ongoing';
-        if (now > endTime) return 'Past';
+        if (now > endTime) return 'Finished';
       }
     }
     
@@ -551,12 +551,11 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
 
   const getStatusColor = (status) => {
     const colors = {
-      'Upcoming': 'bg-indigo-100 text-indigo-800',
-      'Ongoing': 'bg-green-100 text-green-800',
-      'Finished': 'bg-gray-100 text-gray-800',
-      'Past': 'bg-yellow-100 text-yellow-800'
+      'Upcoming': 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+      'Ongoing': 'bg-amber-50 text-amber-700 border border-amber-200',
+      'Finished': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
     };
-    return colors[status] || 'bg-gray-100 text-gray-800';
+    return colors[status] || 'bg-gray-50 text-gray-700 border border-gray-200';
   };
 
   const formatDateTime = (dateTimeString) => {

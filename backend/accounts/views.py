@@ -1333,7 +1333,9 @@ def team_manager_event_programs(request, team_id, event_id):
                 'is_leader': getattr(assignment, 'is_leader', False) or False,
                 'category': getattr(assignment.student, 'category', ''),
                 'grade': getattr(assignment.student, 'grade', ''),
-                'assigned_at': assignment.assigned_at
+                'assigned_at': assignment.assigned_at,
+                'assigned_by': (assignment.assigned_by.display_name or assignment.assigned_by.username) if assignment.assigned_by else f"Team Manager ({team.name})",
+                'assigned_by_role': 'Admin' if assignment.assigned_by else 'Team Manager',
             } for assignment in team_assignments]
             
             # Calculate limits and available slots based on program type

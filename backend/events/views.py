@@ -63,6 +63,7 @@ class ProgramFilter(django_filters.FilterSet):
             ('upcoming', 'Upcoming'),
             ('ongoing', 'Ongoing'),
             ('finished', 'Finished'),
+            ('completed', 'Completed'),
         ],
         method='filter_status'
     )
@@ -72,15 +73,32 @@ class ProgramFilter(django_filters.FilterSet):
         fields = ['category', 'is_team_based', 'is_finished', 'is_active', 'program_type']
     
     def filter_status(self, queryset, name, value):
-        """Filter programs by status"""
+        """Filter programs by status matching Program.status model logic"""
         now = timezone.now()
         
-        if value == 'upcoming':
-            return queryset.filter(start_time__gt=now, is_finished=False)
+        if value in ('finished', 'completed'):
+            return queryset.filter(
+                Q(is_finished=True) |
+                Q(is_published=True) |
+                Q(end_time__isnull=False, end_time__lt=now)
+            )
         elif value == 'ongoing':
-            return queryset.filter(start_time__lte=now, end_time__gte=now, is_finished=False)
-        elif value == 'finished':
-            return queryset.filter(is_finished=True)
+            return queryset.filter(
+                is_finished=False,
+                is_published=False,
+                start_time__isnull=False,
+                start_time__lte=now,
+            ).filter(
+                Q(end_time__isnull=True) | Q(end_time__gte=now)
+            )
+        elif value == 'upcoming':
+            return queryset.filter(
+                is_finished=False,
+                is_published=False,
+            ).filter(
+                Q(start_time__isnull=True) |
+                Q(start_time__gt=now)
+            )
         
         return queryset
 
@@ -612,20 +630,20 @@ class EventViewSet(viewsets.ModelViewSet):
         # Basic statistics
         programs = event.programs.filter(is_active=True)
         total_programs = programs.count()
-        programs_with_results = programs.filter(results__isnull=False).distinct().count()
+        published_programs = programs.filter(is_published=True).count()
         
         # Participation statistics
         total_assignments = ProgramAssignment.objects.filter(program__event=event).count()
         unique_participants = ProgramAssignment.objects.filter(
             program__event=event
-        ).values('student').distinct().count()
+        ).values('student_id').distinct().count()
         
         # Team statistics
         participating_teams = Team.objects.filter(
             program_assignments__program__event=event
         ).distinct().count()
         
-        # Category breakdown dynamically resolved from DB
+        # Category breakdown dynamically resolved from DB with UNIQUE participants per category
         from accounts.models import StudentCategory
         category_stats = {}
         for cat in StudentCategory.objects.filter(school=request.user.school):
@@ -636,11 +654,33 @@ class EventViewSet(viewsets.ModelViewSet):
                 'programs': category_programs.count(),
                 'participants': ProgramAssignment.objects.filter(
                     program__in=category_programs
+                ).values('student_id').distinct().count(),
+                'total_entries': ProgramAssignment.objects.filter(
+                    program__in=category_programs
                 ).count(),
                 'teams': Team.objects.filter(
                     program_assignments__program__in=category_programs
                 ).distinct().count()
             }
+        
+        # Also include any program category not in StudentCategory (e.g. general)
+        all_event_cat_codes = set(programs.values_list('category', flat=True).distinct())
+        for code in all_event_cat_codes:
+            if code and code not in category_stats:
+                category_programs = programs.filter(category=code)
+                category_stats[code] = {
+                    'name': code.capitalize(),
+                    'programs': category_programs.count(),
+                    'participants': ProgramAssignment.objects.filter(
+                        program__in=category_programs
+                    ).values('student_id').distinct().count(),
+                    'total_entries': ProgramAssignment.objects.filter(
+                        program__in=category_programs
+                    ).count(),
+                    'teams': Team.objects.filter(
+                        program_assignments__program__in=category_programs
+                    ).distinct().count()
+                }
         
         # Performance metrics
         results = ProgramResult.objects.filter(program__event=event)
@@ -679,8 +719,9 @@ class EventViewSet(viewsets.ModelViewSet):
         
         return Response({
             'total_programs': total_programs,
-            'completed_programs': programs_with_results,
-            'programs_with_results': programs_with_results,
+            'completed_programs': published_programs,
+            'published_programs': published_programs,
+            'programs_with_results': published_programs,
             'total_participants': unique_participants,
             'total_teams': participating_teams,
             'participation_rate': (unique_participants / User.objects.filter(role='student', school=request.user.school).count() * 100) if User.objects.filter(role='student', school=request.user.school).count() > 0 else 0,
@@ -2053,8 +2094,11 @@ class EventViewSet(viewsets.ModelViewSet):
                         'error': f'Cannot publish results for "{program.name}": Mark entry has not been submitted.'
                     }, status=status.HTTP_400_BAD_REQUEST)
             program.is_published = target_state
+            if target_state:
+                program.is_finished = True
             program.save()
-            from .services import recalculate_program_results
+            from .services import recalculate_program_results, sync_event_result_numbers
+            sync_event_result_numbers(event)
             recalculate_program_results(program)
             invalidate_public_portal_cache(event.id)
             audit_security_event(
@@ -2085,9 +2129,12 @@ class EventViewSet(viewsets.ModelViewSet):
                 skipped.append(program.id)
                 continue
             program.is_published = True
-            program.save(update_fields=['is_published', 'updated_at'])
+            program.is_finished = True
+            program.save(update_fields=['is_published', 'is_finished', 'updated_at'])
             recalculate_program_results(program)
             published.append(program.id)
+        from .services import sync_event_result_numbers
+        sync_event_result_numbers(event)
         invalidate_public_portal_cache(event.id)
         audit_security_event(
             request, 'event_results_publish_all', 'success',
@@ -2181,7 +2228,7 @@ class EventViewSet(viewsets.ModelViewSet):
         assignments_qs = (
             ProgramAssignment.objects
             .filter(program__event=event)
-            .select_related('student', 'team', 'program')
+            .select_related('student', 'team', 'program', 'assigned_by')
             .order_by('program_id', 'sub_team_number', 'id')
         )
         if getattr(request.user, 'role', '') == 'team_manager':
@@ -2191,8 +2238,21 @@ class EventViewSet(viewsets.ModelViewSet):
             elif hasattr(request.user, 'managed_teams'):
                 assignments_qs = assignments_qs.filter(team__in=request.user.managed_teams.filter(school_id=request.user.school_id))
 
-        data = [
-            {
+        data = []
+        for a in assignments_qs:
+            assigned_by_display = None
+            assigned_by_role = None
+            if a.assigned_by:
+                assigned_by_display = a.assigned_by.display_name or a.assigned_by.get_full_name() or a.assigned_by.username
+                assigned_by_role = 'Admin' if getattr(a.assigned_by, 'role', '') in ('admin', 'super_admin') else 'Event Manager'
+            elif a.team:
+                assigned_by_display = f"Team Manager ({a.team.name})"
+                assigned_by_role = 'Team Manager'
+            else:
+                assigned_by_display = "System"
+                assigned_by_role = 'System'
+
+            data.append({
                 'id': a.id,
                 'program_id': a.program_id,
                 'program': a.program_id,
@@ -2220,9 +2280,9 @@ class EventViewSet(viewsets.ModelViewSet):
                 'is_leader': a.is_leader,
                 'chest_number': a.chest_number,
                 'assigned_at': a.assigned_at.isoformat() if a.assigned_at else None,
-            }
-            for a in assignments_qs
-        ]
+                'assigned_by': assigned_by_display,
+                'assigned_by_role': assigned_by_role,
+            })
         return Response(data)
 
 class TeamViewSet(viewsets.ModelViewSet):
@@ -3138,9 +3198,15 @@ class ProgramViewSet(viewsets.ModelViewSet):
         now = timezone.now()
         
         school_programs = Program.objects.filter(event__school_id=request.user.school_id)
-        upcoming = school_programs.filter(start_time__gt=now, is_finished=False).order_by('start_time')
-        ongoing = school_programs.filter(start_time__lte=now, end_time__gte=now, is_finished=False).order_by('start_time')
-        finished = school_programs.filter(is_finished=True).order_by('-end_time')
+        upcoming = school_programs.filter(
+            is_finished=False, is_published=False
+        ).filter(Q(start_time__isnull=True) | Q(start_time__gt=now)).order_by('start_time')
+        ongoing = school_programs.filter(
+            is_finished=False, is_published=False, start_time__isnull=False, start_time__lte=now
+        ).filter(Q(end_time__isnull=True) | Q(end_time__gte=now)).order_by('start_time')
+        finished = school_programs.filter(
+            Q(is_finished=True) | Q(is_published=True) | Q(end_time__isnull=False, end_time__lt=now)
+        ).order_by('-end_time')
         
         return Response({
             'upcoming': {
@@ -4396,6 +4462,8 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
             program.is_published = False
             program.is_finished = False
             program.save(update_fields=['is_published', 'is_finished', 'updated_at'])
+            from .services import sync_event_result_numbers
+            sync_event_result_numbers(program.event)
         elif program.is_finished:
             program.is_finished = False
             program.save(update_fields=['is_finished', 'updated_at'])
@@ -9443,7 +9511,7 @@ def certificate_templates(request, event_id):
             'results': [
                 _certificate_template_payload(
                     request, certificate_type, existing.get(certificate_type),
-                    default_certificate_fields(),
+                    default_certificate_fields(certificate_type),
                 )
                 for certificate_type, _label in CERTIFICATE_TYPE_CHOICES
             ]
@@ -9453,11 +9521,17 @@ def certificate_templates(request, event_id):
 
 
 def _certificate_template_payload(request, certificate_type, template, default_fields=None):
-    default_fields = default_fields or {}
+    from .certificate_config import default_certificate_fields
+    default_fields = default_fields if default_fields is not None else default_certificate_fields(certificate_type)
     background_url = ''
     if template and template.background_image:
         background_url = request.build_absolute_uri(template.background_image.url)
-    default_aspect = 0.75 if certificate_type == 'badge' else 4 / 3
+    default_aspect = 0.75 if (certificate_type == 'badge' or str(certificate_type).startswith('result_poster')) else 4 / 3
+    merged_fields = {**default_fields, **(template.fields or {})} if template else default_fields
+    if str(certificate_type).startswith('result_poster'):
+        for non_poster_field in ('participantName', 'chestNo', 'teamName', 'rank', 'totalPrograms', 'assignedPrograms'):
+            if non_poster_field in merged_fields:
+                merged_fields[non_poster_field]['enabled'] = False
     return {
         'id': template.id if template else None,
         'certificateType': certificate_type,
@@ -9466,21 +9540,24 @@ def _certificate_template_payload(request, certificate_type, template, default_f
         'aspectRatio': template.aspect_ratio if template else default_aspect,
         'naturalWidth': template.natural_width if template else None,
         'naturalHeight': template.natural_height if template else None,
-        'fields': {**default_fields, **(template.fields or {})} if template else default_fields,
+        'fields': merged_fields,
         'updatedAt': template.updated_at.isoformat() if template else None,
     }
 
 
 def _validate_certificate_background(upload):
     import warnings
+    from io import BytesIO
+    from pathlib import Path
     from PIL import Image, UnidentifiedImageError
+    from django.core.files.uploadedfile import InMemoryUploadedFile
 
     allowed_types = {'image/png', 'image/jpeg', 'image/webp'}
     allowed_formats = {'PNG', 'JPEG', 'WEBP'}
     if upload.content_type not in allowed_types:
         raise DjangoValidationError('Use a PNG, JPEG or WebP certificate image.')
-    if upload.size > 8 * 1024 * 1024:
-        raise DjangoValidationError('Certificate images must be 8 MB or smaller.')
+    if upload.size > 25 * 1024 * 1024:
+        raise DjangoValidationError('Certificate images must be 25 MB or smaller.')
 
     try:
         with warnings.catch_warnings():
@@ -9489,8 +9566,9 @@ def _validate_certificate_background(upload):
             image.verify()
             upload.seek(0)
             image = Image.open(upload)
+            image.load()
             width, height = image.size
-            image_format = image.format
+            image_format = (image.format or '').upper()
     except (UnidentifiedImageError, OSError, Image.DecompressionBombWarning):
         raise DjangoValidationError('The uploaded certificate image is invalid or unsafe.')
     finally:
@@ -9505,7 +9583,65 @@ def _validate_certificate_background(upload):
     ratio = width / height
     if ratio < 0.25 or ratio > 4:
         raise DjangoValidationError('Certificate image aspect ratio must be between 1:4 and 4:1.')
-    return width, height, ratio
+
+    # Downsample only if extremely oversized (> 3840px / 4K on longest edge)
+    max_dim = 3840
+    if max(width, height) > max_dim:
+        image.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+        width, height = image.size
+        ratio = width / height
+
+    # Check for transparency
+    has_alpha = False
+    if image.mode in ('RGBA', 'LA') or (image.mode == 'P' and 'transparency' in image.info):
+        rgba_img = image.convert('RGBA')
+        alpha_extrema = rgba_img.getextrema()[3]
+        if alpha_extrema[0] < 255:
+            has_alpha = True
+        else:
+            image = rgba_img.convert('RGB')
+    elif image.mode != 'RGB':
+        image = image.convert('RGB')
+
+    output = BytesIO()
+    if has_alpha:
+        # Preserve PNG with lossless optimization for transparent templates
+        image.save(output, format='PNG', optimize=True)
+        content_type = 'image/png'
+        ext = '.png'
+    elif image_format == 'WEBP':
+        image.save(output, format='WEBP', quality=95, method=6)
+        content_type = 'image/webp'
+        ext = '.webp'
+    elif image_format == 'PNG':
+        # Lossless PNG optimization (strips bloat chunks, optimal DEFLATE)
+        image.save(output, format='PNG', optimize=True)
+        content_type = 'image/png'
+        ext = '.png'
+    else:
+        # High quality JPEG 95 with 4:4:4 lossless chroma (subsampling=0)
+        image.save(output, format='JPEG', quality=95, subsampling=0, optimize=True)
+        content_type = 'image/jpeg'
+        ext = '.jpg'
+
+    output.seek(0)
+    optimized_bytes = output.getvalue()
+
+    # If original was smaller than optimized, retain original
+    if upload.size <= len(optimized_bytes):
+        upload.seek(0)
+        return upload, (width, height, ratio)
+
+    optimized_name = Path(upload.name).stem + ext
+    optimized_upload = InMemoryUploadedFile(
+        file=output,
+        field_name='background_image',
+        name=optimized_name,
+        content_type=content_type,
+        size=len(optimized_bytes),
+        charset=None,
+    )
+    return optimized_upload, (width, height, ratio)
 
 
 @api_view(['PUT', 'DELETE'])
@@ -9523,6 +9659,13 @@ def certificate_template_detail(request, event_id, certificate_type):
         ).first()
         if request.method == 'DELETE':
             if template:
+                if template.background_image:
+                    try:
+                        storage = template.background_image.storage
+                        if storage.exists(template.background_image.name):
+                            storage.delete(template.background_image.name)
+                    except Exception:
+                        pass
                 template.delete()
             audit_security_event(
                 request, 'certificate_template_reset', 'success',
@@ -9538,11 +9681,14 @@ def certificate_template_detail(request, event_id, certificate_type):
                 return Response({'error': 'Certificate fields contain invalid JSON.'}, status=400)
         fields = normalize_certificate_fields(
             fields_value if fields_value is not None
-            else (template.fields if template else default_certificate_fields())
+            else (template.fields if template else default_certificate_fields(certificate_type)),
+            certificate_type=certificate_type
         )
 
         background = request.FILES.get('background_image')
-        dimensions = _validate_certificate_background(background) if background else None
+        dimensions = None
+        if background:
+            background, dimensions = _validate_certificate_background(background)
         if template is None:
             template = CertificateTemplate(event=event, certificate_type=certificate_type)
         old_background_name = template.background_image.name if template.background_image else None
@@ -9551,6 +9697,12 @@ def certificate_template_detail(request, event_id, certificate_type):
         if background:
             template.background_image = background
             template.natural_width, template.natural_height, template.aspect_ratio = dimensions
+        aspect_ratio_val = request.data.get('aspect_ratio')
+        if aspect_ratio_val:
+            try:
+                template.aspect_ratio = float(aspect_ratio_val)
+            except (ValueError, TypeError):
+                pass
         template.save()
         if background and old_background_name and old_background_name != template.background_image.name:
             template.background_image.storage.delete(old_background_name)
@@ -9586,14 +9738,46 @@ def certificate_preview_data(request, event_id):
             except (TypeError, ValueError):
                 return Response({'error': 'Invalid program filter.'}, status=400)
         category_names = event_category_names(event)
+        recipient_payload = None
+        matched_program_id = None
         for program in programs:
             recipients = certificate_recipients(program, certificate_type)
             if recipients:
-                return Response({
-                    'recipient': certificate_field_values(recipients[0], event, category_names),
-                    'programId': program.id,
+                recipient_payload = certificate_field_values(recipients[0], event, category_names)
+                matched_program_id = program.id
+                break
+
+        # Collect actual assigned students belonging to this event for realistic design preview & shuffling
+        from .models import ProgramAssignment, ChestNumber
+        assignments = ProgramAssignment.objects.filter(
+            program__event=event,
+            student__isnull=False
+        ).select_related('student', 'team')
+        
+        event_students = []
+        seen_sids = set()
+        for a in assignments:
+            s = a.student
+            if s and s.id not in seen_sids:
+                seen_sids.add(s.id)
+                cn = ChestNumber.objects.filter(event=event, student=s).values_list('chest_number', flat=True).first()
+                chest_label = f"Chest No: {cn}" if cn else (f"Chest No: {a.chest_number}" if a.chest_number else '')
+                event_students.append({
+                    'id': s.id,
+                    'name': s.get_full_name() or s.display_name or f"Student #{s.id}",
+                    'chest': chest_label,
+                    'chestRaw': str(cn or a.chest_number or ''),
+                    'team': a.team.name if a.team else '',
+                    'category': s.category or '',
                 })
-        return Response({'recipient': None, 'programId': None})
+                if len(event_students) >= 60:
+                    break
+
+        return Response({
+            'recipient': recipient_payload,
+            'programId': matched_program_id,
+            'eventStudents': event_students,
+        })
     except Event.DoesNotExist:
         return Response({'error': 'Event not found'}, status=404)
 
@@ -9644,21 +9828,59 @@ def generate_certificates(request, event_id):
         category = request.GET.get('category', 'all')
         program_id = request.GET.get('program_id', 'all')
 
-        templates = {
-            template.certificate_type: template
-            for template in CertificateTemplate.objects.filter(
-                event=event, certificate_type__in=cert_types
-            )
-        }
-        missing_templates = [
-            certificate_type for certificate_type in cert_types
-            if certificate_type != 'badge' and (certificate_type not in templates or not templates[certificate_type].background_image)
-        ]
-        if missing_templates:
-            return Response({
-                'error': 'Upload and save the required certificate templates first.',
-                'missing_templates': missing_templates,
-            }, status=400)
+        is_poster_export = any(str(c).startswith('result_poster') for c in cert_types)
+        poster_mode = request.GET.get('poster_mode', 'single')
+
+        if is_poster_export:
+            available_poster_templates = {
+                template.certificate_type: template
+                for template in CertificateTemplate.objects.filter(
+                    event=event, certificate_type__startswith='result_poster'
+                ).exclude(background_image='')
+            }
+            if not available_poster_templates:
+                return Response({
+                    'error': 'Upload and save at least one Result Poster template background image in Templates studio first.',
+                    'missing_templates': ['result_poster'],
+                }, status=400)
+
+            if poster_mode in ('alternating', 'shuffled', 'poster_wise') or len(cert_types) > 1:
+                valid_types = [c for c in cert_types if c in available_poster_templates]
+                if not valid_types:
+                    valid_types = sorted(available_poster_templates.keys())
+                cert_types = valid_types
+            else:
+                target_type = cert_types[0]
+                if target_type not in available_poster_templates:
+                    if 'result_poster' in available_poster_templates:
+                        cert_types = ['result_poster']
+                    else:
+                        cert_types = [sorted(available_poster_templates.keys())[0]]
+
+            templates = {
+                template.certificate_type: template
+                for template in CertificateTemplate.objects.filter(
+                    event=event, certificate_type__in=cert_types
+                )
+            }
+            for k, v in available_poster_templates.items():
+                templates.setdefault(k, v)
+        else:
+            templates = {
+                template.certificate_type: template
+                for template in CertificateTemplate.objects.filter(
+                    event=event, certificate_type__in=cert_types
+                )
+            }
+            missing_templates = [
+                certificate_type for certificate_type in cert_types
+                if certificate_type != 'badge' and (certificate_type not in templates or not templates[certificate_type].background_image)
+            ]
+            if missing_templates:
+                return Response({
+                    'error': 'Upload and save the required certificate templates first.',
+                    'missing_templates': missing_templates,
+                }, status=400)
 
         recipients = []
         if is_badge_only:
@@ -9688,7 +9910,14 @@ def generate_certificates(request, event_id):
                     seen_students.add(ba.student_id)
                     recipients.append(CertificateRecipient('badge', ba))
         else:
-            programs = Program.objects.filter(event=event).order_by('category', 'name', 'id')
+            order_by = request.GET.get('order_by', 'result_number' if is_poster_export else 'default')
+
+            programs = Program.objects.filter(event=event)
+            if is_poster_export and (not program_id or program_id == 'all'):
+                only_published = request.GET.get('only_published', 'true').lower() in ('1', 'true', 'yes')
+                if only_published:
+                    programs = programs.filter(is_published=True)
+
             if category and category != 'all':
                 programs = programs.filter(category__iexact=category)
             if program_id and program_id != 'all':
@@ -9699,22 +9928,53 @@ def generate_certificates(request, event_id):
             if not programs.exists():
                 return Response({'error': 'No programs match the selected filters.'}, status=400)
 
-            for certificate_type in cert_types:
-                seen_students_for_badge = set()
-                for program in programs:
-                    prog_recipients = certificate_recipients(program, certificate_type)
+            if order_by == 'result_number':
+                from django.db.models import Min, F
+                programs = programs.annotate(
+                    min_rn=Min('results__result_number')
+                ).order_by(F('min_rn').asc(nulls_last=True), 'id')
+            else:
+                programs = programs.order_by('category', 'name', 'id')
+
+            program_list = list(programs)
+
+            if is_poster_export and poster_mode in ('alternating', 'shuffled') and len(cert_types) > 1:
+                for idx, program in enumerate(program_list):
+                    chosen_cert_type = cert_types[idx % len(cert_types)]
+                    prog_recipients = certificate_recipients(program, chosen_cert_type)
                     if team_id:
                         prog_recipients = [
                             r for r in prog_recipients
                             if (r.assignment.team_id == team_id or (r.student and r.student.team_memberships.filter(id=team_id).exists()))
                         ]
-                    if certificate_type == 'badge':
-                        for r in prog_recipients:
-                            if r.student.id not in seen_students_for_badge:
-                                seen_students_for_badge.add(r.student.id)
-                                recipients.append(r)
-                    else:
+                    recipients.extend(prog_recipients)
+            elif is_poster_export and poster_mode == 'poster_wise' and len(cert_types) > 1:
+                for certificate_type in cert_types:
+                    for program in program_list:
+                        prog_recipients = certificate_recipients(program, certificate_type)
+                        if team_id:
+                            prog_recipients = [
+                                r for r in prog_recipients
+                                if (r.assignment.team_id == team_id or (r.student and r.student.team_memberships.filter(id=team_id).exists()))
+                            ]
                         recipients.extend(prog_recipients)
+            else:
+                for certificate_type in cert_types:
+                    seen_students_for_badge = set()
+                    for program in program_list:
+                        prog_recipients = certificate_recipients(program, certificate_type)
+                        if team_id:
+                            prog_recipients = [
+                                r for r in prog_recipients
+                                if (r.assignment.team_id == team_id or (r.student and r.student.team_memberships.filter(id=team_id).exists()))
+                            ]
+                        if certificate_type == 'badge':
+                            for r in prog_recipients:
+                                if r.student.id not in seen_students_for_badge:
+                                    seen_students_for_badge.add(r.student.id)
+                                    recipients.append(r)
+                        else:
+                            recipients.extend(prog_recipients)
 
         if not recipients:
             return Response({
@@ -9731,7 +9991,15 @@ def generate_certificates(request, event_id):
                 team_suffix = f'_{slugify(team_obj.name)}'
 
         category_suffix = f'_{slugify(category)}' if (category and category != 'all') else ''
-        filename_prefix = 'Badges' if is_badge_only else 'Certificates'
+        if is_poster_export:
+            if program_id and program_id != 'all' and len(program_list) == 1:
+                filename_prefix = f'Result_Poster_{slugify(program_list[0].name)}'
+            else:
+                filename_prefix = 'Result_Posters'
+        elif is_badge_only:
+            filename_prefix = 'Badges'
+        else:
+            filename_prefix = 'Certificates'
         origin = request.headers.get('Origin') or request.META.get('HTTP_ORIGIN') or ''
         if not origin:
             try:
@@ -9739,11 +10007,79 @@ def generate_certificates(request, event_id):
             except Exception:
                 origin = ''
         pdf_buffer = render_certificates_pdf(event, templates, recipients, quality, base_url=origin)
+
+        file_format = (request.GET.get('file_format') or request.GET.get('format', 'pdf')).strip().lower()
+        if file_format in ('jpg', 'jpeg'):
+            import fitz
+            import zipfile
+            import io
+            import re
+
+            doc = fitz.open(stream=pdf_buffer.getvalue(), filetype='pdf')
+            dpi = 200 if quality in ('standard', 'print') else 150
+            jpeg_quality = 95 if quality == 'print' else (90 if quality == 'standard' else 85)
+
+            def sanitize_filename_part(name):
+                clean = re.sub(r'[^\w\s-]', '', str(name or '')).strip()
+                return re.sub(r'[\s-]+', '_', clean)
+
+            def get_recipient_file_info(idx, rec):
+                prog = getattr(rec, 'program', None)
+                if not prog and hasattr(rec, 'assignment') and rec.assignment:
+                    prog = getattr(rec.assignment, 'program', None)
+                res_num = None
+                if prog:
+                    first_res = prog.results.filter(result_number__isnull=False).first()
+                    if first_res and first_res.result_number:
+                        res_num = first_res.result_number
+                if res_num is None:
+                    res_num = idx + 1
+
+                res_num_str = f"Result_{int(res_num):02d}"
+                prog_name_str = f"_{sanitize_filename_part(prog.name)}" if prog and prog.name else ""
+                return f"{res_num_str}{prog_name_str}.jpg"
+
+            if len(doc) == 1:
+                page = doc[0]
+                pix = page.get_pixmap(dpi=dpi)
+                jpg_bytes = pix.tobytes(output='jpg', jpg_quality=jpeg_quality)
+                filename = get_recipient_file_info(0, recipients[0])
+                response = HttpResponse(jpg_bytes, content_type='image/jpeg')
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                response['X-Certificate-Count'] = '1'
+                response['Access-Control-Expose-Headers'] = 'Content-Disposition, X-Certificate-Count'
+                audit_security_event(
+                    request, 'certificate_export', 'success',
+                    school_id=event.school_id, target=f'{event.id}:1',
+                )
+                return response
+            else:
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for i, page in enumerate(doc):
+                        pix = page.get_pixmap(dpi=dpi)
+                        jpg_bytes = pix.tobytes(output='jpg', jpg_quality=jpeg_quality)
+                        rec_obj = recipients[i] if i < len(recipients) else None
+                        filename = get_recipient_file_info(i, rec_obj)
+                        zf.writestr(filename, jpg_bytes)
+
+                zip_filename = f"{filename_prefix}_{slugify(event.title) or event.id}{team_suffix}{category_suffix}.zip"
+                response = HttpResponse(zip_buffer.getvalue(), content_type='application/zip')
+                response['Content-Disposition'] = f'attachment; filename="{zip_filename}"'
+                response['X-Certificate-Count'] = str(len(doc))
+                response['Access-Control-Expose-Headers'] = 'Content-Disposition, X-Certificate-Count'
+                audit_security_event(
+                    request, 'certificate_export', 'success',
+                    school_id=event.school_id, target=f'{event.id}:{len(doc)}',
+                )
+                return response
+
         response = HttpResponse(pdf_buffer.getvalue(), content_type='application/pdf')
         response['Content-Disposition'] = (
             f'attachment; filename="{filename_prefix}_{slugify(event.title) or event.id}{team_suffix}{category_suffix}.pdf"'
         )
         response['X-Certificate-Count'] = str(len(recipients))
+        response['Access-Control-Expose-Headers'] = 'Content-Disposition, X-Certificate-Count'
         audit_security_event(
             request, 'certificate_export', 'success',
             school_id=event.school_id, target=f'{event.id}:{len(recipients)}',

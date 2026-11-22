@@ -12,7 +12,8 @@ import {
   UserMinus,
   UserPlus,
   BookOpen,
-  CheckSquare
+  CheckSquare,
+  RefreshCw
 } from 'lucide-react';
 import { 
   eventProgramsAPI, 
@@ -28,6 +29,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
   const [students, setStudents] = useState([]);
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isReloading, setIsReloading] = useState(false);
 
   // Selection States
   const [selectedCategory, setSelectedCategory] = useState('');
@@ -121,14 +123,31 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
   };
 
   const reloadAssignments = async () => {
+    setIsReloading(true);
     try {
       const assignmentsRes = await eventAssignmentsAPI.getEventAssignments(eventId);
       const assgs = Array.isArray(assignmentsRes.data) ? assignmentsRes.data : (assignmentsRes.data.results || []);
       setAssignments(assgs);
     } catch (err) {
       console.error('Error reloading assignments:', err);
+    } finally {
+      setIsReloading(false);
     }
   };
+
+  // Auto-sync when window regains focus (e.g. after team manager assigns on another tab/device)
+  useEffect(() => {
+    const handleFocus = () => {
+      reloadAssignments();
+    };
+    window.addEventListener('focus', handleFocus);
+    // 30-second live polling while on assignments page
+    const interval = setInterval(reloadAssignments, 30000);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      clearInterval(interval);
+    };
+  }, [eventId]);
 
   // Assign a student to a program (with optional sub-team)
   const handleAssignStudent = async (programId, studentId, subTeamNum = 1) => {
@@ -592,6 +611,18 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                 <option value="stage">Stage</option>
                 <option value="off_stage">Off-Stage</option>
               </select>
+
+              {/* Refresh Assignments Button */}
+              <button
+                type="button"
+                onClick={reloadAssignments}
+                disabled={isReloading}
+                className="px-3 py-2 bg-white border border-gray-200 hover:border-indigo-300 rounded-xl text-xs font-semibold text-gray-700 hover:text-indigo-600 flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+                title="Refresh assignments from server"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-gray-500 ${isReloading ? 'animate-spin text-indigo-600' : ''}`} />
+                <span className="hidden sm:inline">Refresh</span>
+              </button>
             </div>
 
             {/* Typing Search Pad */}
@@ -752,6 +783,7 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                                 setSelectedDrawerStudentIds([]);
                                 setDrawerSearch('');
                                 setDrawerSubTeam(1);
+                                reloadAssignments();
                               }}
                               className={`px-3.5 py-1.5 text-xs font-bold rounded-xl transition-all shadow-2xs inline-flex items-center space-x-1.5 cursor-pointer ${
                                 isFull
@@ -813,7 +845,9 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
         const teamsFromCap = (activeDrawerProgram.team_size && (activeDrawerProgram.max_participants_per_team || activeDrawerProgram.max_participants)) 
           ? Math.floor((activeDrawerProgram.max_participants_per_team || activeDrawerProgram.max_participants) / activeDrawerProgram.team_size) 
           : 1;
-        const totalSubTeams = isTeamProgram ? Math.max(teamsFromField, teamsFromCap, 1) : 1;
+        const existingSubNums = drawerAssignments.map(a => Number(a.sub_team_number ?? a.sub_team ?? 1) || 1);
+        const maxExistingSubTeam = existingSubNums.length > 0 ? Math.max(...existingSubNums) : 1;
+        const totalSubTeams = isTeamProgram ? Math.max(teamsFromField, teamsFromCap, maxExistingSubTeam, 1) : 1;
 
         const maxLimit = !isTeamProgram ? activeDrawerProgram.max_participants : null;
         const isIndividualLimitReached = !isTeamProgram && maxLimit && drawerAssignments.length >= maxLimit;
@@ -943,14 +977,24 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                         {paginatedSubTeamNumbers.map((subNum) => {
                           const subMembers = drawerAssignments.filter(a => (a.sub_team_number ?? a.sub_team ?? 1) === subNum);
                           const hasLeader = subMembers.some(m => m.is_leader);
+                          const isOverConfiguredLimit = subNum > teamsFromField;
 
                           return (
-                            <div key={subNum} className="border border-gray-200/80 rounded-2xl p-3 bg-white space-y-2.5 shadow-2xs">
+                            <div key={subNum} className={`border rounded-2xl p-3 bg-white space-y-2.5 shadow-2xs ${
+                              isOverConfiguredLimit ? 'border-amber-300 ring-1 ring-amber-200' : 'border-gray-200/80'
+                            }`}>
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center space-x-2">
-                                  <span className="px-2.5 py-0.5 text-xs font-bold bg-indigo-600 text-white rounded-md">
+                                  <span className={`px-2.5 py-0.5 text-xs font-bold rounded-md ${
+                                    isOverConfiguredLimit ? 'bg-amber-600 text-white' : 'bg-indigo-600 text-white'
+                                  }`}>
                                     Sub-Team {subNum}
                                   </span>
+                                  {isOverConfiguredLimit && (
+                                    <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 rounded-md">
+                                      Exceeds Max ({teamsFromField})
+                                    </span>
+                                  )}
                                   {hasLeader && (
                                     <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 rounded-md flex items-center space-x-1">
                                       <Crown className="w-3 h-3 text-amber-600 fill-amber-500" />
@@ -974,17 +1018,37 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                                     const studentName = getAssignmentStudentName(assignment);
                                     const chestNo = getAssignmentChestNumber(assignment);
                                     const isLeader = assignment.is_leader;
+                                    const assignedBy = assignment.assigned_by || assignment.assigned_by_name;
+                                    const isTeamManager = assignment.assigned_by_role === 'Team Manager' || (assignedBy && assignedBy.includes('Team Manager'));
 
                                     return (
                                       <div key={assignment.id} className="p-2.5 bg-gray-50/60 rounded-xl border border-gray-200/60 flex items-center justify-between text-xs hover:border-gray-300 transition-colors">
-                                        <div className="flex items-center space-x-2">
-                                          <span className="font-bold text-gray-900">{studentName}</span>
-                                          {chestNo && <span className="text-[11px] text-gray-500 font-medium">(#{chestNo})</span>}
-                                          {isLeader && (
-                                            <span className="px-1.5 py-0.5 text-[9px] font-bold bg-indigo-600 text-white rounded flex items-center space-x-0.5">
-                                              <Crown className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
-                                              <span>LEADER</span>
-                                            </span>
+                                        <div className="flex flex-col gap-0.5">
+                                          <div className="flex items-center space-x-2">
+                                            <span className="font-bold text-gray-900">{studentName}</span>
+                                            {chestNo && <span className="text-[11px] text-gray-500 font-medium">(#{chestNo})</span>}
+                                            {isLeader && (
+                                              <span className="px-1.5 py-0.5 text-[9px] font-bold bg-indigo-600 text-white rounded flex items-center space-x-0.5">
+                                                <Crown className="w-2.5 h-2.5 text-amber-400 fill-amber-400" />
+                                                <span>LEADER</span>
+                                              </span>
+                                            )}
+                                          </div>
+                                          {assignedBy && (
+                                            <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
+                                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded font-medium ${
+                                                isTeamManager
+                                                  ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                                  : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                              }`}>
+                                                {assignedBy}
+                                              </span>
+                                              {assignment.assigned_at && (
+                                                <span className="text-gray-400">
+                                                  {new Date(assignment.assigned_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                              )}
+                                            </div>
                                           )}
                                         </div>
 
@@ -1050,12 +1114,30 @@ const EventAssignments = ({ event, eventId, categories = [] }) => {
                           const studentId = getAssignmentStudentId(assignment);
                           const studentName = getAssignmentStudentName(assignment);
                           const chestNo = getAssignmentChestNumber(assignment);
+                          const assignedBy = assignment.assigned_by || assignment.assigned_by_name;
+                          const isTeamManager = assignment.assigned_by_role === 'Team Manager' || (assignedBy && assignedBy.includes('Team Manager'));
 
                           return (
                             <div key={assignment.id} className="p-2.5 bg-gray-50/60 rounded-xl border border-gray-200/60 flex items-center justify-between text-xs">
-                              <div>
+                              <div className="flex flex-col gap-0.5">
                                 <div className="font-bold text-gray-900">{studentName}</div>
-                                {chestNo && <div className="text-[11px] text-gray-500 font-medium mt-0.5">Chest #{chestNo}</div>}
+                                {chestNo && <div className="text-[11px] text-gray-500 font-medium">Chest #{chestNo}</div>}
+                                {assignedBy && (
+                                  <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
+                                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded font-medium ${
+                                      isTeamManager
+                                        ? 'bg-amber-50 text-amber-800 border border-amber-200'
+                                        : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                    }`}>
+                                      {assignedBy}
+                                    </span>
+                                    {assignment.assigned_at && (
+                                      <span className="text-gray-400">
+                                        {new Date(assignment.assigned_at).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
                               </div>
 
                               <button
