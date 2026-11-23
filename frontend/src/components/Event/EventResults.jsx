@@ -277,6 +277,13 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
       // Refresh full programs list to get updated sequential result_numbers
       await fetchInitialData();
       fetchTeamPoints();
+      if (drawerProgram && drawerProgram.id === program.id) {
+        setDrawerProgram(prev => prev ? {
+          ...prev,
+          is_published: newPublishStatus,
+          result_status: newPublishStatus ? 'published' : 'submitted',
+        } : null);
+      }
       setMessage(`Results for ${program.name} ${newPublishStatus ? 'published' : 'unpublished'} successfully!`);
       setTimeout(() => setMessage(''), 4000);
     } catch (error) {
@@ -361,9 +368,10 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
 
   // Helper to determine status category for badge
   const getProgramStatus = (program) => {
+    if (!program) return 'pending';
     if (program.is_published) return 'published';
     if (program.result_status === 'published') return 'published';
-    if (program.result_status === 'submitted' || program.is_finished) return 'submitted';
+    if (program.result_status === 'submitted') return 'submitted';
     if (program.result_status === 'in_progress') return 'in_progress';
     return 'pending';
   };
@@ -800,8 +808,8 @@ const EventResults = ({ categories: dynamicCategories = [], readOnly = false, ev
                     onChange={(e) => setPointsFilter(e.target.value)}
                     className="px-3 py-2 text-xs font-bold text-gray-800 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none cursor-pointer pr-8 appearance-none"
                   >
-                    <option value="all">All Results (Total)</option>
                     <option value="published">Published Results</option>
+                    <option value="all">All Results (Total)</option>
                   </select>
                   <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>

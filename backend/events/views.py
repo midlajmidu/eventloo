@@ -4378,7 +4378,9 @@ class ProgramResultViewSet(viewsets.ModelViewSet):
                         if field in mark_data:
                             value = mark_data[field]
                             if field == 'code_letter':
-                                value = str(value or '').strip().upper() if is_attending else ''
+                                # Preserve assigned secret code letter even if participant is currently unmarked/absent
+                                clean_val = str(value or '').strip().upper()
+                                value = clean_val or getattr(result, 'code_letter', '') or ''
                             elif field.startswith('judge'):
                                 if not is_attending or value is None or str(value).strip() == '':
                                     value = None

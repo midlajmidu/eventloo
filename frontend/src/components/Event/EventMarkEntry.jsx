@@ -321,18 +321,17 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     }
 
     if (!isDraft) {
-      // Attending participants have marks entered or a code letter provided
-      const attending = participants.filter(p => hasAnyJudgeMark(p) || (p.code_letter || '').trim() !== '');
+      // Check that at least one participant has marks entered before submitting
+      const attendingWithMarks = participants.filter(hasAnyJudgeMark);
 
-      if (attending.length === 0) {
-        const err = 'Enter marks for at least one attending participant before submitting.';
+      if (attendingWithMarks.length === 0) {
+        const err = 'No marks entered. To clear all scores, click "Clear All Marks" or click "Save Draft".';
         setDrawerError(err);
         setMessage(err);
         return;
       }
 
       // Check that every attending participant with marks has a code letter
-      const attendingWithMarks = participants.filter(hasAnyJudgeMark);
       const missingCode = attendingWithMarks.find(p => !(p.code_letter || '').trim());
       if (missingCode) {
         const err = `Enter a secret code letter for Chest #${missingCode.chest_number || ''} before submitting.`;
@@ -441,9 +440,11 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
         );
         window.dispatchEvent(new CustomEvent('pointsUpdated', { detail: { eventId: parseInt(eventId) } }));
         closeDrawer();
+        fetchPrograms();
       } else {
         setMessage(`Draft saved successfully for ${selectedProgram.name}.`);
         setTimeout(() => setMessage(''), 3000);
+        fetchPrograms();
       }
     } catch (error) {
       console.error('Error submitting marks:', error);
@@ -482,10 +483,12 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     const matchesSearch = !searchQuery || prog.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = !categoryFilter || prog.category === categoryFilter;
     
-    const isCompleted = completedPrograms.has(prog.id);
+    const isCompleted = ['submitted', 'published'].includes(prog.result_status) || completedPrograms.has(prog.id);
+    const isInProgress = prog.result_status === 'in_progress';
     let matchesStatus = true;
     if (statusFilter === 'completed') matchesStatus = isCompleted;
-    if (statusFilter === 'pending') matchesStatus = !isCompleted;
+    if (statusFilter === 'in_progress') matchesStatus = isInProgress;
+    if (statusFilter === 'pending') matchesStatus = !isCompleted && !isInProgress;
 
     return matchesSearch && matchesCategory && matchesStatus;
   });
@@ -497,13 +500,23 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     currentPage * pageSize
   );
 
-  const getStatusBadge = (programId) => {
-    const hasMarks = completedPrograms.has(programId);
-    if (hasMarks) {
+  const getStatusBadge = (progOrId) => {
+    const prog = typeof progOrId === 'object' ? progOrId : programs.find(p => p.id === progOrId);
+    const progId = prog?.id || progOrId;
+    const isCompleted = ['submitted', 'published'].includes(prog?.result_status) || completedPrograms.has(progId);
+    if (isCompleted) {
       return (
         <span className="px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-100/80 rounded-full inline-flex items-center">
           <CheckCircle className="w-3 h-3 mr-1 text-emerald-600" />
           Marks Entered
+        </span>
+      );
+    }
+    if (prog?.result_status === 'in_progress') {
+      return (
+        <span className="px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-100/80 rounded-full inline-flex items-center">
+          <AlertCircle className="w-3 h-3 mr-1 text-indigo-600" />
+          In Progress
         </span>
       );
     }
@@ -578,6 +591,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
           >
             <option value="">All Statuses</option>
             <option value="completed">Marks Entered</option>
+            <option value="in_progress">In Progress (Draft)</option>
             <option value="pending">Pending</option>
           </select>
         </div>
@@ -621,7 +635,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                           {prog.gender || 'General'}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          {getStatusBadge(prog.id)}
+                          {getStatusBadge(prog)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right">
                           <button
@@ -676,7 +690,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                         </div>
                       </div>
                       <div className="shrink-0">
-                        {getStatusBadge(prog.id)}
+                        {getStatusBadge(prog)}
                       </div>
                     </div>
 
