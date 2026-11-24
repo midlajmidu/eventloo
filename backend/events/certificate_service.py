@@ -575,17 +575,30 @@ def _get_badge_icon_image(name, color='#4338CA'):
     Prioritizes pre-rendered assets from assets/badge_icons/ so it NEVER fails
     on servers without fitz/PyMuPDF installed.
     """
-    key = (name, color)
+    aliases = {
+        'team': 'trophy',
+        'category': 'stack',
+        'layers': 'stack',
+        'grade': 'award',
+        'class': 'award',
+        'stage': 'theater',
+        'on_stage': 'theater',
+        'off_stage': 'palette',
+        'sports': 'run',
+        'sport': 'run',
+    }
+    canonical_name = aliases.get(name, name)
+    key = (canonical_name, color)
     if key in _BADGE_ICON_CACHE:
         return _BADGE_ICON_CACHE[key]
 
     # 1. Primary: Load pre-rendered high-res PNG asset from disk
     from django.conf import settings
     asset_candidates = [
-        os.path.join(settings.BASE_DIR, 'assets', 'badge_icons', f'{name}.png'),
-        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'assets', 'badge_icons', f'{name}.png')),
-        os.path.abspath(os.path.join(os.getcwd(), 'backend', 'assets', 'badge_icons', f'{name}.png')),
-        os.path.abspath(os.path.join(os.getcwd(), 'assets', 'badge_icons', f'{name}.png')),
+        os.path.join(settings.BASE_DIR, 'assets', 'badge_icons', f'{canonical_name}.png'),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'assets', 'badge_icons', f'{canonical_name}.png')),
+        os.path.abspath(os.path.join(os.getcwd(), 'backend', 'assets', 'badge_icons', f'{canonical_name}.png')),
+        os.path.abspath(os.path.join(os.getcwd(), 'assets', 'badge_icons', f'{canonical_name}.png')),
     ]
     for asset_path in asset_candidates:
         if os.path.exists(asset_path):
@@ -603,10 +616,11 @@ def _get_badge_icon_image(name, color='#4338CA'):
         'award': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="6" /><polyline points="9 14.2 9 21 12 19 15 21 15 14.2" /></svg>""",
         'calendar': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="16" rx="2" /><line x1="16" y1="3" x2="16" y2="7" /><line x1="8" y1="3" x2="8" y2="7" /><line x1="4" y1="11" x2="20" y2="11" /></svg>""",
         'theater': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="1.5" /><path d="M8 4c0 3 -2 6 -3 8c1 3 1 6 -1 8" /><path d="M16 4c0 3 2 6 3 8c-1 3 -1 6 1 8" /><line x1="3" y1="12" x2="6" y2="12" /><line x1="18" y1="12" x2="21" y2="12" /></svg>""",
-        'run': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="1.2" fill="{color}" /><path d="M4 17l5 1l.75 -1.5" /><path d="M15 21l0 -4l-4 -3l1 -6" /><path d="M7 12l0 -3l5 -1l3 3l3 1" /></svg>"""
+        'run': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="13" cy="4" r="1.2" fill="{color}" /><path d="M4 17l5 1l.75 -1.5" /><path d="M15 21l0 -4l-4 -3l1 -6" /><path d="M7 12l0 -3l5 -1l3 3l3 1" /></svg>""",
+        'palette': f"""<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" stroke-width="2" stroke="{color}" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="{color}" /><circle cx="17.5" cy="10.5" r=".5" fill="{color}" /><circle cx="8.5" cy="7.5" r=".5" fill="{color}" /><circle cx="6.5" cy="12.5" r=".5" fill="{color}" /><path d="M12 21a9 9 0 0 0 9 -9c0 -4.97 -4.03 -9 -9 -9a9 9 0 0 0 -9 9c0 4 3 6 4 6c.55 0 1 .45 1 1c0 1.25 -.75 2 -2 2" /></svg>""",
     }
 
-    svg = svg_defs.get(name)
+    svg = svg_defs.get(canonical_name)
     if not svg:
         return None
     try:
@@ -617,7 +631,7 @@ def _get_badge_icon_image(name, color='#4338CA'):
         _BADGE_ICON_CACHE[key] = reader
         return reader
     except Exception as exc:
-        logger.warning("Failed to render vector badge icon %s: %s", name, exc)
+        logger.warning("Failed to render vector badge icon %s: %s", canonical_name, exc)
         return None
 
 
@@ -1008,7 +1022,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         for pt in event_program_types:
             c = type_counts.get(pt.code, 0)
             norm_code = (pt.code or '').lower()
-            kind = 'theater' if 'stage' in norm_code and 'off' not in norm_code else ('stack' if 'off' in norm_code else ('run' if 'sport' in norm_code else 'award'))
+            kind = 'theater' if 'stage' in norm_code and 'off' not in norm_code else ('palette' if 'off' in norm_code else ('run' if 'sport' in norm_code else 'award'))
             cols_to_show.append((pt.name.title(), c, kind))
     else:
         active_pts = [pt for pt in event_program_types if type_counts.get(pt.code, 0) > 0]
@@ -1018,12 +1032,12 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
         for pt in selected_pts:
             c = type_counts.get(pt.code, 0)
             norm_code = (pt.code or '').lower()
-            kind = 'theater' if 'stage' in norm_code and 'off' not in norm_code else ('stack' if 'off' in norm_code else ('run' if 'sport' in norm_code else 'award'))
+            kind = 'theater' if 'stage' in norm_code and 'off' not in norm_code else ('palette' if 'off' in norm_code else ('run' if 'sport' in norm_code else 'award'))
             cols_to_show.append((pt.name.title(), c, kind))
 
     num_cols = max(1, len(cols_to_show))
 
-    stats_top = card_top - 150.5
+    stats_top = card_top - 149.0
     stats_w = card_w - 16.0
     stats_left = card_x + 8.0
     col_w = stats_w / float(num_cols)
@@ -1032,7 +1046,7 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     sh_h = 13.0
     sh_y = stats_top - sh_h
     sh_cy = sh_y + sh_h / 2.0
-    num_y = card_top - 174.5
+    num_y = card_top - 176.5
 
     for i, (col_label, count_val, icon_key) in enumerate(cols_to_show):
         cx = stats_left + (i + 0.5) * col_w
@@ -1123,9 +1137,9 @@ def _draw_paper_badge(pdf, cell_x, cell_y, badge_width, badge_height, recipient,
     except Exception as qr_err:
         logger.warning("Badge QR generation failed: %s", qr_err)
 
-    pdf.setFont('Helvetica-Bold', 4.8)
+    pdf.setFont('Helvetica-Bold', 4.0)
     pdf.setFillColor(HexColor('#4338CA'))
-    pdf.drawCentredString(qr_box_x + qr_box_w / 2.0, qr_box_y + 3.8, 'SCAN TO VERIFY')
+    pdf.drawCentredString(qr_box_x + qr_box_w / 2.0, qr_box_y + 4.0, 'SCAN TO VERIFY')
 
     # 11. Footer Branding: "Powered by Eventloo" with Refined Alignment & Modern Typography
     eventloo_icon_path = _resolve_eventloo_icon_path()
