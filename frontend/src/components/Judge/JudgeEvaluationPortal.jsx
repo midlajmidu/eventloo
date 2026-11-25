@@ -39,6 +39,44 @@ import {
 import EventlooLogo, { EventlooIcon } from '../common/EventlooLogo';
 import { judgePortalAPI } from '../../services/api';
 
+// Helper to sort candidates strictly by Code Letter (A, B, C, D...) matching performance sequence
+export const sortCandidatesByCodeLetter = (candidates = []) => {
+  return [...candidates].sort((a, b) => {
+    const codeA = String(a?.code_letter || '').trim().toUpperCase();
+    const codeB = String(b?.code_letter || '').trim().toUpperCase();
+
+    const cleanA = codeA.replace(/^(?:CODE[\s\-_]*)/i, '').trim();
+    const cleanB = codeB.replace(/^(?:CODE[\s\-_]*)/i, '').trim();
+
+    if (!cleanA && !cleanB) return 0;
+    if (!cleanA) return 1;
+    if (!cleanB) return -1;
+
+    const isAlphaA = /^[A-Z]+$/.test(cleanA);
+    const isAlphaB = /^[A-Z]+$/.test(cleanB);
+
+    if (isAlphaA && isAlphaB) {
+      if (cleanA.length !== cleanB.length) {
+        return cleanA.length - cleanB.length;
+      }
+      return cleanA.localeCompare(cleanB);
+    }
+    if (isAlphaA) return -1;
+    if (isAlphaB) return 1;
+
+    const isDigitA = /^\d+$/.test(cleanA);
+    const isDigitB = /^\d+$/.test(cleanB);
+
+    if (isDigitA && isDigitB) {
+      return parseInt(cleanA, 10) - parseInt(cleanB, 10);
+    }
+    if (isDigitA) return -1;
+    if (isDigitB) return 1;
+
+    return cleanA.localeCompare(cleanB, undefined, { numeric: true, sensitivity: 'base' });
+  });
+};
+
 const JudgeEvaluationPortal = () => {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -253,11 +291,15 @@ const JudgeEvaluationPortal = () => {
 
     try {
       const res = await judgePortalAPI.getScoreSheet(token, programId);
-      setScoreSheetData(res.data);
+      const sortedCandidates = sortCandidatesByCodeLetter(res.data?.candidates || []);
+      setScoreSheetData({
+        ...res.data,
+        candidates: sortedCandidates,
+      });
 
       // Initialize candidate scores
       const initialMap = {};
-      (res.data.candidates || []).forEach((c) => {
+      sortedCandidates.forEach((c) => {
         initialMap[c.result_id] = {
           mark: c.current_mark !== null && c.current_mark !== undefined ? String(c.current_mark) : '',
           comments: c.comments || '',
@@ -325,7 +367,7 @@ const JudgeEvaluationPortal = () => {
     });
 
     if (isFinalLock) {
-      const candidates = scoreSheetData?.candidates || [];
+      const candidates = sortCandidatesByCodeLetter(scoreSheetData?.candidates || []);
       const unscored = candidates.filter((c) => {
         const val = candidatesScores[c.result_id]?.mark;
         return val === '' || val === null || val === undefined;
@@ -547,7 +589,7 @@ const JudgeEvaluationPortal = () => {
   if (activeView === 'eval' && selectedProgramId) {
     const isLocked = Boolean(scoreSheetData?.assignment?.is_locked);
     const maxMark = scoreSheetData?.criteria?.max_mark_per_judge || 100;
-    const candidates = scoreSheetData?.candidates || [];
+    const candidates = sortCandidatesByCodeLetter(scoreSheetData?.candidates || []);
     const currentCandidate = candidates[selectedCandidateIndex] || candidates[0];
     const currentScore = currentCandidate ? (candidatesScores[currentCandidate.result_id]?.mark ?? '') : '';
     const currentComments = currentCandidate ? (candidatesScores[currentCandidate.result_id]?.comments ?? '') : '';

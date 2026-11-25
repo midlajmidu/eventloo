@@ -11152,6 +11152,21 @@ def judge_score_sheet(request, token, program_id):
             for r in res_list:
                 ProgramResult.objects.filter(id=r.id).update(code_letter=r.code_letter)
 
+    # Sort candidates strictly by Code Letter order (A, B, C, D...) matching live performance sequence
+    import re
+    def code_letter_sort_key(r):
+        code = str(getattr(r, 'code_letter', '') or '').strip().upper()
+        clean = re.sub(r'^(?:CODE[\s\-_]*)', '', code).strip()
+        if not clean:
+            return (3, getattr(r, 'id', 0))
+        if clean.isalpha():
+            return (0, len(clean), clean)
+        if clean.isdigit():
+            return (1, int(clean))
+        return (2, clean)
+
+    res_list.sort(key=code_letter_sort_key)
+
     candidates = []
     for idx, r in enumerate(res_list, 1):
         if program.is_team_based:
