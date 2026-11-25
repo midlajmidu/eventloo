@@ -42,36 +42,88 @@ export function Landing({ data, preview }: ThemePageProps) {
   return (
     <Shell data={data} preview={preview}>
       {/* Hero */}
-      <section className="relative overflow-hidden">
-        <img src={coast} alt="Watercolor lighthouse on a coastal cliff at sunrise" width={1920} height={896}
-          className="pointer-events-none relative w-full object-cover sm:absolute sm:inset-0 sm:h-full sm:object-right" style={{ transform: `translateY(${y}px)` }} />
-        <div className="relative mx-auto flex max-w-7xl flex-col justify-center px-6 py-10 sm:min-h-[560px] sm:px-8 lg:min-h-[640px]">
-          <div className="max-w-xl">
-            <h1 className="animate-rise font-editorial text-6xl leading-[1.02] text-primary sm:text-7xl lg:text-8xl">
+      <section className="relative overflow-hidden bg-background">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <img
+            src={coast}
+            alt="Watercolor lighthouse on a coastal cliff at sunrise"
+            width={1920}
+            height={896}
+            className="h-full w-full object-cover object-right-top opacity-30 sm:opacity-100 sm:object-right transition-opacity duration-700"
+            style={{ transform: `translateY(${y}px)` }}
+          />
+          {/* Subtle gradient vignette on mobile to guarantee crystal-clear editorial readability */}
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/90 to-background/30 sm:hidden" />
+          <div className="hidden sm:block absolute inset-y-0 left-0 w-3/5 bg-gradient-to-r from-background via-background/80 to-transparent" />
+        </div>
+
+        <div className="relative mx-auto flex max-w-7xl flex-col justify-center px-6 py-12 sm:min-h-[540px] sm:px-8 lg:min-h-[600px] lg:py-16">
+          <div className="max-w-2xl">
+            {/* Festival Context Eyebrow - Ensures event info is never lost */}
+            <div className="animate-rise flex flex-wrap items-center gap-2 text-[11px] sm:text-xs font-semibold tracking-[0.25em] text-gold uppercase mb-3 sm:mb-4">
+              <span>{ev?.name || "The Annual Festival"}</span>
+              {dates && (
+                <>
+                  <span className="text-gold/40">·</span>
+                  <span className="font-normal text-muted-foreground tracking-wider">{dates}</span>
+                </>
+              )}
+            </div>
+
+            {/* Editorial Title - Minimal, balanced and responsive */}
+            <h1 className="animate-rise font-editorial text-3xl sm:text-5xl md:text-6xl lg:text-7xl leading-[1.12] sm:leading-[1.08] text-primary tracking-tight break-words">
               {words.join(" ")}
-              {last && <span className="block font-serif text-gold italic">{last}</span>}
+              {last && <span className="block font-serif text-gold italic font-normal mt-0.5 sm:mt-1">{last}</span>}
             </h1>
-            {ev?.tagline && <p className="mt-6 animate-rise text-xs tracking-[0.35em] text-foreground/80 uppercase [animation-delay:.2s]">{ev.tagline}</p>}
-            <a href="#explore" className="mt-8 inline-flex animate-rise items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm text-primary-foreground transition hover:gap-3 [animation-delay:.35s]">
-              Explore Festival <ArrowRight className="h-4 w-4" />
-            </a>
+
+            {/* Tagline */}
+            {ev?.tagline && (
+              <p className="mt-4 sm:mt-5 animate-rise text-xs sm:text-sm tracking-[0.25em] text-foreground/80 uppercase [animation-delay:.2s] font-medium">
+                {ev.tagline}
+              </p>
+            )}
+
+            {/* Quick Venue Badge on mobile/tablet if available */}
+            {ev?.venue && (
+              <div className="mt-3 animate-rise flex items-center gap-1.5 text-xs text-muted-foreground [animation-delay:.25s]">
+                <MapPin className="h-3.5 w-3.5 text-gold shrink-0" />
+                <span>{ev.venue}</span>
+              </div>
+            )}
+
+            {/* Primary CTA Strip */}
+            <div className="mt-7 sm:mt-8 animate-rise flex flex-wrap items-center gap-3 [animation-delay:.35s]">
+              <a
+                href="#explore"
+                className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 sm:px-6 sm:py-3 text-xs sm:text-sm font-semibold text-primary-foreground shadow-xs transition hover:gap-3 hover:opacity-95 cursor-pointer"
+              >
+                Explore Festival <ArrowRight className="h-4 w-4" />
+              </a>
+              <Link
+                to="/results"
+                search={{ preview }}
+                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 backdrop-blur px-4 py-2.5 sm:px-5 sm:py-3 text-xs sm:text-sm font-semibold text-foreground transition hover:border-gold/60 hover:text-primary cursor-pointer"
+              >
+                Live Results
+              </Link>
+            </div>
           </div>
         </div>
         <Wave className="absolute inset-x-0 bottom-0 hidden h-16 w-full text-background sm:block" />
       </section>
 
       {/* Identity */}
-      <section className="px-6 pt-10 text-center">
+      <section className="px-6 pt-10 sm:pt-14 text-center">
         <Reveal>
-          <p className="text-xs tracking-[0.35em] text-gold uppercase">The Annual Festival</p>
-          <h2 className="mt-3 font-editorial text-6xl tracking-wide text-primary sm:text-8xl">{ev?.name}</h2>
+          <p className="text-[11px] sm:text-xs tracking-[0.3em] text-gold uppercase font-semibold">Official Festival Portal</p>
+          <h2 className="mt-2.5 font-editorial text-2xl sm:text-4xl lg:text-5xl tracking-tight text-primary font-normal">{ev?.name}</h2>
           {(dates || ev?.venue) && (
-            <div className="mt-6 flex flex-wrap justify-center gap-3 text-sm">
+            <div className="mt-5 flex flex-wrap justify-center gap-2.5 text-xs sm:text-sm">
               {dates && <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2"><CalendarDays className="h-4 w-4 text-gold" />{dates}</span>}
               {ev?.venue && <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2"><MapPin className="h-4 w-4 text-gold" />{ev.venue}</span>}
             </div>
           )}
-          <Ornament className="mt-8" />
+          <Ornament className="mt-7 sm:mt-8" />
         </Reveal>
       </section>
 
@@ -98,7 +150,7 @@ export function Landing({ data, preview }: ThemePageProps) {
               return (
                 <Reveal key={s.label + i} delay={i * 100} className="text-center">
                   <Icon className="mx-auto h-7 w-7 text-gold" strokeWidth={1.4} />
-                  <p className="mt-3 font-editorial text-5xl text-primary">{s.value}</p>
+                  <p className="mt-2.5 font-editorial text-3xl sm:text-4xl lg:text-5xl text-primary font-normal">{s.value}</p>
                   <p className="mt-1 text-xs tracking-[0.25em] text-muted-foreground uppercase">{s.label}</p>
                 </Reveal>
               );
@@ -116,7 +168,7 @@ export function Landing({ data, preview }: ThemePageProps) {
               <div className="grid grid-cols-4 divide-x divide-border rounded-[2rem] border border-gold/25 px-2 py-6 sm:py-8" aria-live="polite">
                 {parts.map((p) => (
                   <div key={p.l}>
-                    <p className="font-editorial text-4xl text-primary tabular-nums sm:text-6xl">{pad(p.v)}</p>
+                    <p className="font-editorial text-3xl sm:text-4xl lg:text-5xl text-primary tabular-nums font-normal">{pad(p.v)}</p>
                     <p className="mt-1 text-xs text-muted-foreground sm:text-sm">{p.l}</p>
                   </div>
                 ))}

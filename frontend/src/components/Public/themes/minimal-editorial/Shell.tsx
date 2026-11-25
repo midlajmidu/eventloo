@@ -34,10 +34,10 @@ export function Ornament({ className = "" }: { className?: string }) {
 
 export function SectionTitle({ children }: { children: string }) {
   return (
-    <div className="flex items-center justify-center gap-5">
-      <span className="hidden h-px w-24 bg-gradient-to-r from-transparent to-gold/70 sm:block" />
-      <h2 className="font-editorial text-3xl text-primary sm:text-4xl">{children}</h2>
-      <span className="hidden h-px w-24 bg-gradient-to-l from-transparent to-gold/70 sm:block" />
+    <div className="flex items-center justify-center gap-4 sm:gap-5">
+      <span className="hidden h-px w-16 sm:w-24 bg-gradient-to-r from-transparent to-gold/70 sm:block" />
+      <h2 className="font-editorial text-2xl sm:text-3xl lg:text-4xl text-primary font-normal tracking-tight">{children}</h2>
+      <span className="hidden h-px w-16 sm:w-24 bg-gradient-to-l from-transparent to-gold/70 sm:block" />
     </div>
   );
 }
@@ -137,11 +137,11 @@ export function Shell({ data, preview, children }: { data: SiteData; preview?: s
 
 export function PageIntro({ eyebrow, title, subtitle }: { eyebrow?: string | undefined; title: string; subtitle: string }) {
   return (
-    <section className="mx-auto max-w-4xl px-6 pb-12 pt-16 text-center">
-      {eyebrow && <p className="text-xs tracking-[0.3em] text-gold uppercase">{eyebrow}</p>}
-      <h1 className="mt-3 font-editorial text-5xl text-primary sm:text-6xl">{title}</h1>
-      <Ornament className="mt-5" />
-      <p className="mx-auto mt-5 max-w-xl text-muted-foreground">{subtitle}</p>
+    <section className="mx-auto max-w-4xl px-6 pb-8 pt-10 sm:pb-12 sm:pt-16 text-center">
+      {eyebrow && <p className="text-[11px] sm:text-xs tracking-[0.25em] text-gold uppercase font-semibold">{eyebrow}</p>}
+      <h1 className="mt-2.5 font-editorial text-3xl sm:text-4xl lg:text-5xl text-primary font-normal tracking-tight">{title}</h1>
+      <Ornament className="mt-4 sm:mt-5" />
+      <p className="mx-auto mt-4 max-w-xl text-xs sm:text-sm text-muted-foreground leading-relaxed">{subtitle}</p>
     </section>
   );
 }
