@@ -1013,7 +1013,9 @@ export const eventJudgesAPI = {
   assignPrograms: (judgeId, payload) => api.post(`judges/${judgeId}/assign_programs/`, payload),
   sendInvite: (judgeId) => api.post(`judges/${judgeId}/send_invite/`),
   regenerateLink: (judgeId) => api.post(`judges/${judgeId}/regenerate_link/`),
-  getQrCode: (judgeId) => api.get(`judges/${judgeId}/qr_code/`),
+  getQrCode: (judgeId, origin) => api.get(`judges/${judgeId}/qr_code/`, { 
+    params: { origin: origin || (typeof window !== 'undefined' ? window.location.origin : '') } 
+  }),
   getOverview: (eventId) => api.get('judges/event_overview/', { params: { event: eventId } }),
 };
 

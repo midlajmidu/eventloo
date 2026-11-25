@@ -68,8 +68,10 @@ const EventJudges = ({ event, eventId, onRefresh, categories = [] }) => {
   const [showQrModal, setShowQrModal] = useState(false);
   const [qrJudge, setQrJudge] = useState(null);
   const [qrSvg, setQrSvg] = useState('');
+  const [qrPortalUrl, setQrPortalUrl] = useState('');
   const [loadingQr, setLoadingQr] = useState(false);
   const [copiedPin, setCopiedPin] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Action Menu dropdown state (by judge id)
   const [activeMenuJudgeId, setActiveMenuJudgeId] = useState(null);
@@ -307,15 +309,29 @@ const EventJudges = ({ event, eventId, onRefresh, categories = [] }) => {
     setShowQrModal(true);
     setLoadingQr(true);
     setCopiedPin(false);
+    setCopiedLink(false);
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const fallbackUrl = `${origin}/judge/eval/${judge.access_token}`;
+    setQrPortalUrl(fallbackUrl);
     try {
-      const res = await eventJudgesAPI.getQrCode(judge.id);
-      setQrSvg(res.data.qr_code_svg);
+      const res = await eventJudgesAPI.getQrCode(judge.id, origin);
+      setQrSvg(res.data?.qr_code_svg || '');
+      if (res.data?.portal_url) {
+        setQrPortalUrl(res.data.portal_url);
+      }
     } catch (err) {
       console.error('Failed to generate QR:', err);
       setQrSvg('');
     } finally {
       setLoadingQr(false);
     }
+  };
+
+  const handleCopyLink = (url) => {
+    if (!url) return;
+    navigator.clipboard.writeText(url);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
   };
 
   const handleCopyPin = (pin) => {
@@ -1275,13 +1291,18 @@ const EventJudges = ({ event, eventId, onRefresh, categories = [] }) => {
             
             {/* Header */}
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-gray-900">
-                <Smartphone className="h-4 w-4 text-indigo-600" />
-                <span>Tablet Evaluation Scan</span>
+              <div className="flex items-center gap-2 text-xs font-bold text-gray-900">
+                <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                  <Smartphone className="h-4 w-4" />
+                </div>
+                <div className="text-left">
+                  <div className="font-bold text-gray-900 leading-tight">Tablet Magic Link & QR</div>
+                  <div className="text-[11px] font-normal text-gray-500">Scan to evaluate without login</div>
+                </div>
               </div>
               <button
                 onClick={() => setShowQrModal(false)}
-                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 cursor-pointer"
+                className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100 transition cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1293,34 +1314,68 @@ const EventJudges = ({ event, eventId, onRefresh, categories = [] }) => {
             </div>
 
             {/* QR SVG Container */}
-            <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl mx-auto inline-block mb-3 min-w-[220px] min-h-[220px] flex items-center justify-center shadow-2xs">
+            <div className="p-4 bg-white border border-gray-200 rounded-2xl mx-auto inline-block mb-3 min-w-[220px] min-h-[220px] shadow-xs flex items-center justify-center">
               {loadingQr ? (
                 <RefreshCw className="h-8 w-8 animate-spin text-indigo-600" />
               ) : qrSvg ? (
-                <div dangerouslySetInnerHTML={{ __html: qrSvg }} />
+                <div 
+                  className="w-[200px] h-[200px] flex items-center justify-center [&>svg]:w-full [&>svg]:h-full"
+                  dangerouslySetInnerHTML={{ 
+                    __html: qrSvg.replace(/<\?xml[\s\S]*?\?>/i, '').replace(/<!DOCTYPE[\s\S]*?>/i, '') 
+                  }} 
+                />
               ) : (
-                <span className="text-xs text-red-500">Failed to render QR Code</span>
+                <div className="py-6 px-4 text-center">
+                  <p className="text-xs font-semibold text-rose-600 mb-1">Failed to generate QR</p>
+                  <button 
+                    onClick={() => handleOpenQrModal(qrJudge)}
+                    className="text-xs text-indigo-600 font-bold hover:underline"
+                  >
+                    Try Again
+                  </button>
+                </div>
               )}
             </div>
 
             {/* PIN Card with Copy */}
-            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 mb-4 flex items-center justify-between">
+            <div className="bg-indigo-50/70 border border-indigo-100/80 rounded-xl p-3 mb-3 flex items-center justify-between">
               <div className="text-left">
                 <div className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Device Security PIN</div>
-                <div className="text-lg font-mono font-black text-indigo-950 tracking-widest">{qrJudge.access_pin}</div>
+                <div className="text-xl font-mono font-black text-indigo-950 tracking-widest">{qrJudge.access_pin || '----'}</div>
               </div>
               <button
                 type="button"
                 onClick={() => handleCopyPin(qrJudge.access_pin)}
-                className="px-2.5 py-1.5 bg-white border border-indigo-200 hover:bg-indigo-100/50 rounded-lg text-xs font-bold text-indigo-700 shadow-2xs transition cursor-pointer flex items-center gap-1"
+                className="px-3 py-1.5 bg-white border border-indigo-200 hover:bg-indigo-50 rounded-lg text-xs font-bold text-indigo-700 shadow-2xs transition cursor-pointer flex items-center gap-1.5"
               >
                 {copiedPin ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                <span>{copiedPin ? 'Copied' : 'Copy'}</span>
+                <span>{copiedPin ? 'Copied' : 'Copy PIN'}</span>
               </button>
             </div>
 
+            {/* Action buttons: Copy Magic Link & Open Portal */}
+            <div className="grid grid-cols-2 gap-2 mb-4">
+              <button
+                type="button"
+                onClick={() => handleCopyLink(qrPortalUrl)}
+                className="py-2 px-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl text-xs font-bold text-gray-700 flex items-center justify-center gap-1.5 transition cursor-pointer"
+              >
+                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-gray-500" />}
+                <span>{copiedLink ? 'Link Copied!' : 'Copy Magic Link'}</span>
+              </button>
+              <a
+                href={qrPortalUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="py-2 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer shadow-2xs shadow-indigo-200"
+              >
+                <span>Open Portal</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </div>
+
             <p className="text-[11px] text-gray-500 leading-snug">
-              Point your smartphone or tablet camera at this code to open the score sheet instantly. No app installation required.
+              Point your tablet or smartphone camera at the code above or open the link directly. Enter the PIN when prompted.
             </p>
           </div>
         </div>

@@ -10132,16 +10132,25 @@ def generate_qr_svg_string(url_or_text, size=200):
         from reportlab.graphics.barcode.qr import QrCodeWidget
         from reportlab.graphics.shapes import Drawing
         from reportlab.graphics import renderSVG
+        import re
         qr = QrCodeWidget(url_or_text)
         bounds = qr.getBounds()
         w = max(bounds[2] - bounds[0], 1)
         h = max(bounds[3] - bounds[1], 1)
         d = Drawing(size, size, transform=[size / w, 0, 0, size / h, 0, 0])
         d.add(qr)
-        return renderSVG.drawToString(d)
+        raw_svg = renderSVG.drawToString(d)
+        # Strip XML declaration and DOCTYPE for direct HTML embedding
+        svg = re.sub(r'<\?xml[^>]*\?>', '', raw_svg)
+        svg = re.sub(r'<!DOCTYPE[^>]*>', '', svg)
+        return svg.strip()
     except Exception as e:
         logger.warning(f"QR code generation failed: {e}")
         return ""
+
+
+# Alias for backward compatibility
+generate_qr_svg = generate_qr_svg_string
 
 
 def invalidate_public_portal_cache(event_id):
@@ -10908,10 +10917,19 @@ class EventJudgeViewSet(viewsets.ModelViewSet):
         """Return SVG QR code for this judge's magic link"""
         judge = self.get_object()
         from django.conf import settings
-        frontend_base = request.headers.get('origin') or getattr(settings, 'FRONTEND_URL', 'http://localhost:3003')
+        frontend_base = (
+            request.query_params.get('origin')
+            or request.headers.get('origin')
+            or getattr(settings, 'FRONTEND_URL', 'http://localhost:3000')
+        ).rstrip('/')
         magic_link = f"{frontend_base}/judge/eval/{judge.access_token}"
-        svg = generate_qr_svg(magic_link, size=240)
-        return Response({'qr_code_svg': svg, 'portal_url': magic_link})
+        svg = generate_qr_svg_string(magic_link, size=240)
+        return Response({
+            'qr_code_svg': svg,
+            'portal_url': magic_link,
+            'judge_name': judge.name,
+            'access_pin': judge.access_pin
+        })
 
     @action(detail=False, methods=['get'])
     def event_overview(self, request, event_pk=None):
