@@ -1454,6 +1454,34 @@ class EventBusinessLogicTests(TestCase):
         self.assertEqual(r3.points_earned, 1)
         self.assertEqual(r4.points_earned, 0)
 
+        # Test team-based program update with custom points
+        team_prog = Program.objects.create(
+            event=self.event,
+            name='Team Program Custom Points',
+            category='junior',
+            is_team_based=True,
+            team_size=2,
+            max_teams_per_school=1,
+            program_type='stage',
+        )
+        put_response = client.put(f'/api/events/{self.event.id}/programs/{team_prog.id}/', {
+            'name': team_prog.name,
+            'category': 'junior',
+            'is_team_based': True,
+            'team_size': 2,
+            'max_teams_per_school': 1,
+            'program_type': 'stage',
+            'has_custom_points': True,
+            'first_place_points': 25,
+            'second_place_points': 15,
+            'third_place_points': 10,
+            'participation_points': 5,
+        }, format='json')
+        self.assertEqual(put_response.status_code, 200, put_response.data)
+        team_prog.refresh_from_db()
+        self.assertTrue(team_prog.has_custom_points)
+        self.assertEqual(team_prog.first_place_points, 25)
+
     def test_published_group_points_reach_every_subteam_member_and_top_scorers(self):
         group = Program.objects.create(
             event=self.event, name='Group Points', category='junior',
