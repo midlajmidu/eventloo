@@ -177,148 +177,229 @@ const PublicParticipantBadge = () => {
                 <div className="w-16 h-3 bg-slate-200/90 rounded-full border border-slate-300/60 shadow-inner" />
               </div>
 
-              <div className="px-5 pt-1 pb-1 flex-1 flex flex-col justify-between min-h-0 overflow-hidden">
-                <div>
-                  {/* Top Row: Event Name & OFFICIAL Pill */}
-                  <div className="flex items-center justify-between gap-2.5 pb-2.5 border-b border-slate-100">
-                    <div className="flex items-center gap-2 min-w-0">
-                      {eventLogo ? (
-                        <img
-                          src={eventLogo}
-                          alt={event.title}
-                          className="w-7 h-7 object-contain rounded-md shrink-0 border border-slate-200/60"
-                        />
-                      ) : (
-                        <div className="w-1.5 h-7 rounded-full bg-indigo-600 shrink-0" />
-                      )}
-                      <div className="truncate">
-                        <h2 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight truncate capitalize">
-                          {event.title || 'Event'}
-                        </h2>
-                        <span className="text-[9px] font-extrabold tracking-[0.2em] text-slate-400 uppercase block mt-0.5">
-                          OFFICIAL EVENT PASS
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Official Verified Pill & Date */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      {event.start_date && (
-                        <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500">
-                          <Calendar className="w-3 h-3 text-slate-400" />
-                          <span>{formatDate(event.start_date)}</span>
-                        </span>
-                      )}
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 shadow-2xs">
-                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                        <span>OFFICIAL</span>
+              <div className="px-5 pt-1.5 pb-1 flex-1 flex flex-col justify-between min-h-0 overflow-hidden">
+                {/* Top Row: Event Name & OFFICIAL Pill (pinned to top) */}
+                <div className="shrink-0 flex items-center justify-between gap-2.5 pb-2 border-b border-slate-100">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {eventLogo ? (
+                      <img
+                        src={eventLogo}
+                        alt={event.title}
+                        className="w-7 h-7 object-contain rounded-md shrink-0 border border-slate-200/60"
+                      />
+                    ) : (
+                      <div className="w-1.5 h-7 rounded-full bg-indigo-600 shrink-0" />
+                    )}
+                    <div className="truncate">
+                      <h2 className="text-xs sm:text-sm font-bold text-slate-900 leading-tight truncate capitalize">
+                        {event.title || 'Event'}
+                      </h2>
+                      <span className="text-[9px] font-extrabold tracking-[0.2em] text-slate-400 uppercase block mt-0.5">
+                        OFFICIAL EVENT PASS
                       </span>
                     </div>
                   </div>
 
-                  {/* Avatar & Participant Identity */}
-                  <div className="text-center pt-3 sm:pt-4">
-                    {/* Fixed-dimension circular profile photo / WhatsApp-style default avatar */}
-                    <div
-                      className="rounded-full p-1 bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 shadow-md mx-auto flex items-center justify-center shrink-0"
-                      style={{ width: '82px', height: '82px' }}
-                    >
-                      <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
-                        {participant.photo_url ? (
-                          <img
-                            src={participant.photo_url}
-                            alt={participant.name}
-                            className="w-full h-full object-cover rounded-full"
-                          />
-                        ) : (
-                          <div
-                            className="w-full h-full bg-[#dfe5e7] flex items-center justify-center overflow-hidden relative"
-                            title={participant.name || 'Participant'}
-                          >
-                            {/* WhatsApp-style Boy/Default Profile Silhouette */}
-                            <svg
-                              viewBox="0 0 100 100"
-                              className="w-full h-full"
-                              fill="none"
-                              xmlns="http://www.w3.org/2000/svg"
-                            >
-                              <circle cx="50" cy="37" r="18" fill="#FFFFFF" />
-                              <path
-                                d="M14 90C14 71 30 59 50 59C70 59 86 71 86 90C86 96 82 100 76 100H24C18 100 14 96 14 90Z"
-                                fill="#FFFFFF"
-                              />
-                            </svg>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Participant Name */}
-                    <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight uppercase mt-2.5 truncate">
-                      {participant.name}
-                    </h1>
-
-                    {/* CHEST NO #1000 Hero Pill */}
-                    <div className="mt-2 inline-flex items-center rounded-full bg-[#1e1b4b] text-white px-4 py-1 shadow-2xs">
-                      <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-200/90">
-                        CHEST NO
+                  {/* Official Verified Pill & Date */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {event.start_date && (
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                        <Calendar className="w-3 h-3 text-slate-400" />
+                        <span>{formatDate(event.start_date)}</span>
                       </span>
-                      <span className="h-3.5 w-px bg-white/20 mx-2" />
-                      <span className="text-sm sm:text-base font-black text-white tracking-wider">
-                        #{participant.chest_number || 'N/A'}
-                      </span>
-                    </div>
-
-                    {/* Metadata Badges: Team, Category, Grade */}
-                    <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5 text-xs">
-                      {participant.team_name && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold text-[11px]">
-                          <Users className="w-3 h-3 text-slate-500" />
-                          <span>{participant.team_name}</span>
-                        </span>
-                      )}
-
-                      {participant.category && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold uppercase text-[11px]">
-                          <Layers className="w-3 h-3 text-slate-500" />
-                          <span>{participant.category}</span>
-                        </span>
-                      )}
-
-                      {(participant.grade || participant.student_id) && (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold text-[11px]">
-                          <Hash className="w-3 h-3 text-slate-500" />
-                          <span>
-                            {participant.grade ? `Grade ${participant.grade}` : `ID: ${participant.student_id}`}
-                            {participant.section ? ` - ${participant.section}` : ''}
-                          </span>
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Digital Verification Pass Barcode */}
-                  <div className="flex flex-col items-center justify-center pt-4 space-y-1">
-                    <div className="flex items-center justify-center gap-0.5 opacity-40 h-5">
-                      {[2, 1, 3, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 3, 2, 1, 4, 2, 1, 3, 2, 4, 1, 2, 3].map((bar, bIdx) => (
-                        <div
-                          key={bIdx}
-                          className="bg-slate-900 rounded-xs"
-                          style={{ width: `${bar * 1.3}px`, height: '100%' }}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-[8px] font-mono tracking-widest text-slate-400 uppercase font-semibold">
-                      AUTHENTICATED PASS • {participant.chest_number ? `#${participant.chest_number}` : `ID-${participant.id}`}
+                    )}
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0 shadow-2xs">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>OFFICIAL</span>
                     </span>
                   </div>
                 </div>
 
-                {/* Flip Card Interactive Pill Hint */}
-                <div className="pt-2 pb-1 flex justify-center shrink-0">
-                  <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all shadow-2xs border border-indigo-200/60 group">
-                    <RotateCw className="w-3.5 h-3.5 transition-transform group-hover:rotate-180 duration-500 text-indigo-600" />
-                    <span>Tap card to view schedule & stats</span>
+                {/* Main Centered Content Group: Avatar -> Name -> Chest No -> Metadata -> Stats -> Flip Hint */}
+                <div className="flex-1 flex flex-col items-center justify-center my-auto w-full text-center py-0.5">
+                  {/* Fixed-dimension circular profile photo */}
+                  <div
+                    className="rounded-full p-1 bg-gradient-to-tr from-indigo-600 via-indigo-500 to-purple-500 shadow-md mx-auto flex items-center justify-center shrink-0"
+                    style={{ width: '74px', height: '74px' }}
+                  >
+                    <div className="w-full h-full rounded-full bg-white flex items-center justify-center overflow-hidden">
+                      {participant.photo_url ? (
+                        <img
+                          src={participant.photo_url}
+                          alt={participant.name}
+                          className="w-full h-full object-cover rounded-full"
+                        />
+                      ) : (
+                        <div
+                          className="w-full h-full bg-[#dfe5e7] flex items-center justify-center overflow-hidden relative"
+                          title={participant.name || 'Participant'}
+                        >
+                          {/* WhatsApp-style Boy/Default Profile Silhouette */}
+                          <svg
+                            viewBox="0 0 100 100"
+                            className="w-full h-full"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                          >
+                            <circle cx="50" cy="37" r="18" fill="#FFFFFF" />
+                            <path
+                              d="M14 90C14 71 30 59 50 59C70 59 86 71 86 90C86 96 82 100 76 100H24C18 100 14 96 14 90Z"
+                              fill="#FFFFFF"
+                            />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Participant Name */}
+                  <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight uppercase mt-2 truncate max-w-full">
+                    {participant.name}
+                  </h1>
+
+                  {/* CHEST NO #1000 Hero Pill - small gap after name */}
+                  <div className="mt-1.5 inline-flex items-center rounded-full bg-[#1e1b4b] text-white px-3.5 py-0.5 shadow-2xs">
+                    <span className="text-[10px] font-extrabold uppercase tracking-widest text-indigo-200/90">
+                      CHEST NO
+                    </span>
+                    <span className="h-3 w-px bg-white/20 mx-2" />
+                    <span className="text-sm sm:text-base font-black text-white tracking-wider">
+                      #{participant.chest_number || 'N/A'}
+                    </span>
+                  </div>
+
+                  {/* Metadata Badges - small gap after chest no */}
+                  <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1.5 text-xs">
+                    {participant.team_name && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold text-[11px]">
+                        <Users className="w-3 h-3 text-slate-500" />
+                        <span>{participant.team_name}</span>
+                      </span>
+                    )}
+
+                    {participant.category && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold uppercase text-[11px]">
+                        <Layers className="w-3 h-3 text-slate-500" />
+                        <span>{participant.category}</span>
+                      </span>
+                    )}
+
+                    {(participant.grade || participant.student_id) && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-xl bg-slate-100/90 text-slate-700 border border-slate-200/50 font-bold text-[11px]">
+                        <Hash className="w-3 h-3 text-slate-500" />
+                        <span>
+                          {participant.grade ? `Grade ${participant.grade}` : `ID: ${participant.student_id}`}
+                          {participant.section ? ` - ${participant.section}` : ''}
+                        </span>
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Dynamic Stats Grid - small gap after metadata badges */}
+                  {(() => {
+                    const typesList = stats?.type_counts ? Object.values(stats.type_counts) : [];
+                    const cardCount = 1 + (typesList.length > 0 ? typesList.length : 2);
+                    const gridColsClass =
+                      cardCount === 2
+                        ? 'grid-cols-2'
+                        : cardCount === 3
+                        ? 'grid-cols-3'
+                        : cardCount === 4
+                        ? 'grid-cols-4'
+                        : 'grid-cols-2 sm:grid-cols-4';
+
+                    const getTypeIcon = (name = '') => {
+                      const lower = name.toLowerCase();
+                      if (lower.includes('sport')) return <Trophy className="w-3.5 h-3.5" />;
+                      if (lower.includes('off')) return <Flag className="w-3.5 h-3.5" />;
+                      if (lower.includes('stage')) return <Layers className="w-3.5 h-3.5" />;
+                      return <Bookmark className="w-3.5 h-3.5" />;
+                    };
+
+                    return (
+                      <div className={`w-full grid ${gridColsClass} gap-1.5 mt-2.5 px-0.5`}>
+                        {/* Total Events */}
+                        <div className="bg-slate-50/95 hover:bg-slate-100/90 transition-colors rounded-xl p-1.5 sm:p-2 border border-slate-200/70 text-center shadow-2xs">
+                          <div className="w-5 h-5 sm:w-6 sm:h-6 mx-auto rounded-lg bg-indigo-100/80 text-indigo-600 flex items-center justify-center mb-0.5 sm:mb-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                          </div>
+                          <span className="text-sm sm:text-base font-black text-slate-900 block leading-tight">
+                            {stats.total_programs ?? 0}
+                          </span>
+                          <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 block truncate mt-0.5">
+                            Total Events
+                          </span>
+                        </div>
+
+                        {typesList.length > 0 ? (
+                          typesList.map((tObj) => {
+                            const isHex = tObj.color && tObj.color.startsWith('#');
+                            const colorVal = tObj.color || '#4F46E5';
+                            return (
+                              <div
+                                key={tObj.code || tObj.name}
+                                className="bg-slate-50/95 hover:bg-slate-100/90 transition-colors rounded-xl p-1.5 sm:p-2 border border-slate-200/70 text-center shadow-2xs"
+                              >
+                                <div
+                                  className="w-5 h-5 sm:w-6 sm:h-6 mx-auto rounded-lg flex items-center justify-center mb-0.5 sm:mb-1"
+                                  style={{
+                                    backgroundColor: isHex ? `${colorVal}20` : '#EEF2FF',
+                                    color: isHex ? colorVal : '#4F46E5',
+                                  }}
+                                >
+                                  {getTypeIcon(tObj.name)}
+                                </div>
+                                <span className="text-sm sm:text-base font-black text-slate-900 block leading-tight">
+                                  {tObj.count ?? 0}
+                                </span>
+                                <span
+                                  className="text-[9px] sm:text-[10px] font-bold text-slate-600 block truncate capitalize mt-0.5"
+                                  title={tObj.name}
+                                >
+                                  {tObj.name}
+                                </span>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <>
+                            {/* Stage Events */}
+                            <div className="bg-slate-50/95 hover:bg-slate-100/90 transition-colors rounded-xl p-1.5 sm:p-2 border border-slate-200/70 text-center shadow-2xs">
+                              <div className="w-5 h-5 sm:w-6 sm:h-6 mx-auto rounded-lg bg-indigo-100/80 text-indigo-600 flex items-center justify-center mb-0.5 sm:mb-1">
+                                <Layers className="w-3.5 h-3.5" />
+                              </div>
+                              <span className="text-sm sm:text-base font-black text-slate-900 block leading-tight">
+                                {stats.stage_count ?? 0}
+                              </span>
+                              <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 block truncate mt-0.5">
+                                Stage
+                              </span>
+                            </div>
+
+                            {/* Off-Stage Events */}
+                            <div className="bg-slate-50/95 hover:bg-slate-100/90 transition-colors rounded-xl p-1.5 sm:p-2 border border-slate-200/70 text-center shadow-2xs">
+                              <div className="w-5 h-5 sm:w-6 sm:h-6 mx-auto rounded-lg bg-emerald-100/80 text-emerald-600 flex items-center justify-center mb-0.5 sm:mb-1">
+                                <Flag className="w-3.5 h-3.5" />
+                              </div>
+                              <span className="text-sm sm:text-base font-black text-slate-900 block leading-tight">
+                                {stats.offstage_count ?? 0}
+                              </span>
+                              <span className="text-[9px] sm:text-[10px] font-bold text-slate-500 block truncate mt-0.5">
+                                Off-Stage
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* Flip Card Interactive Pill Hint - small gap after stats boxes */}
+                  <div className="flex justify-center shrink-0 mt-2">
+                    <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all shadow-2xs border border-indigo-200/60 group">
+                      <RotateCw className="w-3.5 h-3.5 transition-transform group-hover:rotate-180 duration-500 text-indigo-600" />
+                      <span>Tap card to view programs & QR</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -376,7 +457,7 @@ const PublicParticipantBadge = () => {
                         {event.title || 'Event'}
                       </span>
                       <span className="text-[9px] font-extrabold tracking-widest text-slate-400 uppercase">
-                        SCHEDULE & STATS
+                        PROGRAMS & PASS
                       </span>
                     </div>
                   </div>
@@ -396,103 +477,23 @@ const PublicParticipantBadge = () => {
                 </div>
 
                 {/* Participant quick recap (shrink-0) */}
-                <div className="shrink-0 flex items-center justify-between py-1 text-xs font-semibold text-slate-600">
+                <div className="shrink-0 flex items-center justify-between py-1.5 text-xs font-semibold text-slate-600">
                   <span className="truncate uppercase font-bold text-slate-800">
                     {participant.name}
                   </span>
-                  <span className="px-2 py-0.5 rounded-full bg-[#1e1b4b] text-white text-[10px] font-black tracking-wider shrink-0">
+                  <span className="px-2.5 py-0.5 rounded-full bg-[#1e1b4b] text-white text-[10px] font-black tracking-wider shrink-0">
                     #{participant.chest_number || 'N/A'}
                   </span>
                 </div>
 
-                {/* ================================================================= */}
-                {/* DYNAMIC STATS CARDS: Total Events + Each Event Type (Sports, Stage, etc.) */}
-                {/* ================================================================= */}
-                {(() => {
-                  const typesList = stats?.type_counts ? Object.values(stats.type_counts) : [];
-                  const cardCount = 1 + (typesList.length > 0 ? typesList.length : 2);
-                  const gridColsClass = cardCount === 2 ? 'grid-cols-2' : cardCount === 3 ? 'grid-cols-3' : 'grid-cols-2 sm:grid-cols-4';
-
-                  return (
-                    <div className={`shrink-0 grid ${gridColsClass} gap-2 my-1`}>
-                      {/* Total Events */}
-                      <div className="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 text-center">
-                        <div className="w-6 h-6 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-0.5">
-                          <Calendar className="w-3 h-3" />
-                        </div>
-                        <span className="text-base font-black text-slate-900 block leading-tight">
-                          {stats.total_programs}
-                        </span>
-                        <span className="text-[10px] font-semibold text-slate-500 block truncate">
-                          Total Events
-                        </span>
-                      </div>
-
-                      {typesList.length > 0 ? (
-                        typesList.map((tObj) => {
-                          const isHex = tObj.color && tObj.color.startsWith('#');
-                          const colorVal = tObj.color || '#4F46E5';
-                          return (
-                            <div key={tObj.code} className="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 text-center">
-                              <div
-                                className="w-6 h-6 mx-auto rounded-lg flex items-center justify-center mb-0.5"
-                                style={{
-                                  backgroundColor: isHex ? `${colorVal}20` : '#EEF2FF',
-                                  color: isHex ? colorVal : '#4F46E5',
-                                }}
-                              >
-                                <Layers className="w-3 h-3" />
-                              </div>
-                              <span className="text-base font-black text-slate-900 block leading-tight">
-                                {tObj.count ?? 0}
-                              </span>
-                              <span className="text-[10px] font-bold text-slate-600 block truncate capitalize" title={tObj.name}>
-                                {tObj.name}
-                              </span>
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <>
-                          {/* Stage Events */}
-                          <div className="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 text-center">
-                            <div className="w-6 h-6 mx-auto rounded-lg bg-indigo-100/70 text-indigo-600 flex items-center justify-center mb-0.5">
-                              <Layers className="w-3 h-3" />
-                            </div>
-                            <span className="text-base font-black text-slate-900 block leading-tight">
-                              {stats.stage_count}
-                            </span>
-                            <span className="text-[10px] font-semibold text-slate-500 block truncate">
-                              Stage
-                            </span>
-                          </div>
-
-                          {/* Off-Stage Events */}
-                          <div className="bg-slate-50/90 rounded-2xl p-2 border border-slate-200/60 text-center">
-                            <div className="w-6 h-6 mx-auto rounded-lg bg-emerald-100/70 text-emerald-600 flex items-center justify-center mb-0.5">
-                              <Flag className="w-3 h-3" />
-                            </div>
-                            <span className="text-base font-black text-slate-900 block leading-tight">
-                              {stats.offstage_count}
-                            </span>
-                            <span className="text-[10px] font-semibold text-slate-500 block truncate">
-                              Off-Stage
-                            </span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  );
-                })()}
-
                 {/* Sub-tab Switcher: Programs | Digital QR (shrink-0) */}
-                <div className="shrink-0 flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl my-1">
+                <div className="shrink-0 flex items-center gap-1.5 p-1 bg-slate-100/90 rounded-xl my-1.5">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
                       setBackTab('programs');
                     }}
-                    className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                       backTab === 'programs'
                         ? 'bg-white text-indigo-700 shadow-2xs'
                         : 'text-slate-600 hover:text-slate-900'
@@ -506,7 +507,7 @@ const PublicParticipantBadge = () => {
                       e.stopPropagation();
                       setBackTab('qr');
                     }}
-                    className={`flex-1 py-1 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                       backTab === 'qr'
                         ? 'bg-white text-indigo-700 shadow-2xs'
                         : 'text-slate-600 hover:text-slate-900'

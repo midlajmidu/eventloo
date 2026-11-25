@@ -15,7 +15,8 @@ import django_filters
 from .models import (
     Event, EventStage, EventProgramType, Team, IndividualParticipation,
     EventAnnouncement, Program, ProgramAssignment, ProgramResult,
-    PointsRecord, TeamProfile, ChestNumber, CertificateTemplate
+    PointsRecord, TeamProfile, ChestNumber, CertificateTemplate,
+    EventJudge, ProgramJudgeAssignment
 )
 from .serializers import (
     EventListSerializer, EventDetailSerializer, EventCreateUpdateSerializer,
@@ -24,8 +25,10 @@ from .serializers import (
     ProgramSerializer, ProgramAssignmentSerializer, ProgramResultSerializer,
     PointsRecordSerializer, PointsRecordCreateSerializer, TeamProfileSerializer,
     EventWithProgramsSerializer, ChestNumberSerializer, MarkEntrySerializer,
-    ProgramResultSummarySerializer, EventStageSerializer, EventProgramTypeSerializer
+    ProgramResultSummarySerializer, EventStageSerializer, EventProgramTypeSerializer,
+    EventJudgeSerializer, ProgramJudgeAssignmentSerializer
 )
+from accounts.email_service import send_judge_invitation_email
 from .permissions import IsAdminOrEventManager, IsSchoolAdmin, IsTeamManagerOrAdmin, TeamManagerAuthentication
 from accounts.authentication import SchoolJWTAuthentication
 from accounts.security_audit import audit_security_event
@@ -10756,4 +10759,541 @@ def get_public_event_portal(request, event_id):
     response = Response(portal_payload)
     response['Cache-Control'] = 'public, max-age=10, s-maxage=30'
     return response
+
+
+class EventJudgeViewSet(viewsets.ModelViewSet):
+    """
+    Manage Event Judges (Judge 1, Judge 2, Judge 3, etc.) for an event.
+    Supports configuring judge profiles, assigning programs, sending email invites,
+    generating QR codes, and monitoring evaluation progress.
+    """
+    serializer_class = EventJudgeSerializer
+    authentication_classes = [SchoolJWTAuthentication]
+    permission_classes = [permissions.IsAuthenticated, IsAdminOrEventManager]
+
+    def get_queryset(self):
+        user = self.request.user
+        school_id = getattr(user, 'school_id', None)
+        qs = EventJudge.objects.filter(school_id=school_id).select_related('event').prefetch_related('program_assignments__program')
+        event_id = self.kwargs.get('event_pk') or self.request.query_params.get('event')
+        if event_id:
+            qs = qs.filter(event_id=event_id)
+        return qs
+
+    def perform_create(self, serializer):
+        event_id = self.kwargs.get('event_pk') or self.request.data.get('event')
+        event = Event.objects.get(id=event_id, school_id=self.request.user.school_id)
+        if 'default_judge_number' not in serializer.validated_data:
+            existing_count = EventJudge.objects.filter(event=event).count()
+            serializer.save(event=event, school=event.school, default_judge_number=min(existing_count + 1, 4))
+        else:
+            serializer.save(event=event, school=event.school)
+
+    @action(detail=True, methods=['post'])
+    def assign_programs(self, request, pk=None, event_pk=None):
+        """
+        Assign or update program evaluations for this judge.
+        Accepts:
+        {
+            "assignments": [
+                { "program_id": 1 },
+                ...
+            ]
+        }
+        or shorthand:
+        {
+            "program_ids": [1, 2, 3]
+        }
+        """
+        judge = self.get_object()
+        assignments_data = request.data.get('assignments')
+        
+        # Shorthand fallback: program_ids
+        if assignments_data is None and 'program_ids' in request.data:
+            assignments_data = [
+                {'program_id': pid}
+                for pid in request.data.get('program_ids', [])
+            ]
+        elif assignments_data is None:
+            assignments_data = []
+
+        with transaction.atomic():
+            if not assignments_data:
+                judge.program_assignments.all().delete()
+                serializer = self.get_serializer(judge)
+                return Response({'status': 'success', 'message': 'All program assignments cleared for this judge.', 'judge': serializer.data})
+
+            prog_ids = [int(a.get('program_id')) for a in assignments_data if a.get('program_id')]
+            valid_progs = {p.id: p for p in Program.objects.filter(id__in=prog_ids, event=judge.event)}
+
+            # Delete assignments for programs not in this payload
+            judge.program_assignments.exclude(program_id__in=valid_progs.keys()).delete()
+
+            for item in assignments_data:
+                prog_id = int(item.get('program_id'))
+                if prog_id not in valid_progs:
+                    continue
+
+                raw_slot = item.get('judge_number')
+                existing_assignment = ProgramJudgeAssignment.objects.filter(
+                    program_id=prog_id, judge=judge
+                ).first()
+
+                if raw_slot:
+                    judge_num = int(raw_slot)
+                    if judge_num < 1 or judge_num > 4:
+                        judge_num = 1
+                elif existing_assignment:
+                    judge_num = existing_assignment.judge_number
+                else:
+                    # Automatically find next available slot (1, 2, 3, 4) for this program
+                    taken_slots = set(ProgramJudgeAssignment.objects.filter(
+                        program_id=prog_id
+                    ).exclude(judge=judge).values_list('judge_number', flat=True))
+                    judge_num = next((s for s in range(1, 5) if s not in taken_slots), 1)
+
+                # Reassign slot if another judge was assigned to that slot for this program
+                ProgramJudgeAssignment.objects.filter(
+                    program_id=prog_id, judge_number=judge_num
+                ).exclude(judge=judge).delete()
+
+                ProgramJudgeAssignment.objects.update_or_create(
+                    program_id=prog_id,
+                    judge=judge,
+                    defaults={'judge_number': judge_num}
+                )
+
+        judge.refresh_from_db()
+        serializer = self.get_serializer(judge)
+        return Response({'status': 'success', 'judge': serializer.data})
+
+    @action(detail=True, methods=['post'])
+    def send_invite(self, request, pk=None, event_pk=None):
+        """Send magic link + PIN email invitation to the judge via Zoho SMTP"""
+        judge = self.get_object()
+        if not judge.email:
+            return Response({'error': 'Judge has no email address configured.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.conf import settings
+        frontend_base = request.headers.get('origin') or getattr(settings, 'FRONTEND_URL', 'http://localhost:3003')
+        magic_link = f"{frontend_base}/judge/eval/{judge.access_token}"
+
+        assigned_programs = list(judge.program_assignments.values_list('program__name', flat=True))
+        school_name = judge.school.name if judge.school else ""
+
+        success = send_judge_invitation_email(
+            to_email=judge.email,
+            judge_name=judge.name,
+            event_title=judge.event.title,
+            magic_link=magic_link,
+            access_pin=judge.access_pin,
+            assigned_programs=assigned_programs,
+            school_name=school_name,
+        )
+
+        if success:
+            return Response({'status': 'success', 'message': f'Invitation successfully sent to {judge.email}'})
+        return Response({'error': 'Failed to send invitation email. Please verify SMTP settings.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    @action(detail=True, methods=['post'])
+    def regenerate_link(self, request, pk=None, event_pk=None):
+        """Regenerate access token and PIN for security"""
+        judge = self.get_object()
+        judge.regenerate_credentials()
+        serializer = self.get_serializer(judge)
+        return Response({'status': 'success', 'judge': serializer.data})
+
+    @action(detail=True, methods=['get'])
+    def qr_code(self, request, pk=None, event_pk=None):
+        """Return SVG QR code for this judge's magic link"""
+        judge = self.get_object()
+        from django.conf import settings
+        frontend_base = request.headers.get('origin') or getattr(settings, 'FRONTEND_URL', 'http://localhost:3003')
+        magic_link = f"{frontend_base}/judge/eval/{judge.access_token}"
+        svg = generate_qr_svg(magic_link, size=240)
+        return Response({'qr_code_svg': svg, 'portal_url': magic_link})
+
+    @action(detail=False, methods=['get'])
+    def event_overview(self, request, event_pk=None):
+        """Returns online judging overview for all programs in this event"""
+        event_id = event_pk or request.query_params.get('event')
+        if not event_id:
+            return Response({'error': 'Event ID required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        event = Event.objects.filter(id=event_id, school_id=request.user.school_id).first()
+        if not event:
+            return Response({'error': 'Event not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        programs = Program.objects.filter(event=event).prefetch_related('judge_assignments__judge', 'results')
+        judges = EventJudge.objects.filter(event=event).prefetch_related('program_assignments')
+
+        programs_overview = []
+        for p in programs:
+            judge_slots = []
+            for assg in p.judge_assignments.all():
+                judge_slots.append({
+                    'assignment_id': assg.id,
+                    'judge_id': assg.judge_id,
+                    'judge_name': assg.judge.name,
+                    'judge_number': assg.judge_number,
+                    'status': assg.status,
+                    'is_locked': assg.is_locked,
+                    'locked_at': assg.locked_at.isoformat() if assg.locked_at else None,
+                })
+            
+            programs_overview.append({
+                'id': p.id,
+                'name': p.name,
+                'category': p.category,
+                'judging_mode': p.judging_mode,
+                'num_judges': p.num_judges or event.num_judges,
+                'assigned_judges': judge_slots,
+                'is_all_locked': bool(judge_slots and all(j['is_locked'] for j in judge_slots)),
+                'is_fully_assigned': len(judge_slots) >= (p.num_judges or event.num_judges),
+            })
+
+        return Response({
+            'event_id': event.id,
+            'event_title': event.title,
+            'default_num_judges': event.num_judges,
+            'max_mark_per_judge': float(event.max_mark_per_judge),
+            'total_judges': judges.count(),
+            'programs': programs_overview,
+        })
+
+
+# ==============================================================================
+# PUBLIC JUDGE EVALUATION PORTAL VIEWS (TOKEN-BASED AUTH)
+# ==============================================================================
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def judge_portal_info(request, token):
+    """
+    Returns judge details, event info, and list of assigned programs for the portal dashboard.
+    """
+    try:
+        judge = EventJudge.objects.select_related('event', 'school').get(
+            access_token=token, is_active=True
+        )
+    except EventJudge.DoesNotExist:
+        return Response({'error': 'Invalid or inactive judge evaluation link.'}, status=status.HTTP_404_NOT_FOUND)
+
+    event = judge.event
+    assignments = judge.program_assignments.select_related('program', 'program__stage').order_by('program__start_time', 'program__name')
+
+    programs_data = []
+    for assg in assignments:
+        prog = assg.program
+        judge_field = f'judge{assg.judge_number}_marks'
+        
+        # Count total candidates
+        if prog.is_team_based:
+            total_count = prog.assignments.values('team_id', 'sub_team_number').distinct().count()
+        else:
+            total_count = prog.assignments.count()
+
+        # Count evaluated
+        evaluated_count = prog.results.filter(**{f"{judge_field}__isnull": False}).count()
+
+        programs_data.append({
+            'id': prog.id,
+            'name': prog.name,
+            'category': prog.category,
+            'category_display': str(prog.category or 'general').upper(),
+            'is_team_based': prog.is_team_based,
+            'program_type': prog.program_type,
+            'judging_mode': prog.judging_mode,
+            'venue': prog.venue or (prog.stage.display_name if prog.stage else ''),
+            'start_time': prog.start_time.isoformat() if prog.start_time else None,
+            'duration_minutes_per_entry': prog.duration_minutes_per_entry,
+            'assignment': {
+                'id': assg.id,
+                'judge_number': assg.judge_number,
+                'status': assg.status,
+                'is_locked': assg.is_locked,
+                'locked_at': assg.locked_at.isoformat() if assg.locked_at else None,
+            },
+            'total_participants': total_count,
+            'evaluated_count': evaluated_count,
+        })
+
+    return Response({
+        'judge': {
+            'id': judge.id,
+            'name': judge.name,
+            'email': judge.email,
+            'designation': judge.designation,
+            'default_judge_number': judge.default_judge_number,
+            'requires_pin': bool(judge.access_pin),
+        },
+        'event': {
+            'id': event.id,
+            'title': event.title,
+            'description': event.description or '',
+            'venue': event.venue or '',
+            'num_judges': event.num_judges,
+            'max_mark_per_judge': float(event.max_mark_per_judge),
+            'converted_total_mark': float(event.converted_total_mark),
+            'school_name': event.school.name if event.school else '',
+        },
+        'programs': programs_data,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def judge_portal_verify_pin(request, token):
+    """
+    Verifies the 4-digit PIN for device security.
+    """
+    try:
+        judge = EventJudge.objects.get(access_token=token, is_active=True)
+    except EventJudge.DoesNotExist:
+        return Response({'error': 'Invalid or expired judge token.'}, status=status.HTTP_404_NOT_FOUND)
+
+    pin = str(request.data.get('pin', '')).strip()
+    if not judge.access_pin or pin == judge.access_pin.strip():
+        return Response({'status': 'success', 'verified': True})
+    return Response({'status': 'error', 'message': 'Incorrect 4-digit PIN. Please verify from your invitation.'}, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def judge_score_sheet(request, token, program_id):
+    """
+    Returns anonymous score sheet for a program assigned to this judge.
+    STUDENT AND TEAM NAMES ARE STRICTLY OMITTED to guarantee blind anonymous judging.
+    """
+    try:
+        judge = EventJudge.objects.select_related('event', 'school').get(
+            access_token=token, is_active=True
+        )
+    except EventJudge.DoesNotExist:
+        return Response({'error': 'Invalid or inactive judge session.'}, status=status.HTTP_404_NOT_FOUND)
+
+    assignment = ProgramJudgeAssignment.objects.select_related('program', 'program__stage').filter(
+        judge=judge, program_id=program_id
+    ).first()
+    if not assignment:
+        return Response({'error': 'You are not assigned to evaluate this program.'}, status=status.HTTP_403_FORBIDDEN)
+
+    program = assignment.program
+    event = judge.event
+    judge_num = assignment.judge_number
+    judge_field = f'judge{judge_num}_marks'
+
+    # Ensure results exist for all assignments of this program
+    if not program.is_team_based:
+        for pa in ProgramAssignment.objects.filter(program=program).select_related('student'):
+            ProgramResult.objects.get_or_create(
+                program=program,
+                participant=pa.student,
+                is_team_result=False,
+                defaults={'team': pa.team, 'entry_status': 'draft'}
+            )
+    else:
+        subteams = ProgramAssignment.objects.filter(program=program).values('team_id', 'sub_team_number').distinct()
+        for st in subteams:
+            rep = ProgramAssignment.objects.filter(
+                program=program, team_id=st['team_id'], sub_team_number=st['sub_team_number']
+            ).order_by('-is_leader').first()
+            if rep:
+                ProgramResult.objects.get_or_create(
+                    program=program,
+                    team_id=st['team_id'],
+                    sub_team_number=st['sub_team_number'],
+                    is_team_result=True,
+                    defaults={'participant': rep.student, 'entry_status': 'draft'}
+                )
+
+    results = ProgramResult.objects.filter(program=program).select_related('participant', 'team')
+
+    # Pre-fetch chest numbers
+    chest_map = {}
+    for pa in ProgramAssignment.objects.filter(program=program):
+        if program.is_team_based:
+            key = (pa.team_id, pa.sub_team_number or 1)
+            if key not in chest_map or pa.is_leader:
+                chest_map[key] = pa.chest_number
+        else:
+            chest_map[pa.student_id] = pa.chest_number
+
+    # Auto-assign code letters (A, B, C...) if missing
+    import string
+    alphabet = string.ascii_uppercase
+    res_list = list(results.order_by('id'))
+    needs_code_save = False
+    for idx, r in enumerate(res_list):
+        if not r.code_letter:
+            r.code_letter = alphabet[idx] if idx < len(alphabet) else f"C{idx+1}"
+            needs_code_save = True
+
+    if needs_code_save:
+        with transaction.atomic():
+            for r in res_list:
+                ProgramResult.objects.filter(id=r.id).update(code_letter=r.code_letter)
+
+    candidates = []
+    for idx, r in enumerate(res_list, 1):
+        if program.is_team_based:
+            chest_num = chest_map.get((r.team_id, r.sub_team_number or 1))
+        else:
+            chest_num = chest_map.get(r.participant_id)
+
+        candidates.append({
+            'result_id': r.id,
+            'serial_number': idx,
+            'code_letter': r.code_letter or f"Code {idx}",
+            'chest_number': chest_num or '-',
+            'current_mark': float(getattr(r, judge_field)) if getattr(r, judge_field) is not None else None,
+            'comments': r.comments or '',
+            # NOTICE: Student names & team names are strictly omitted for blind evaluation!
+        })
+
+    return Response({
+        'program': {
+            'id': program.id,
+            'name': program.name,
+            'category': program.category,
+            'category_display': str(program.category or 'general').upper(),
+            'is_team_based': program.is_team_based,
+            'venue': program.venue or (program.stage.display_name if program.stage else ''),
+            'start_time': program.start_time.isoformat() if program.start_time else None,
+            'judging_mode': program.judging_mode,
+        },
+        'assignment': {
+            'id': assignment.id,
+            'judge_number': assignment.judge_number,
+            'status': assignment.status,
+            'is_locked': assignment.is_locked,
+            'locked_at': assignment.locked_at.isoformat() if assignment.locked_at else None,
+        },
+        'criteria': {
+            'max_mark_per_judge': float(event.max_mark_per_judge),
+            'converted_total_mark': float(event.converted_total_mark),
+            'num_judges': program.num_judges or event.num_judges,
+        },
+        'candidates': candidates,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def judge_save_marks(request, token, program_id):
+    """
+    Saves scores entered by the judge for a specific program.
+    Can be a draft save (is_final_lock=False) or final locked evaluation (is_final_lock=True).
+    """
+    try:
+        judge = EventJudge.objects.select_related('event', 'school').get(
+            access_token=token, is_active=True
+        )
+    except EventJudge.DoesNotExist:
+        return Response({'error': 'Invalid or inactive judge session.'}, status=status.HTTP_404_NOT_FOUND)
+
+    assignment = ProgramJudgeAssignment.objects.select_related('program').filter(
+        judge=judge, program_id=program_id
+    ).first()
+    if not assignment:
+        return Response({'error': 'You are not assigned to evaluate this program.'}, status=status.HTTP_403_FORBIDDEN)
+
+    if assignment.is_locked:
+        return Response({'error': 'Evaluation for this program has already been locked and submitted.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
+    from .services import recalculate_program_results
+
+    program = assignment.program
+    event = judge.event
+    judge_num = assignment.judge_number
+    judge_field = f'judge{judge_num}_marks'
+    max_mark = Decimal(str(event.max_mark_per_judge))
+
+    marks_data = request.data.get('marks', [])
+    is_final_lock = bool(request.data.get('is_final_lock', False))
+
+    try:
+        with transaction.atomic():
+            for item in marks_data:
+                result_id = item.get('result_id')
+                raw_mark = item.get('mark')
+                comments = item.get('comments', '')
+
+                if not result_id:
+                    continue
+                result = ProgramResult.objects.select_for_update().filter(
+                    id=result_id, program=program
+                ).first()
+                if not result:
+                    continue
+
+                if raw_mark is None or str(raw_mark).strip() == '':
+                    mark_val = None
+                else:
+                    try:
+                        mark_val = Decimal(str(raw_mark).strip()).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+                    except (InvalidOperation, TypeError, ValueError):
+                        return Response({'error': f'Invalid numeric score: {raw_mark}'}, status=status.HTTP_400_BAD_REQUEST)
+                    if mark_val < 0 or mark_val > max_mark:
+                        return Response({'error': f'Mark must be between 0 and {max_mark}. Received: {mark_val}'}, status=status.HTTP_400_BAD_REQUEST)
+
+                setattr(result, judge_field, mark_val)
+                if comments:
+                    result.comments = comments
+                result.save()
+
+            if is_final_lock:
+                assignment.is_locked = True
+                assignment.locked_at = timezone.now()
+                assignment.status = 'completed'
+                assignment.save()
+
+                # Check if all required judges for this program have completed evaluation
+                all_assigned = list(ProgramJudgeAssignment.objects.filter(program=program))
+                effective_judges_count = program.effective_num_judges
+                if (
+                    all_assigned
+                    and len(all_assigned) >= effective_judges_count
+                    and all(a.is_locked for a in all_assigned)
+                ):
+                    import string
+                    alphabet = string.ascii_uppercase
+                    all_results = list(ProgramResult.objects.filter(program=program).order_by('id'))
+                    for idx, r in enumerate(all_results):
+                        has_all = all(
+                            getattr(r, f'judge{n}_marks') is not None
+                            for n in range(1, effective_judges_count + 1)
+                        )
+                        if has_all:
+                            if not r.code_letter:
+                                r.code_letter = alphabet[idx] if idx < len(alphabet) else f"C{idx+1}"
+                            r.entry_status = 'submitted'
+                            r.save()
+                        else:
+                            r.entry_status = 'draft'
+                            r.raw_total_marks = None
+                            r.total_marks = None
+                            r.average_marks = None
+                            r.position = None
+                            r.points_earned = 0
+                            r.grade = ''
+                            r.grade_extra_points = 0
+                            r.save()
+                    recalculate_program_results(program)
+            else:
+                assignment.status = 'in_progress'
+                assignment.save()
+
+    except Exception as exc:
+        logger.error(f"Error saving judge marks: {exc}")
+        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({
+        'status': 'success',
+        'is_locked': assignment.is_locked,
+        'message': 'Evaluation locked and submitted successfully.' if is_final_lock else 'Marks saved as draft.'
+    })
+
+
 

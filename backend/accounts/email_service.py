@@ -390,3 +390,152 @@ contact@eventloo.in
     except Exception as e:
         logger.error(f"Failed to send staff invitation email to {to_email}: {e}")
         return False
+
+
+def send_judge_invitation_email(to_email, judge_name, event_title, magic_link, access_pin, assigned_programs=None, school_name=""):
+    """
+    Send Judge Invitation email for online judgement portal.
+    Includes Magic Link + 4-digit PIN.
+    Sent from Eventloo Judging <contact@eventloo.in>.
+    """
+    subject = f"Judge Invitation: {event_title} Evaluation Portal"
+    from_email = getattr(settings, 'CONTACT_FROM_EMAIL', 'Eventloo Judging <contact@eventloo.in>')
+
+    programs_list_str = ""
+    if assigned_programs:
+        programs_list_str = "\n".join(f"- {p}" for p in assigned_programs)
+
+    text_content = f"""
+Hello {judge_name},
+
+You have been invited to serve as an official judge for {event_title}{f" at {school_name}" if school_name else ""}.
+
+Your evaluation access details:
+Magic Portal Link: {magic_link}
+Security PIN: {access_pin}
+
+{f"Assigned Programs:\n{programs_list_str}\n" if programs_list_str else ""}
+You can open this evaluation link directly on your mobile phone, tablet, or laptop to evaluate participants and enter marks securely.
+
+- Eventloo Digital Judging System
+"""
+
+    prog_chips = ""
+    if assigned_programs:
+        items = "".join(f'<li style="margin-bottom: 6px; color: #1e293b; font-size: 13px;"><strong>{p}</strong></li>' for p in assigned_programs)
+        prog_chips = f"""
+        <div style="margin-top: 16px; padding: 14px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 8px;">Assigned Programs:</div>
+          <ul style="margin: 0; padding-left: 20px;">
+            {items}
+          </ul>
+        </div>
+        """
+
+    formatted_pin = " ".join(str(access_pin))
+
+    html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Judge Invitation - {event_title}</title>
+</head>
+<body style="margin: 0; padding: 30px 10px; background-color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 580px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
+    <!-- Top Header Banner -->
+    <tr>
+      <td style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); padding: 24px 28px; text-align: center;">
+        <span style="color: #6366f1; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; display: block; margin-bottom: 6px;">EVENTLOO DIGITAL JUDGING</span>
+        <span style="color: #ffffff; font-size: 20px; font-weight: 800; letter-spacing: 0.3px;">Evaluation Portal Access</span>
+      </td>
+    </tr>
+
+    <!-- Main Content Container -->
+    <tr>
+      <td style="padding: 34px 30px 26px 30px;">
+        <h1 style="margin: 0 0 14px 0; color: #0f172a; font-size: 20px; font-weight: 700; line-height: 1.3;">
+          Welcome, {judge_name}!
+        </h1>
+        
+        <p style="margin: 0 0 20px 0; color: #475569; font-size: 14px; line-height: 1.6;">
+          You have been appointed as an official judge for <strong style="color: #1e293b;">{event_title}</strong>{f' at <strong style="color: #1e293b;">{school_name}</strong>' if school_name else ''}. You can access your mobile-friendly scoring sheet directly through the secure link below.
+        </p>
+
+        <!-- Access Details Card -->
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; margin-bottom: 24px;">
+          <tr>
+            <td style="padding: 22px 24px;">
+              <div style="color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">
+                JUDGE EVALUATION CREDENTIALS
+              </div>
+              <div style="margin-bottom: 14px; font-size: 13.5px; color: #334155;">
+                <strong style="color: #0f172a;">Event:</strong> {event_title}
+              </div>
+              <div style="margin-bottom: 16px;">
+                <div style="color: #64748b; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px;">
+                  YOUR 4-DIGIT SECURITY PIN
+                </div>
+                <div style="color: #4338ca; font-size: 28px; font-weight: 800; letter-spacing: 5px; font-family: monospace; background: #e0e7ff; display: inline-block; padding: 4px 16px; border-radius: 8px;">
+                  {formatted_pin}
+                </div>
+              </div>
+              {prog_chips}
+            </td>
+          </tr>
+        </table>
+
+        <!-- CTA Button -->
+        <table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 24px;">
+          <tr>
+            <td align="center">
+              <a href="{magic_link}" style="display: inline-block; background-color: #4f46e5; color: #ffffff; text-decoration: none; padding: 14px 36px; border-radius: 10px; font-size: 14.5px; font-weight: 700; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.35);">
+                Open Evaluation Portal →
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+          <p style="margin: 0; color: #15803d; font-size: 12px; line-height: 1.5;">
+            <strong>Tip:</strong> Works seamlessly on mobile phones and tablets. No app installation or registration needed.
+          </p>
+        </div>
+
+        <p style="margin: 0; color: #64748b; font-size: 12px; line-height: 1.6; word-break: break-all;">
+          Or copy and paste this link in your browser:<br/>
+          <a href="{magic_link}" style="color: #4f46e5; text-decoration: none;">{magic_link}</a>
+        </p>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="background-color: #f8fafc; padding: 18px 30px; border-top: 1px solid #f1f5f9; text-align: center; color: #94a3b8; font-size: 11.5px;">
+        Questions or technical issues? Contact <a href="mailto:contact@eventloo.in" style="color: #6366f1; text-decoration: none;">contact@eventloo.in</a><br/>
+        © 2026 Eventloo Management System. All rights reserved.
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+"""
+
+    try:
+        connection = get_contact_connection()
+        msg = EmailMultiAlternatives(
+            subject=subject,
+            body=text_content.strip(),
+            from_email=from_email,
+            to=[to_email],
+            connection=connection,
+        )
+        msg.attach_alternative(html_content, "text/html")
+        msg.send()
+        logger.info(f"Successfully sent judge invitation email to {to_email}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send judge invitation email to {to_email}: {e}")
+        return False
+

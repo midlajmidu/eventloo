@@ -1003,5 +1003,27 @@ export const publicEventAPI = {
     publicApi.get(`events/${eventId}/participants/${studentIdentifier}/public-badge/`),
 };
 
+// Event Judges API (Admin configuration & evaluation management)
+export const eventJudgesAPI = {
+  list: (eventId) => api.get('judges/', { params: { event: eventId } }),
+  get: (judgeId) => api.get(`judges/${judgeId}/`),
+  create: (eventId, data) => api.post('judges/', { ...data, event: eventId }),
+  update: (judgeId, data) => api.put(`judges/${judgeId}/`, data),
+  delete: (judgeId) => api.delete(`judges/${judgeId}/`),
+  assignPrograms: (judgeId, payload) => api.post(`judges/${judgeId}/assign_programs/`, payload),
+  sendInvite: (judgeId) => api.post(`judges/${judgeId}/send_invite/`),
+  regenerateLink: (judgeId) => api.post(`judges/${judgeId}/regenerate_link/`),
+  getQrCode: (judgeId) => api.get(`judges/${judgeId}/qr_code/`),
+  getOverview: (eventId) => api.get('judges/event_overview/', { params: { event: eventId } }),
+};
+
+// Public Judge Evaluation Portal API (Token-authenticated)
+export const judgePortalAPI = {
+  getPortalInfo: (token) => api.get(`judge/portal/${token}/`),
+  verifyPin: (token, pin) => api.post(`judge/portal/${token}/verify-pin/`, { pin }),
+  getScoreSheet: (token, programId) => api.get(`judge/portal/${token}/programs/${programId}/score-sheet/`),
+  saveMarks: (token, programId, payload) => api.post(`judge/portal/${token}/programs/${programId}/save-marks/`, payload),
+};
+
 // Export default api instance for custom requests
 export default api; 

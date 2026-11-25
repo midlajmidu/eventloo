@@ -79,6 +79,8 @@ fi
 
 # 4. Run Database Migrations & Configure High-Performance SQLite WAL
 echo "[3/6] Running database migrations..."
+rm -f /app/backend/events/migrations/0057_program_judging_mode_eventjudge_and_more.py
+rm -f /app/backend/events/migrations/0058_event_enable_public_portal_event_public_about_text_and_more.py
 python3 manage.py migrate --noinput
 
 if [ -z "$DATABASE_URL" ] || [[ ! "$DATABASE_URL" =~ ^postgres ]]; then

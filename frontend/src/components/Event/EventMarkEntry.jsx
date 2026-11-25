@@ -9,9 +9,11 @@ import {
   AlertCircle,
   Users,
   User,
-  RotateCcw
+  RotateCcw,
+  Sparkles,
+  Edit3
 } from 'lucide-react';
-import { eventProgramsAPI, markEntryAPI } from '../../services/api';
+import { eventProgramsAPI, markEntryAPI, eventJudgesAPI } from '../../services/api';
 import Pagination from '../common/Pagination';
 
 const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }) => {
@@ -23,6 +25,8 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const [adminOverrideMode, setAdminOverrideMode] = useState(false);
+  const [eventJudgesOverview, setEventJudgesOverview] = useState([]);
   const [message, setMessage] = useState('');
   const [drawerError, setDrawerError] = useState('');
 
@@ -132,6 +136,20 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     setLoadingParticipants(true);
     setSortField('chest');
     setSortOrder('asc');
+    setAdminOverrideMode(false);
+
+    if (program.judging_mode === 'online') {
+      try {
+        const ovRes = await eventJudgesAPI.getOverview(eventId);
+        const progOv = (ovRes.data?.programs || []).find((p) => p.id === program.id);
+        setEventJudgesOverview(progOv?.assigned_judges || []);
+      } catch (e) {
+        console.warn('Judge overview fetch error:', e);
+        setEventJudgesOverview([]);
+      }
+    } else {
+      setEventJudgesOverview([]);
+    }
 
     try {
       const response = await markEntryAPI.getParticipants(eventId, program.id);
@@ -152,6 +170,8 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
     setSelectedProgram(null);
     setParticipants([]);
     setDrawerError('');
+    setEventJudgesOverview([]);
+    setAdminOverrideMode(false);
   };
 
   const handleMarkChange = (participantId, field, rawValue) => {
@@ -780,6 +800,73 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
               </div>
             </div>
 
+            {/* Online Judging Banner with Live Status & Edit Option */}
+            {selectedProgram?.judging_mode === 'online' && (
+              <div className="px-6 py-3.5 bg-gradient-to-r from-purple-50 via-indigo-50/50 to-purple-50 border-b border-purple-200/80">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-600 text-white tracking-wide uppercase shadow-2xs">
+                        <Sparkles className="h-3 w-3" /> Online Judging Program
+                      </span>
+                      {adminOverrideMode ? (
+                        <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
+                          Admin Override Unlocked
+                        </span>
+                      ) : (
+                        <span className="text-xs font-semibold text-gray-700">
+                          Live evaluation sync active
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      {adminOverrideMode
+                        ? 'You can now manually edit, adjust, or override judge marks below and save.'
+                        : 'Scores submitted digitally by judges appear in real-time below.'}
+                    </p>
+
+                    {/* Live Judge Status Chips */}
+                    {eventJudgesOverview.length > 0 && (
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        {eventJudgesOverview.map((pj) => (
+                          <span
+                            key={pj.assignment_id || pj.judge_number}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${
+                              pj.is_locked
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : pj.status === 'in_progress'
+                                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                                : 'bg-white text-gray-600 border-gray-200'
+                            }`}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${pj.is_locked ? 'bg-emerald-500' : pj.status === 'in_progress' ? 'bg-amber-500' : 'bg-gray-300'}`} />
+                            <span>Slot {pj.judge_number}: <strong>{pj.judge_name}</strong></span>
+                            <span className="text-[10px] uppercase font-bold text-gray-500">
+                              [{pj.is_locked ? 'Submitted' : pj.status}]
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Edit / Override Marks Option */}
+                  <button
+                    type="button"
+                    onClick={() => setAdminOverrideMode(!adminOverrideMode)}
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-2xs shrink-0 cursor-pointer ${
+                      adminOverrideMode
+                        ? 'bg-amber-600 hover:bg-amber-500 text-white ring-2 ring-amber-300'
+                        : 'bg-white border border-purple-300 text-purple-700 hover:bg-purple-100/70'
+                    }`}
+                  >
+                    <Edit3 className="h-3.5 w-3.5" />
+                    <span>{adminOverrideMode ? 'Lock Override' : 'Edit / Override Marks'}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Drawer Error Banner at Top */}
             {drawerError && (
               <div className="mx-3.5 sm:mx-6 mt-3 sm:mt-4 p-3 sm:p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 flex items-start justify-between gap-2.5 animate-in fade-in duration-200 shadow-2xs shrink-0">
@@ -895,7 +982,9 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                       </thead>
                       <tbody className="divide-y divide-gray-200 text-sm bg-white">
                         {sortedParticipants.length > 0 ? (
-                          sortedParticipants.map((participant) => (
+                          sortedParticipants.map((participant) => {
+                            const isInputLocked = selectedProgram?.judging_mode === 'online' && !adminOverrideMode;
+                            return (
                             <tr key={participant.id} className="hover:bg-indigo-50/30 transition-colors">
                               {/* Chest Number with Group / Sub-Team Indicator */}
                               <td className="px-4 py-3 text-center font-bold text-gray-900 border-r border-gray-200 bg-gray-50/30">
@@ -921,10 +1010,15 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                                 <input
                                   type="text"
                                   maxLength="10"
+                                  disabled={isInputLocked}
                                   value={participant.code_letter || ''}
                                   onChange={(e) => handleCodeLetterChange(participant.id, e.target.value)}
                                   placeholder="Code"
-                                  className={`w-20 px-2 py-1 text-center font-bold text-xs uppercase border rounded-md focus:ring-2 focus:outline-none bg-white shadow-2xs transition-colors ${
+                                  className={`w-20 px-2 py-1 text-center font-bold text-xs uppercase border rounded-md focus:ring-2 focus:outline-none transition-colors ${
+                                    isInputLocked
+                                      ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200'
+                                      : 'bg-white shadow-2xs'
+                                  } ${
                                     duplicateCodeLetters.has((participant.code_letter || '').trim().toUpperCase()) ||
                                     (hasAnyJudgeMark(participant) && !(participant.code_letter || '').trim() && drawerError)
                                       ? 'border-rose-400 text-rose-900 bg-rose-50/40 focus:ring-rose-400 ring-1 ring-rose-300'
@@ -946,11 +1040,16 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                                     <input
                                       type="text"
                                       inputMode="decimal"
+                                      disabled={isInputLocked}
                                       value={participant[fieldName] ?? ''}
                                       onChange={(e) => handleMarkChange(participant.id, fieldName, e.target.value)}
                                       onWheel={(e) => e.target.blur()}
                                       placeholder="0.00"
-                                      className={`w-18 px-2 py-1 text-center font-semibold text-xs border rounded-md focus:ring-2 focus:outline-none bg-white shadow-2xs transition-colors no-spinner ${
+                                      className={`w-18 px-2 py-1 text-center font-semibold text-xs border rounded-md focus:ring-2 focus:outline-none transition-colors no-spinner ${
+                                        isInputLocked
+                                          ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200'
+                                          : 'bg-white shadow-2xs'
+                                      } ${
                                         isInvalidMark || isMissingMark
                                           ? 'border-rose-400 text-rose-900 bg-rose-50/40 focus:ring-rose-400 ring-1 ring-rose-300'
                                           : 'border-gray-300 focus:ring-indigo-500'
@@ -973,7 +1072,8 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                                 )}
                               </td>
                             </tr>
-                          ))
+                            );
+                          })
                         ) : (
                           <tr>
                             <td colSpan={3 + numJudges} className="px-4 py-12 text-center text-gray-400 text-xs">
@@ -989,6 +1089,7 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                   <div className="block md:hidden space-y-3">
                     {sortedParticipants.length > 0 ? (
                       sortedParticipants.map((participant) => {
+                        const isInputLocked = selectedProgram?.judging_mode === 'online' && !adminOverrideMode;
                         const isCodeDuplicate = duplicateCodeLetters.has((participant.code_letter || '').trim().toUpperCase());
                         const hasMissingCode = hasAnyJudgeMark(participant) && !(participant.code_letter || '').trim() && drawerError;
 
@@ -1041,10 +1142,15 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                                 <input
                                   type="text"
                                   maxLength="10"
+                                  disabled={isInputLocked}
                                   value={participant.code_letter || ''}
                                   onChange={(e) => handleCodeLetterChange(participant.id, e.target.value)}
                                   placeholder="e.g. A"
-                                  className={`w-28 px-2.5 py-1.5 text-center font-bold text-xs uppercase border rounded-lg focus:ring-2 focus:outline-none bg-white shadow-2xs transition-colors ${
+                                  className={`w-28 px-2.5 py-1.5 text-center font-bold text-xs uppercase border rounded-lg focus:ring-2 focus:outline-none transition-colors ${
+                                    isInputLocked
+                                      ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200'
+                                      : 'bg-white shadow-2xs'
+                                  } ${
                                     isCodeDuplicate || hasMissingCode
                                       ? 'border-rose-400 text-rose-900 bg-rose-50/40 focus:ring-rose-400 ring-1 ring-rose-300'
                                       : 'border-gray-300 focus:ring-indigo-500'
@@ -1087,11 +1193,16 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                                         <input
                                           type="text"
                                           inputMode="decimal"
+                                          disabled={isInputLocked}
                                           value={participant[fieldName] ?? ''}
                                           onChange={(e) => handleMarkChange(participant.id, fieldName, e.target.value)}
                                           onWheel={(e) => e.target.blur()}
                                           placeholder="0.00"
-                                          className={`w-full px-2 py-2 text-center font-bold text-xs border rounded-lg focus:ring-2 focus:outline-none bg-white shadow-2xs transition-colors no-spinner ${
+                                          className={`w-full px-2 py-2 text-center font-bold text-xs border rounded-lg focus:ring-2 focus:outline-none transition-colors no-spinner ${
+                                            isInputLocked
+                                              ? 'bg-gray-100 text-gray-500 cursor-not-allowed border-gray-200'
+                                              : 'bg-white shadow-2xs'
+                                          } ${
                                             isInvalidMark || isMissingMark
                                               ? 'border-rose-400 text-rose-900 bg-rose-50/40 focus:ring-rose-400 ring-1 ring-rose-300'
                                               : 'border-gray-300 focus:ring-indigo-500'
@@ -1174,8 +1285,9 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                     <button
                       type="button"
                       onClick={() => handleBulkSubmit(true)}
-                      disabled={submitting}
-                      className="px-4 py-2.5 sm:py-2 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 text-center order-2 sm:order-none"
+                      disabled={submitting || (selectedProgram?.judging_mode === 'online' && !adminOverrideMode)}
+                      title={selectedProgram?.judging_mode === 'online' && !adminOverrideMode ? "Click 'Edit / Override Marks' above to enable editing" : ''}
+                      className="px-4 py-2.5 sm:py-2 text-xs font-semibold text-gray-700 bg-gray-100 border border-gray-200 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-center order-2 sm:order-none"
                     >
                       {submitting ? 'Saving...' : 'Save Draft'}
                     </button>
@@ -1184,8 +1296,9 @@ const EventMarkEntry = ({ eventId, categories: dbCategories = [], event = null }
                   <button
                     type="button"
                     onClick={() => handleBulkSubmit(false)}
-                    disabled={submitting}
-                    className={`px-5 py-2.5 sm:py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs disabled:opacity-50 text-center ${
+                    disabled={submitting || (selectedProgram?.judging_mode === 'online' && !adminOverrideMode)}
+                    title={selectedProgram?.judging_mode === 'online' && !adminOverrideMode ? "Click 'Edit / Override Marks' above to enable editing" : ''}
+                    className={`px-5 py-2.5 sm:py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors shadow-2xs disabled:opacity-40 disabled:cursor-not-allowed text-center ${
                       !selectedProgram?.is_published ? 'col-span-2 sm:col-span-1 order-3 sm:order-none' : 'order-2 sm:order-none'
                     }`}
                   >

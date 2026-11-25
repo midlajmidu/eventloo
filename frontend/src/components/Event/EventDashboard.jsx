@@ -15,12 +15,14 @@ import EventTopScorers from './EventTopScorers';
 import EventStages from './EventStages';
 import EventSchedule from './EventSchedule';
 import EventProgramTypes from './EventProgramTypes';
+import EventJudges from './EventJudges';
 import {
   LayoutDashboard,
   BookOpen,
   Tags,
   Users,
   UserCheck,
+  Scale,
   Edit3,
   Trophy,
   FileText,
@@ -121,6 +123,7 @@ const EventDashboard = () => {
     { id: 'schedule', name: 'Schedule', icon: CalendarClock, description: 'Schedule programs by stage and time' },
     { id: 'assignments', name: 'Assignments', icon: Users, description: 'Assign students to programs' },
     { id: 'participants', name: 'Participants', icon: UserCheck, description: 'View assigned participants with chest numbers' },
+    { id: 'judges', name: 'Judges', icon: Scale, description: 'Manage judges & digital evaluations' },
     { id: 'mark-entry', name: 'Mark Entry', icon: Edit3, description: 'Enter marks and scores' },
     { id: 'results', name: 'Results', icon: Trophy, description: 'View results and rankings' },
     { id: 'top-scorers', name: 'Top Scorers', icon: Medal, description: 'View event top performers and points' },
@@ -166,6 +169,8 @@ const EventDashboard = () => {
         return <EventAssignments {...props} />;
       case 'participants':
         return <EventParticipants {...props} />;
+      case 'judges':
+        return <EventJudges {...props} />;
       case 'mark-entry':
         return <EventMarkEntry eventId={eventId} categories={categories} event={event} />;
       case 'results':

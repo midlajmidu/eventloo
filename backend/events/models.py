@@ -1019,8 +1019,91 @@ class Program(models.Model):
         # Delete all program results for this program
         self.results.all().delete()
         
+        # Delete all judge assignments for this program
+        if hasattr(self, 'judge_assignments'):
+            self.judge_assignments.all().delete()
+        
         # Call the parent delete method
         super().delete(*args, **kwargs)
+
+
+class EventJudge(models.Model):
+    """Judge assigned to evaluate programs in an event"""
+    event = models.ForeignKey(Event, on_delete=models.CASCADE, related_name='judges')
+    school = models.ForeignKey('accounts.School', on_delete=models.CASCADE, related_name='event_judges')
+    name = models.CharField(max_length=150)
+    email = models.EmailField(blank=True, default='')
+    phone = models.CharField(max_length=30, blank=True, default='')
+    designation = models.CharField(max_length=150, blank=True, default='', help_text="e.g. Senior Vocalist, External Expert")
+    default_judge_number = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(4)],
+        help_text="Default judge slot (Judge 1, Judge 2, Judge 3, Judge 4)"
+    )
+    access_token = models.CharField(max_length=64, unique=True, db_index=True)
+    access_pin = models.CharField(max_length=10, blank=True, default='')
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['default_judge_number', 'name']
+
+    def save(self, *args, **kwargs):
+        if not self.school_id and self.event_id:
+            self.school_id = self.event.school_id
+        if not self.access_token:
+            self.access_token = secrets.token_urlsafe(32)
+        if not self.access_pin:
+            self.access_pin = f"{secrets.randbelow(9000) + 1000}"
+        super().save(*args, **kwargs)
+
+    def regenerate_credentials(self):
+        self.access_token = secrets.token_urlsafe(32)
+        self.access_pin = f"{secrets.randbelow(9000) + 1000}"
+        self.save(update_fields=['access_token', 'access_pin', 'updated_at'])
+
+    def __str__(self):
+        return f"{self.name} (Judge {self.default_judge_number}) - {self.event.title}"
+
+
+class ProgramJudgeAssignment(models.Model):
+    """Assigns an EventJudge to evaluate a specific Program in a designated Judge Slot (1-4)"""
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+    ]
+    judge = models.ForeignKey(EventJudge, on_delete=models.CASCADE, related_name='program_assignments')
+    program = models.ForeignKey(Program, on_delete=models.CASCADE, related_name='judge_assignments')
+    judge_number = models.PositiveIntegerField(
+        default=1,
+        validators=[MinValueValidator(1), MaxValueValidator(4)],
+        help_text="Which judge slot (1, 2, 3, or 4) this judge evaluates for this program"
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    is_locked = models.BooleanField(default=False)
+    locked_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = [
+            ['program', 'judge'],
+            ['program', 'judge_number'],
+        ]
+        ordering = ['program', 'judge_number']
+
+    def clean(self):
+        super().clean()
+        if self.judge_id and self.program_id:
+            if self.judge.event_id != self.program.event_id:
+                raise ValidationError('Judge and Program must belong to the same event.')
+
+    def __str__(self):
+        return f"{self.program.name} - Judge {self.judge_number}: {self.judge.name}"
 
 
 class ProgramAssignment(models.Model):

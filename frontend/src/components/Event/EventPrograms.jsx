@@ -170,6 +170,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
     program_type: 'stage', // new field
     grading_points: {},
     num_judges: event?.num_judges ? String(event.num_judges) : '3',
+    judging_mode: 'offline',
     has_custom_points: false,
     first_place_points: '',
     second_place_points: '',
@@ -309,6 +310,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
         start_time: formData.start_time || null,
         duration_minutes_per_entry: parseInt(formData.duration_minutes_per_entry, 10),
         program_type: formData.program_type || 'stage',
+        judging_mode: formData.judging_mode || 'offline',
         has_custom_points: Boolean(formData.has_custom_points),
         first_place_points: formData.has_custom_points && formData.first_place_points !== '' ? parseInt(formData.first_place_points, 10) : null,
         second_place_points: formData.has_custom_points && formData.second_place_points !== '' ? parseInt(formData.second_place_points, 10) : null,
@@ -368,6 +370,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
       participation_points: program.participation_points !== null && program.participation_points !== undefined ? String(program.participation_points) : '',
       grading_points: program.grading_points || {},
       num_judges: String(program.num_judges || program.effective_num_judges || event?.num_judges || 3),
+      judging_mode: program.judging_mode || 'offline',
     });
     setShowAddModal(true);
   };
@@ -495,6 +498,7 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
       program_type: 'stage',
       grading_points: {},
       num_judges: event?.num_judges ? String(event.num_judges) : '3',
+      judging_mode: 'offline',
       has_custom_points: false,
       first_place_points: '',
       second_place_points: '',
@@ -812,12 +816,23 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                               {getProgramTypeLabel(program)}
                             </span>
                           </div>
-                          <div className="text-xs text-gray-500 font-medium flex items-center">
-                            <Users className="h-3 w-3 mr-1 text-gray-400" />
-                            {program.is_team_based ? (
-                              <span>Team {program.team_size && `(${program.team_size})`}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 font-medium flex items-center">
+                              <Users className="h-3 w-3 mr-1 text-gray-400" />
+                              {program.is_team_based ? (
+                                <span>Team {program.team_size && `(${program.team_size})`}</span>
+                              ) : (
+                                <span>Individual</span>
+                              )}
+                            </span>
+                            {program.judging_mode === 'online' ? (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-purple-50 text-purple-700 border border-purple-200">
+                                <Sparkles className="h-2.5 w-2.5" /> Online
+                              </span>
                             ) : (
-                              <span>Individual</span>
+                              <span className="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-md bg-gray-100 text-gray-600 border border-gray-200">
+                                Offline
+                              </span>
                             )}
                           </div>
                         </div>
@@ -1262,6 +1277,60 @@ const EventPrograms = ({ event, eventId, onRefresh, categories = [], readOnly = 
                         </>
                       )}
                     </select>
+                  </div>
+
+                  {/* Judging Mode Selection */}
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                      Judging Mode *
+                    </label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, judging_mode: 'offline' })}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
+                          formData.judging_mode !== 'online'
+                            ? 'border-indigo-600 bg-indigo-50/40 ring-1 ring-indigo-500 shadow-2xs'
+                            : 'border-gray-200 bg-white hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className={`p-2 rounded-lg shrink-0 ${formData.judging_mode !== 'online' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                          <FileSpreadsheet className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                            Offline (Manual Entry)
+                            {formData.judging_mode !== 'online' && <CheckCircle2 className="h-3.5 w-3.5 text-indigo-600" />}
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+                            Admin enters scores manually from paper score sheets
+                          </p>
+                        </div>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, judging_mode: 'online' })}
+                        className={`p-3 rounded-xl border text-left transition-all flex items-start gap-3 cursor-pointer ${
+                          formData.judging_mode === 'online'
+                            ? 'border-purple-600 bg-purple-50/40 ring-1 ring-purple-500 shadow-2xs'
+                            : 'border-gray-200 bg-white hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className={`p-2 rounded-lg shrink-0 ${formData.judging_mode === 'online' ? 'bg-purple-600 text-white' : 'bg-gray-100 text-gray-500'}`}>
+                          <Sparkles className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <div className="text-xs font-bold text-gray-900 flex items-center gap-1.5">
+                            Online Judging
+                            {formData.judging_mode === 'online' && <CheckCircle2 className="h-3.5 w-3.5 text-purple-600" />}
+                          </div>
+                          <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">
+                            Judges enter scores digitally on mobile/tablet via magic link & PIN
+                          </p>
+                        </div>
+                      </button>
+                    </div>
                   </div>
 
                   <div>

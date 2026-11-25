@@ -16,6 +16,10 @@ events_router = routers.NestedDefaultRouter(router, r'events', lookup='event')
 events_router.register(r'stages', views.EventStageViewSet, basename='event-stages')
 events_router.register(r'program-types', views.EventProgramTypeViewSet, basename='event-program-types')
 events_router.register(r'programs', views.ProgramViewSet, basename='event-programs')
+events_router.register(r'judges', views.EventJudgeViewSet, basename='event-judges')
+
+# Direct router for judges
+router.register(r'judges', views.EventJudgeViewSet, basename='judges')
 
 # Create nested routers for program assignments and results
 programs_router = routers.NestedDefaultRouter(events_router, r'programs', lookup='program')
@@ -73,4 +77,10 @@ urlpatterns = [
     
     # Public Event Portal (Results, Points Table, Schedule, QR) (No auth required)
     path('events/<int:event_id>/public-portal/', views.get_public_event_portal, name='get_public_event_portal'),
+
+    # Public Judge Evaluation Portal endpoints (No standard auth required - token authenticated)
+    path('judge/portal/<str:token>/', views.judge_portal_info, name='judge-portal-info'),
+    path('judge/portal/<str:token>/verify-pin/', views.judge_portal_verify_pin, name='judge-portal-verify-pin'),
+    path('judge/portal/<str:token>/programs/<int:program_id>/score-sheet/', views.judge_score_sheet, name='judge-score-sheet'),
+    path('judge/portal/<str:token>/programs/<int:program_id>/save-marks/', views.judge_save_marks, name='judge-save-marks'),
 ]

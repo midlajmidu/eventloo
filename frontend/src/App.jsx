@@ -36,6 +36,7 @@ const ProgramAssignmentPage = lazy(() => import('./components/TeamManager/Progra
 const TeamEventDashboard = lazy(() => import('./components/TeamManager/TeamEventDashboard'));
 const PublicParticipantBadge = lazy(() => import('./components/Public/PublicParticipantBadge'));
 const ThemedPage = lazy(() => import('./components/Public/themes/ThemedPage'));
+const JudgeEvaluationPortal = lazy(() => import('./components/Judge/JudgeEvaluationPortal'));
 
 import './index.css';
 
@@ -97,6 +98,8 @@ function App() {
           <Route path="/events/:eventId/badge/:studentId" element={<PublicParticipantBadge />} />
           <Route path="/public/events/:eventId/participants/:studentId" element={<PublicParticipantBadge />} />
           <Route path="/public/events/:eventId/badges/:chestOrStudentId" element={<PublicParticipantBadge />} />
+          <Route path="/judge/eval/:token" element={<Suspense fallback={<PageLoader />}><JudgeEvaluationPortal /></Suspense>} />
+          <Route path="/public/judge/:token" element={<Suspense fallback={<PageLoader />}><JudgeEvaluationPortal /></Suspense>} />
           <Route
             path="/super-admin"
             element={

@@ -3,7 +3,11 @@ from django.db import models
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from datetime import timedelta
-from .models import Event, EventStage, EventProgramType, Team, IndividualParticipation, EventAnnouncement, PointsRecord, TeamProfile, Program, ProgramAssignment, ProgramResult, ChestNumber
+from .models import (
+    Event, EventStage, EventProgramType, Team, IndividualParticipation,
+    EventAnnouncement, PointsRecord, TeamProfile, Program, ProgramAssignment,
+    ProgramResult, ChestNumber, EventJudge, ProgramJudgeAssignment
+)
 
 User = get_user_model()
 
@@ -1422,4 +1426,57 @@ class EventWithProgramsSerializer(EventDetailSerializer):
         
     def get_programs_count(self, obj):
         return obj.programs.count()
+
+
+class ProgramJudgeAssignmentSerializer(serializers.ModelSerializer):
+    judge_name = serializers.CharField(source='judge.name', read_only=True)
+    judge_designation = serializers.CharField(source='judge.designation', read_only=True)
+    program_name = serializers.CharField(source='program.name', read_only=True)
+    program_category = serializers.CharField(source='program.category', read_only=True)
+    program_is_team_based = serializers.BooleanField(source='program.is_team_based', read_only=True)
+    program_judging_mode = serializers.CharField(source='program.judging_mode', read_only=True)
+
+    class Meta:
+        model = ProgramJudgeAssignment
+        fields = [
+            'id', 'judge', 'judge_name', 'judge_designation',
+            'program', 'program_name', 'program_category', 'program_is_team_based', 'program_judging_mode',
+            'judge_number', 'status', 'is_locked', 'locked_at', 'notes',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+class EventJudgeSerializer(serializers.ModelSerializer):
+    program_assignments = ProgramJudgeAssignmentSerializer(many=True, read_only=True)
+    assigned_programs_count = serializers.SerializerMethodField()
+    portal_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EventJudge
+        fields = [
+            'id', 'event', 'name', 'email', 'phone', 'designation',
+            'default_judge_number', 'access_token', 'access_pin',
+            'is_active', 'notes', 'portal_url',
+            'assigned_programs_count', 'program_assignments',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'access_token', 'access_pin', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'default_judge_number': {'required': False},
+        }
+
+    def get_assigned_programs_count(self, obj):
+        return obj.program_assignments.count()
+
+    def get_portal_url(self, obj):
+        request = self.context.get('request')
+        relative_path = f"/judge/eval/{obj.access_token}"
+        if request:
+            origin = request.headers.get('origin')
+            if origin:
+                return f"{origin}{relative_path}"
+            return request.build_absolute_uri(relative_path)
+        return relative_path
+
 
