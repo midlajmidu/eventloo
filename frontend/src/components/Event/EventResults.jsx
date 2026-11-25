@@ -48,6 +48,7 @@ const EventResults = ({ event, categories: dynamicCategories = [], readOnly = fa
   const [loadingPrograms, setLoadingPrograms] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('all'); // 'all', 'published', 'submitted', 'pending'
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -415,11 +416,18 @@ const EventResults = ({ event, categories: dynamicCategories = [], readOnly = fa
   // Filtered and sorted programs (submitted marks at the top)
   const sortedPrograms = programs
     .filter(p => {
+      const status = getProgramStatus(p);
       const matchesCategory = !selectedCategory || p.category === selectedCategory;
       const matchesSearch = !searchTerm || 
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.category.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesCategory && matchesSearch;
+      const matchesStatus = 
+        !selectedStatus || 
+        selectedStatus === 'all' || 
+        (selectedStatus === 'published' && (p.is_published || status === 'published')) ||
+        (selectedStatus === 'submitted' && status === 'submitted') ||
+        (selectedStatus === 'pending' && (status === 'pending' || status === 'in_progress'));
+      return matchesCategory && matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
       const rankA = getStatusRank(a);
@@ -430,10 +438,10 @@ const EventResults = ({ event, categories: dynamicCategories = [], readOnly = fa
       return (a.name || '').localeCompare(b.name || '');
     });
 
-  // Reset pagination on search or category filter change
+  // Reset pagination on search, category or status filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory]);
+  }, [searchTerm, selectedCategory, selectedStatus]);
 
   // Paginated programs for table display
   const totalPages = Math.ceil(sortedPrograms.length / pageSize) || 1;
@@ -509,39 +517,83 @@ const EventResults = ({ event, categories: dynamicCategories = [], readOnly = fa
         </div>
       </div>
 
-      {/* Top Stats Badges Bar */}
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Top Stats Badges Bar - Interactive Filter Tabs */}
+      <div className="flex flex-wrap items-center gap-2.5">
+        <button
+          type="button"
+          onClick={() => setSelectedStatus('all')}
+          className={`flex items-center px-3.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+            selectedStatus === 'all'
+              ? 'bg-slate-900 text-white border-slate-900 shadow-2xs'
+              : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+          }`}
+          title="Show all competitions"
+        >
+          <span>All</span>
+          <span className={`ml-2 px-1.5 py-0.5 rounded-md text-[11px] font-extrabold ${
+            selectedStatus === 'all' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-900'
+          }`}>
+            {programs.length}
+          </span>
+        </button>
+
         {!readOnly && (
           <>
-            <div className="flex items-center bg-gray-100/90 text-gray-700 px-3.5 py-2 rounded-xl text-xs font-bold border border-gray-200">
+            <button
+              type="button"
+              onClick={() => setSelectedStatus(selectedStatus === 'pending' ? 'all' : 'pending')}
+              className={`flex items-center px-3.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                selectedStatus === 'pending'
+                  ? 'bg-slate-700 text-white border-slate-700 shadow-2xs'
+                  : 'bg-gray-100/90 text-gray-700 border-gray-200 hover:bg-gray-200/80'
+              }`}
+              title="Filter by Pending Mark Entry"
+            >
               <span>Pending</span>
-              <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-gray-900">
-                {statsCounts.pending}
+              <span className={`ml-2 px-1.5 py-0.5 rounded-md text-[11px] font-extrabold ${
+                selectedStatus === 'pending' ? 'bg-white/20 text-white' : 'bg-white text-gray-900 shadow-2xs'
+              }`}>
+                {statsCounts.pending + statsCounts.in_progress}
               </span>
-            </div>
+            </button>
 
-            <div className="flex items-center bg-indigo-50 text-indigo-700 px-3.5 py-2 rounded-xl text-xs font-bold border border-indigo-100">
-              <span>In Progress</span>
-              <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-indigo-900">
-                {statsCounts.in_progress}
-              </span>
-            </div>
-
-            <div className="flex items-center bg-amber-50 text-amber-800 px-3.5 py-2 rounded-xl text-xs font-bold border border-amber-100">
+            <button
+              type="button"
+              onClick={() => setSelectedStatus(selectedStatus === 'submitted' ? 'all' : 'submitted')}
+              className={`flex items-center px-3.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+                selectedStatus === 'submitted'
+                  ? 'bg-amber-600 text-white border-amber-600 shadow-2xs'
+                  : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100/70'
+              }`}
+              title="Filter by Submitted Results"
+            >
               <span>Submitted</span>
-              <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-amber-900">
+              <span className={`ml-2 px-1.5 py-0.5 rounded-md text-[11px] font-extrabold ${
+                selectedStatus === 'submitted' ? 'bg-white/20 text-white' : 'bg-white text-amber-900 shadow-2xs'
+              }`}>
                 {statsCounts.submitted}
               </span>
-            </div>
+            </button>
           </>
         )}
 
-        <div className="flex items-center bg-emerald-50 text-emerald-800 px-3.5 py-2 rounded-xl text-xs font-bold border border-emerald-200">
+        <button
+          type="button"
+          onClick={() => setSelectedStatus(selectedStatus === 'published' ? 'all' : 'published')}
+          className={`flex items-center px-3.5 py-1.5 rounded-xl text-xs font-bold border transition cursor-pointer ${
+            selectedStatus === 'published'
+              ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
+              : 'bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100/70'
+          }`}
+          title="Filter by Published Results"
+        >
           <span>{readOnly ? 'Published Competitions' : 'Published'}</span>
-          <span className="ml-2.5 px-2 py-0.5 bg-white rounded-lg shadow-2xs font-extrabold text-emerald-900">
+          <span className={`ml-2 px-1.5 py-0.5 rounded-md text-[11px] font-extrabold ${
+            selectedStatus === 'published' ? 'bg-white/20 text-white' : 'bg-white text-emerald-900 shadow-2xs'
+          }`}>
             {statsCounts.published}
           </span>
-        </div>
+        </button>
       </div>
 
       {/* Feedback Message Banner */}
@@ -561,7 +613,7 @@ const EventResults = ({ event, categories: dynamicCategories = [], readOnly = fa
             
             {/* Table Search & Actions */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="relative w-full sm:w-64">
+              <div className="relative w-full sm:w-60">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                 <input
                   type="text"
@@ -582,7 +634,23 @@ const EventResults = ({ event, categories: dynamicCategories = [], readOnly = fa
                 )}
               </div>
 
-              <div className="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-end">
+              <div className="flex items-center space-x-2 w-full sm:w-auto justify-between sm:justify-end flex-wrap gap-y-2">
+                {/* Status Selector Dropdown */}
+                <select
+                  value={selectedStatus}
+                  onChange={(e) => {
+                    setSelectedStatus(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none cursor-pointer hover:bg-gray-100/70 transition-colors"
+                  title="Filter by Status"
+                >
+                  <option value="all">All Status ({programs.length})</option>
+                  <option value="published">Published ({statsCounts.published})</option>
+                  <option value="submitted">Submitted ({statsCounts.submitted})</option>
+                  <option value="pending">Pending ({statsCounts.pending + statsCounts.in_progress})</option>
+                </select>
+
                 {/* Category selector */}
                 <select
                   value={selectedCategory}
@@ -775,7 +843,24 @@ const EventResults = ({ event, categories: dynamicCategories = [], readOnly = fa
                   ) : (
                     <tr>
                       <td colSpan="4" className="px-4 py-12 text-center text-gray-400 text-xs">
-                        No competition results found.
+                        {selectedStatus !== 'all' || selectedCategory || searchTerm ? (
+                          <div className="flex flex-col items-center justify-center space-y-2">
+                            <span>No {selectedStatus !== 'all' ? selectedStatus : ''} competition results match your filters.</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedStatus('all');
+                                setSelectedCategory('');
+                                setSearchTerm('');
+                              }}
+                              className="text-[11px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                            >
+                              Reset all filters
+                            </button>
+                          </div>
+                        ) : (
+                          'No competition results found.'
+                        )}
                       </td>
                     </tr>
                   )}
