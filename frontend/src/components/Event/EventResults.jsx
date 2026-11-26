@@ -430,6 +430,14 @@ const EventResults = ({ event, categories: dynamicCategories = [], readOnly = fa
       return matchesCategory && matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
+      if (selectedStatus === 'published') {
+        const resA = a.result_number != null ? Number(a.result_number) : Number.MAX_SAFE_INTEGER;
+        const resB = b.result_number != null ? Number(b.result_number) : Number.MAX_SAFE_INTEGER;
+        if (resA !== resB) {
+          return resA - resB;
+        }
+        return (a.name || '').localeCompare(b.name || '');
+      }
       const rankA = getStatusRank(a);
       const rankB = getStatusRank(b);
       if (rankA !== rankB) {
@@ -680,7 +688,9 @@ const EventResults = ({ event, categories: dynamicCategories = [], readOnly = fa
               <table className="w-full text-left border-collapse">
                 <thead className="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500">
                   <tr>
-                    <th className="px-4 py-3 w-12 text-center">#</th>
+                    <th className="px-4 py-3 w-16 text-center whitespace-nowrap">
+                      {selectedStatus === 'published' ? 'Result #' : '#'}
+                    </th>
                     <th className="px-4 py-3">Competition</th>
                     <th className="px-4 py-3 text-center w-28 whitespace-nowrap">Status</th>
                     <th className="px-4 py-3 text-right w-24">Actions</th>
@@ -706,9 +716,19 @@ const EventResults = ({ event, categories: dynamicCategories = [], readOnly = fa
                           onClick={() => handleOpenDrawer(prog)}
                           className="hover:bg-gray-50/70 transition-colors cursor-pointer"
                         >
-                          {/* Index # */}
-                          <td className="px-4 py-3 text-center text-gray-400 font-semibold">
-                            #{startIndex + idx + 1}
+                          {/* Index # or Result # when Published */}
+                          <td className="px-4 py-3 text-center font-semibold whitespace-nowrap">
+                            {selectedStatus === 'published' ? (
+                              prog.result_number != null ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-bold text-[11px]">
+                                  #{String(prog.result_number).padStart(2, '0')}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400">#{startIndex + idx + 1}</span>
+                              )
+                            ) : (
+                              <span className="text-gray-400">#{startIndex + idx + 1}</span>
+                            )}
                           </td>
 
                           {/* Competition Name & Category */}

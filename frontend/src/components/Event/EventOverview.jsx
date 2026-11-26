@@ -659,7 +659,7 @@ const EventOverview = ({ event, eventId, onRefresh, categories = [], setActiveTa
             {/* Heading & Description after QR Code (Template Match) */}
             <div className="my-4 px-1">
               <h4 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">
-                View Your Public Event Page
+                View Our Public Event Page
               </h4>
               <p className="text-xs sm:text-[13px] text-slate-500 font-medium mt-1 leading-relaxed">
                 Explore the event results, schedule, and points table for {event?.title || 'this event'}.

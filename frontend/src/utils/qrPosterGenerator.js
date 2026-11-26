@@ -284,7 +284,7 @@ export async function generateEventQrPosterBlob({ event, portalData, publicUrl, 
 
   // =========================================================================
   // 4. HEADING & DESCRIPTION AFTER QR CODE (EXACT TEMPLATE MATCH)
-  // "View Your Public Event Page"
+  // "View Our Public Event Page"
   // "Explore the event results, schedule, and points table for {eventTitle}."
   // =========================================================================
   const headingY = qrBoxY + qrBoxSize + 44;
@@ -292,7 +292,7 @@ export async function generateEventQrPosterBlob({ event, portalData, publicUrl, 
   ctx.font = '800 27px Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('View Your Public Event Page', width / 2, headingY);
+  ctx.fillText('View Our Public Event Page', width / 2, headingY);
 
   const descY = headingY + 30;
   ctx.fillStyle = '#64748B';
