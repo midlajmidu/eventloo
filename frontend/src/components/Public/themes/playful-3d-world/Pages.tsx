@@ -63,7 +63,7 @@ export function Results({ data, preview }: ThemePageProps) {
                 <option value="">-- Choose a Program ({availablePrograms.length}) --</option>
                 {availablePrograms.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} {p.category ? `(${p.category})` : ""}
+                    {p.name} {p.category ? `(${p.category})` : ""}{p.is_published ? " (Published)" : ""}
                   </option>
                 ))}
               </select>

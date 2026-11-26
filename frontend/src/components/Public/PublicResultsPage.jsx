@@ -215,7 +215,7 @@ const PublicResultsPage = () => {
                 <option value="">-- Choose a Program ({currentCategoryPrograms.length}) --</option>
                 {currentCategoryPrograms.map((prog) => (
                   <option key={prog.id} value={prog.id}>
-                    {prog.name} {prog.category_name ? `(${prog.category_name})` : ''}
+                    {prog.name} {prog.category_name ? `(${prog.category_name})` : ''}{prog.is_published ? ' (Published)' : ''}
                   </option>
                 ))}
               </select>

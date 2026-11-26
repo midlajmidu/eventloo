@@ -101,13 +101,27 @@ export function useResultsFilter(data: SiteData) {
   const [selectedCategory, setSelectedCategory] = useState<string>("");
   const [selectedProgramId, setSelectedProgramId] = useState<string>("");
 
+  // Track which programs have published results
+  const publishedProgramIds = useMemo(() => {
+    const ids = new Set<string>();
+    (data.results || []).forEach((r) => {
+      if (r.program_id != null) ids.add(String(r.program_id));
+    });
+    return ids;
+  }, [data.results]);
+
   // Filter programs based on selectedCategory
   const availablePrograms = useMemo(() => {
-    if (!selectedCategory) return programs;
-    return programs.filter(
-      (p) => p.category?.toLowerCase() === selectedCategory.toLowerCase()
-    );
-  }, [programs, selectedCategory]);
+    const filtered = !selectedCategory
+      ? programs
+      : programs.filter(
+          (p) => p.category?.toLowerCase() === selectedCategory.toLowerCase()
+        );
+    return filtered.map((p) => ({
+      ...p,
+      is_published: Boolean(p.is_published || publishedProgramIds.has(String(p.id))),
+    }));
+  }, [programs, selectedCategory, publishedProgramIds]);
 
   // Selected program object
   const selectedProgram = useMemo(() => {
